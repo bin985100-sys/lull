@@ -1,0 +1,41 @@
+appId: website.lull.app
+productName: Lull
+copyright: © 2026 Lull
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+asar: true
+artifactName: Lull-${version}-${os}-${arch}.${ext}
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Lull
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  artifactName: Lull-Setup-${version}.${ext}
+mac:
+  icon: build/icon.png
+  category: public.app-category.music
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  hardenedRuntime: false
+  gatekeeperAssess: false
+dmg:
+  artifactName: Lull-${version}-${arch}.${ext}
+  title: Lull
+linux:
+  icon: build/icon.png
+  target: AppImage
+  category: Audio

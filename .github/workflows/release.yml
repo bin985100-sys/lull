@@ -1,0 +1,91 @@
+# Сборки Lull: Windows (.exe), macOS (.dmg), Android (.apk) и веб-версия.
+# Запуск: вкладка Actions → «Сборки Lull» → Run workflow, или тег v* (тогда ещё и GitHub Release со ссылками).
+name: Сборки Lull
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  LULL_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '1.0.0' }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run dist
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false', LULL_RELAY: '${{ secrets.LULL_RELAY }}' }
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-Windows, path: release/*.exe, if-no-files-found: error }
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run dist:mac
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false', LULL_RELAY: '${{ secrets.LULL_RELAY }}' }
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-macOS, path: release/*.dmg, if-no-files-found: error }
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: npm ci
+      - run: npm run build:web
+      - run: npx cap sync android
+      - name: Ключ подписи
+        env: { KS: '${{ secrets.LULL_KEYSTORE_B64 }}' }
+        run: if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/lull.jks"; echo "LULL_KEYSTORE=$RUNNER_TEMP/lull.jks" >> "$GITHUB_ENV"; fi
+      - name: APK
+        working-directory: android
+        env:
+          LULL_KEYSTORE_PASSWORD: ${{ secrets.LULL_KEYSTORE_PASSWORD }}
+          LULL_VERSION_CODE: ${{ github.run_number }}
+        run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon
+      - run: mv android/app/build/outputs/apk/release/*.apk "Lull-${LULL_VERSION#v}.apk"
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-Android, path: '*.apk', if-no-files-found: error }
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build:web && npm run build:api
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-Web, path: dist-web }
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-API, path: dist-server/lull-api.mjs }
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Lull ${{ github.ref_name }}
+          files: |
+            out/*.exe
+            out/*.dmg
+            out/*.apk

@@ -1,0 +1,149 @@
+/* ---------- Телефон и узкое окно (класс .mobile ставит useIsMobile, ≤ 760px) ---------- */
+.app.mobile {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100dvh;
+  --m-dock: calc(64px + env(safe-area-inset-bottom));
+}
+.app.mobile .main { grid-column: 1; }
+.app.mobile .scroll { padding: 0 16px calc(var(--m-dock) + 96px) 16px; -webkit-overflow-scrolling: touch; scroll-behavior: auto; }
+body:has(.app.mobile) { user-select: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+
+/* шапка */
+.m-head { display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 16px 6px; flex-shrink: 0; }
+.m-logo { width: 32px; height: 32px; border-radius: 9px; }
+.m-brand { font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
+.m-gear { margin-left: auto; width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.07); color: rgba(245, 245, 247, 0.85); }
+.m-top { display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; flex-shrink: 0; min-height: 60px; }
+.m-top > * { min-width: 0; }
+.m-top .field, .m-top input { flex: 1; min-width: 0; }
+
+/* нижний блок: мини-плеер + вкладки */
+.m-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; flex-direction: column; pointer-events: none; }
+.m-dock > * { pointer-events: auto; }
+.m-tabs {
+  display: grid; grid-template-columns: repeat(4, 1fr); height: var(--m-dock); padding-bottom: env(safe-area-inset-bottom);
+  background: linear-gradient(180deg, rgba(11, 11, 14, 0.72), rgba(11, 11, 14, 0.94)); backdrop-filter: blur(30px) saturate(1.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.m-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10.5px; font-weight: 600; color: rgba(245, 245, 247, 0.5); transition: color 0.2s; }
+.m-tab.on { color: #fff; }
+
+.m-mini {
+  position: relative; margin: 0 8px 8px; height: 60px; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 8px; border-radius: 16px; overflow: hidden;
+  background: color-mix(in srgb, var(--tint) 28%, rgba(22, 22, 27, 0.92)); backdrop-filter: blur(30px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); transition: background 1s ease;
+}
+.m-mini-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 11px; text-align: left; height: 100%; }
+.m-mini-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.m-mini-text b { font-size: 14.5px; font-weight: 700; }
+.m-mini-text span { font-size: 12.5px; color: var(--text-2); }
+.m-mini-btn { width: 44px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+.m-mini-btn:active { background: rgba(255, 255, 255, 0.1); }
+.m-mini-prog { position: absolute; left: 0; bottom: 0; height: 2px; background: #fff; border-radius: 0 2px 2px 0; transition: width 0.3s linear; }
+.m-spin { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, 0.25); border-top-color: #fff; animation: m-spin 0.8s linear infinite; }
+@keyframes m-spin { to { transform: rotate(360deg); } }
+
+/* контент */
+.app.mobile .hrow { grid-auto-columns: 148px; gap: 14px; }
+.app.mobile .hrow.more { -webkit-mask-image: none; mask-image: none; }
+.app.mobile .hrow-nav { display: none; }
+.app.mobile .card .t { font-size: 14px; }
+.app.mobile .card .s { font-size: 12.5px; }
+.app.mobile .card .fab { display: none; }
+.app.mobile .card:hover .cv, .app.mobile .hrow .card:hover .cv { transform: none; }
+.app.mobile h1 { font-size: clamp(24px, 7vw, 32px); }
+.app.mobile h2 { font-size: 21px !important; line-height: 1.15; }
+.app.mobile .toasts { top: calc(12px + env(safe-area-inset-top)); width: calc(100% - 32px); }
+.app.mobile .toast { max-width: 100%; }
+
+/* поиск поверх — на телефоне ведём на вкладку поиска */
+.app.mobile .sov { padding: calc(10px + env(safe-area-inset-top)) 12px 0; }
+
+/* полноэкранный плеер: обложка, управление, а ниже — текст/очередь (листается вниз) */
+@media (max-width: 760px) {
+  .np { overflow: hidden; }
+  .np-head { flex-shrink: 0; height: auto; padding: calc(10px + env(safe-area-inset-top)) 12px 6px; z-index: 3; flex-wrap: nowrap; }
+  .np-toolbar { margin-right: 0; min-width: 0; }
+  .np-seg button { padding: 0 10px; font-size: 12.5px; }
+  .np-seg button > span:not(.np-seg-bg) { display: none; }
+  .np-lyrtools, .np-head .winctl { display: none !important; }
+  .np-grid { display: flex; flex-direction: column; padding: 0; gap: 0; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+  .np-grid::-webkit-scrollbar { display: none; }
+  .np-player { flex-shrink: 0; min-height: calc(100dvh - 76px - env(safe-area-inset-top)); padding: 4px 0 24px; justify-content: flex-start; }
+  .np-player > * { width: calc(100% - 44px); }
+  .np-meta { margin-top: 26px; }
+  .np-meta h1 { font-size: 23px; }
+  .np-ctrls { gap: 14px; margin-top: 18px; }
+  .np-bottom { margin-top: 16px; }
+  .np-vol { display: none; }
+  .np-side { flex-shrink: 0; height: calc(100dvh - 76px - env(safe-area-inset-top)); padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
+  .np-side::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.25); margin: 0 auto 16px; }
+
+  .np-blyrics .blyrics--line { font-size: 26px !important; line-height: 1.25 !important; }
+  .np-blyrics .blyrics-container { padding-bottom: 30vh; }
+
+  /* модальные окна на всю ширину */
+  .modal, .dialog { width: calc(100vw - 24px) !important; max-width: none !important; max-height: calc(100dvh - 40px) !important; }
+}
+
+/* общие правки сеток и списков */
+.app.mobile .page { gap: 24px; }
+.app.mobile .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; }
+.app.mobile .page label.field { width: 100% !important; flex: 1 1 100%; }
+.app.mobile .page .btn { flex: 1 1 auto; justify-content: center; }
+.app.mobile .chips { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px; scrollbar-width: none; }
+.app.mobile .chips::-webkit-scrollbar { display: none; }
+.app.mobile .chips > * { flex-shrink: 0; }
+.app.mobile .hrow-wrap { margin-left: 0; margin-right: -16px; }
+.app.mobile .hrow { margin: -10px 0 -16px -16px; padding: 10px 16px 16px 16px; scroll-padding-left: 16px; }
+.app.mobile .trow { gap: 12px; padding: 7px 4px; }
+.app.mobile .trow .num { display: none; }
+.app.mobile .trow .mo { opacity: 1; }
+.app.mobile .trow .dur { display: none; }
+.app.mobile .tracks-box { padding: 6px !important; }
+.app.mobile .m-top { min-height: 0; }
+.app.mobile .m-top:empty { display: none; }
+.app.mobile .ttable-head { display: none; }
+.app.mobile .ttable-row, .app.mobile .ttable.compact .ttable-row { grid-template-columns: minmax(0, 1fr) 36px 36px; gap: 6px; padding: 8px 6px; }
+.app.mobile .ttable:not(.compact) .ttable-row > :nth-child(3),
+.app.mobile .ttable:not(.compact) .ttable-row > :nth-child(4),
+.app.mobile .ttable:not(.compact) .ttable-row > :nth-child(6),
+.app.mobile .ttable.compact .ttable-row > :nth-child(4) { display: none; }
+.app.mobile .tracks-box:has(.ttable) { padding: 4px !important; }
+
+/* настройки на телефоне: список разделов → раздел */
+.dialog.m-set { position: fixed; inset: 0; width: 100vw !important; height: 100dvh !important; max-height: none !important; border-radius: 0; flex-direction: column; }
+.dialog.m-set .set-nav { width: 100%; flex: 1; border-right: 0; padding: calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+.dialog.m-set.body .set-nav { display: none; }
+.dialog.m-set.nav .set-body { display: none; }
+.dialog.m-set .set-body { padding: calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+.dialog.m-set .set-body h1 { font-size: 22px !important; }
+.dialog.m-set .set-row { flex-wrap: wrap; }
+.dialog.m-set .nav-item { height: 48px; font-size: 16px; }
+.m-set-head { display: flex; align-items: center; justify-content: space-between; }
+.app.mobile .r { flex-wrap: wrap; }
+.app.mobile .r > label.field { flex: 1 1 100% !important; width: auto !important; }
+.app.mobile .r > .btn:not(.sq) { flex: 1 1 auto; }
+
+/* ---------- веб-приложение: ощущение нативного (без выделения, лупы, «резинки» и подсветки нажатий) ---------- */
+html.webapp, html.webapp body { overscroll-behavior: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+html.webapp img, html.webapp a { -webkit-user-drag: none; -webkit-touch-callout: none; }
+html.webapp input, html.webapp textarea { font-size: max(16px, 1em); } /* iOS не приближает поле при фокусе */
+html.webapp ::-webkit-scrollbar { width: 0; height: 0; }
+html.webapp .m-tab:active, html.webapp .m-mini-btn:active, html.webapp button:active { transform: scale(0.96); transition: transform 0.08s; }
+
+/* предложение установить (только в браузере телефона) */
+.inst-back { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.5); display: flex; align-items: flex-end; }
+.inst { width: 100%; padding: 10px 20px calc(20px + env(safe-area-inset-bottom)); border-radius: 26px 26px 0 0; background: #17171c; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; flex-direction: column; gap: 18px; }
+.inst-grab { width: 40px; height: 5px; border-radius: 5px; background: rgba(255, 255, 255, 0.2); margin: 0 auto; }
+.inst-head { display: flex; align-items: center; gap: 14px; }
+.inst-head img { width: 60px; height: 60px; border-radius: 15px; }
+.inst-head b { display: block; font-size: 20px; font-weight: 800; }
+.inst-head span { font-size: 14px; color: var(--text-2); }
+.inst-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; font-size: 15.5px; line-height: 1.4; color: rgba(245, 245, 247, 0.85); }
+.inst-p { font-size: 15.5px; line-height: 1.45; color: rgba(245, 245, 247, 0.85); }
+.inst-btns { display: flex; flex-direction: column; gap: 8px; }
+.inst-main, .inst-later { height: 52px; border-radius: 15px; font-size: 16px; font-weight: 700; }
+.inst-main { background: #f5f5f7; color: #0b0b0e; }
+.inst-later { background: rgba(255, 255, 255, 0.08); }

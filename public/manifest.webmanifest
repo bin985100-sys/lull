@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "Lull",
+  "short_name": "Lull",
+  "description": "Музыка, которая знает тебя",
+  "lang": "ru",
+  "start_url": "/?source=app",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "portrait",
+  "background_color": "#0B0B0E",
+  "theme_color": "#0B0B0E",
+  "categories": ["music", "entertainment"],
+  "launch_handler": { "client_mode": "focus-existing" },
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Моя волна", "url": "/#/wave", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Поиск", "url": "/#/search", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

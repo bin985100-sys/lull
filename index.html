@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' media: data: blob:; img-src 'self' media: data: blob: https:; media-src 'self' media: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:; worker-src 'self' blob:; connect-src 'self' media: ws: http://localhost:5173 data: blob:; font-src 'self' data:" />
+    <title>Lull</title>
+  </head>
+  <body>
+    <div id="root"><div class="boot" aria-label="Загрузка"><span></span></div></div>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0b0e; }
+      .boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+      .boot span { width: 44px; height: 44px; border-radius: 50%; border: 3px solid rgba(255,255,255,.12); border-top-color: #f5f5f7; animation: boot-spin .8s linear infinite; }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+    </style>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
