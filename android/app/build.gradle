@@ -7,7 +7,7 @@ android {
         applicationId "website.lull.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (System.getenv("LULL_VERSION_CODE") ?: "1") as int
+        versionCode ((System.getenv("LULL_VERSION_CODE") ?: "1") as int)
         versionName System.getenv("LULL_VERSION") ?: "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
