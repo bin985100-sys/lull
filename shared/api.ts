@@ -40,7 +40,7 @@ export interface Api {
   streamUrl(id: string): string;
   imageUrl(src: string): string;
   /** prefetch — заранее, в очереди по одному (не мешает текущему треку) */
-  prepareStream(id: string, prefetch?: boolean, hint?: { title: string; artist: string }): Promise<StreamMeta>;
+  prepareStream(id: string, prefetch?: boolean, hint?: { title: string; artist: string; duration?: number }): Promise<StreamMeta>;
   /** Проверка сервера Lull (raw — строка подключения до сохранения). */
   relayHealth(raw?: string): Promise<{ ok: boolean; ms: number; detail: string }>;
 

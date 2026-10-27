@@ -84,7 +84,7 @@ export const TrackRow = memo(function TrackRow({ list, index, source }: RowProps
   const { play, dbl } = useTrackActions(list, index, source);
   const menu = (e: MouseEvent) => openMenuAt(e, trackMenu(track, navigate));
   return (
-    <div className={`trow ${isCurrent ? 'current' : ''}`} onClick={(e) => !(e.target as HTMLElement).closest('a,button') && dbl()} onContextMenu={menu} onMouseEnter={() => hoverPrefetch(track.id)} onMouseLeave={cancelHoverPrefetch} style={{ cursor: 'pointer' }}>
+    <div className={`trow ${isCurrent ? 'current' : ''}`} onClick={(e) => !(e.target as HTMLElement).closest('a,button') && dbl()} onContextMenu={menu} onMouseEnter={() => hoverPrefetch(track)} onMouseLeave={cancelHoverPrefetch} style={{ cursor: 'pointer' }}>
       <button type="button" className="cover-link" aria-label={track.album?.id ? `Открыть альбом «${track.album.name}»` : `Играть «${track.title}»`} onClick={() => (openTrackAlbum(track, navigate) ? undefined : play())}>
         <Cover src={track.thumb} size={48} radius={10} glow />
         {isCurrent && (
@@ -132,7 +132,7 @@ export function TrackTable({ tracks, source, addedAt, playlistId, showAlbum = tr
   const sentinel = useRef<HTMLDivElement>(null);
   useEffect(() => setShown(PAGE), [tracks]);
   // Первые треки открытого списка готовим заранее — клик по ним запускает звук сразу
-  useEffect(() => listPrefetch(tracks.map((t) => t.id)), [tracks]);
+  useEffect(() => listPrefetch(tracks), [tracks]);
   useEffect(() => {
     const el = sentinel.current;
     if (!el || shown >= tracks.length) return;
@@ -169,7 +169,7 @@ export function TrackTable({ tracks, source, addedAt, playlistId, showAlbum = tr
                 else playTracks(tracks, i, source);
               }}
               onContextMenu={menu}
-              onMouseEnter={() => hoverPrefetch(t.id)}
+              onMouseEnter={() => hoverPrefetch(t)}
               onMouseLeave={cancelHoverPrefetch}
             >
               <span className="num">

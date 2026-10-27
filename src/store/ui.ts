@@ -21,6 +21,7 @@ export interface Toast {
 interface UiState {
   menu: { x: number; y: number; items: MenuItem[] } | null;
   nowPlaying: boolean;
+  nowPlayingPanelRequested: boolean;
   nowPlayingTab: 'lyrics' | 'queue' | 'related';
   settings: boolean;
   settingsSection: string;
@@ -59,6 +60,7 @@ interface UiState {
 export const useUi = create<UiState>((set, get) => ({
   menu: null,
   nowPlaying: false,
+  nowPlayingPanelRequested: false,
   nowPlayingTab: 'lyrics',
   settings: false,
   settingsSection: 'play',
@@ -86,7 +88,7 @@ export const useUi = create<UiState>((set, get) => ({
   setSearch: (open) => set({ search: open, menu: null }),
   openMenu: (x, y, items) => set({ menu: { x, y, items } }),
   closeMenu: () => set({ menu: null }),
-  setNowPlaying: (open, tab) => set({ nowPlaying: open, ...(tab ? { nowPlayingTab: tab } : {}) }),
+  setNowPlaying: (open, tab) => set({ nowPlaying: open, nowPlayingPanelRequested: open && !!tab, ...(tab ? { nowPlayingTab: tab } : {}) }),
   openSettings: (section) => set({ settings: true, settingsSection: section ?? get().settingsSection }),
   closeSettings: () => set({ settings: false }),
   toast: (text, kind = 'info') => {

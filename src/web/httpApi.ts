@@ -1,5 +1,5 @@
 import type { Api } from '../../shared/api';
-import type { Track } from '../../shared/types';
+import type { Track, StreamMeta } from '../../shared/types';
 
 /**
  * Api для веб-версии, PWA и Android: каталог и звук — с сервера Lull (api.lull.website),
@@ -8,13 +8,22 @@ import type { Track } from '../../shared/types';
 export const API_BASE = (import.meta.env.VITE_LULL_API as string | undefined) ?? 'https://api.lull.website';
 
 const get = async <T>(path: string): Promise<T> => {
-  const r = await fetch(`${API_BASE}/api/${path}`).catch(() => {
+  const r = await fetch(`${API_BASE}/api/${path}`, { signal: AbortSignal.timeout(15000) }).catch(() => {
     throw new Error(navigator.onLine ? 'Нет связи с сервером Lull — попробуй ещё раз' : 'Нет интернета');
   });
   if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Сервер ответил ${r.status}`);
   return r.json() as Promise<T>;
 };
 const enc = encodeURIComponent;
+const streamHints = new Map<string, { title: string; artist: string; duration?: number }>();
+const preparing = new Map<string, Promise<StreamMeta>>();
+const prepared = new Map<string, { at: number; meta: StreamMeta }>();
+const streamQuery = (id: string) => {
+  const hint = streamHints.get(id);
+  const query = new URLSearchParams({ q: quality() });
+  if (hint) { query.set('t', hint.title); query.set('a', hint.artist); if (hint.duration) query.set('d', String(hint.duration)); }
+  return query.toString();
+};
 
 // Хранилище: localStorage, по ключу на запись (как файлы в десктопе)
 const PREFIX = 'lull:';
@@ -70,14 +79,31 @@ export const httpApi: Api = {
   artist: (id) => get(`artist/${enc(id)}`),
   upNext: (id) => get(`upnext/${enc(id)}`),
   lyrics: async (track: Track) => {
-    const r = await fetch(`${API_BASE}/api/lyrics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(track) });
+    const r = await fetch(`${API_BASE}/api/lyrics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(track), signal: AbortSignal.timeout(10000) });
     if (!r.ok) throw new Error(`Сервер ответил ${r.status}`);
     return r.json();
   },
 
-  streamUrl: (id) => `${API_BASE}/api/stream/${enc(id)}?q=${quality()}`,
-  imageUrl: (src) => (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(src) ? `${API_BASE}/api/img?u=${enc(src)}` : src),
-  prepareStream: async (id, _prefetch, _hint) => ({ id, mime: quality() === 'aac' ? 'audio/mp4' : 'audio/webm', bitrate: 128000, contentLength: 0, durationSec: 0, loudnessDb: 0 }),
+  streamUrl: (id) => `${API_BASE}/api/stream/${enc(id)}?${streamQuery(id)}`,
+  imageUrl: (src) => (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(src) ? `${API_BASE}/api/img?u=${enc(src)}&iv=2` : src),
+  prepareStream: (id, _prefetch, hint) => {
+    if (hint) {
+      streamHints.set(id, hint);
+      if (streamHints.size > 500) streamHints.delete(streamHints.keys().next().value!);
+    }
+    const key = `${quality()}:${id}`;
+    const hit = prepared.get(key);
+    if (hit && Date.now() - hit.at < 5 * 60_000) return Promise.resolve(hit.meta);
+    const active = preparing.get(key);
+    if (active) return active;
+    const task = get<StreamMeta>(`prepare/${enc(id)}?${streamQuery(id)}`).then(meta => {
+      prepared.set(key, { at: Date.now(), meta });
+      if (prepared.size > 200) prepared.delete(prepared.keys().next().value!);
+      return meta;
+    }).finally(() => preparing.delete(key));
+    preparing.set(key, task);
+    return task;
+  },
   relayHealth: async () => {
     const t0 = performance.now();
     try {

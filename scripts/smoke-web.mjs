@@ -12,6 +12,7 @@ try {
     await new Promise(r => setTimeout(r, 500));
   }
   for (const [name, engine, device] of [['android', chromium, 'Pixel 7'], ['iphone', webkit, 'iPhone 13']]) {
+    if (process.argv.includes('--chromium-only') && name !== 'android') continue;
     const browser = await engine.launch();
     try {
       const context = await browser.newContext({ ...devices[device], serviceWorkers: stagedCorsFix ? 'block' : 'allow' });

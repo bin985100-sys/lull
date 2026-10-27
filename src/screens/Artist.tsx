@@ -24,7 +24,7 @@ export function ArtistScreen() {
   const [all, setAll] = useState(false);
   usePageArt(data?.thumb);
   // Популярные треки готовим заранее — чаще всего включают их
-  useEffect(() => (data ? listPrefetch(data.topTracks.map((t) => t.id), 3) : undefined), [data]);
+  useEffect(() => (data ? listPrefetch(data.topTracks, 3) : undefined), [data]);
 
   if (loading && !data)
     return (

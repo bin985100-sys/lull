@@ -7,5 +7,5 @@ export function relayApi(): Promise<Response> {
 }
 export function xfetch(input: any, init: any = {}): Promise<Response> {
   const { direct: _d, ...rest } = init ?? {};
-  return globalThis.fetch(input, rest);
+  return globalThis.fetch(input, { ...rest, signal: rest.signal ?? AbortSignal.timeout(15000) });
 }

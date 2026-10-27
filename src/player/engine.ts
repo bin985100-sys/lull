@@ -34,6 +34,7 @@ export interface EngineEvents {
 }
 
 export class AudioEngine {
+  private generation = 0;
   private ctx: AudioContext | null = null;
   private decks: [Deck, Deck];
   private active = 0;
@@ -199,9 +200,11 @@ export class AudioEngine {
 
   /** Загрузить трек в активную деку. Если он уже предзагружен во второй — просто переключаемся. */
   async load(key: string, url: string, opts: { autoplay: boolean; startAt?: number }) {
+    const generation = ++this.generation;
     const startedAt = performance.now();
     this.cancelFade();
     await this.resume();
+    if (generation !== this.generation) return;
     const old = this.cur;
     old.want = false;
     clearTimeout(old.watchdog);
@@ -242,7 +245,9 @@ export class AudioEngine {
 
   /** Плавный переход в предзагруженный трек. */
   async crossfade(key: string, url: string, seconds: number) {
+    const generation = ++this.generation;
     await this.resume();
+    if (generation !== this.generation) return;
     const ctx = this.ctx!;
     if (this.idle.key !== key) this.preload(key, url);
     const from = this.cur;
@@ -277,9 +282,11 @@ export class AudioEngine {
   }
 
   private async safePlay(el: HTMLAudioElement) {
+    const generation = this.generation;
     try {
       await el.play();
     } catch (e) {
+      if (generation !== this.generation || this.cur.el !== el) return;
       // AbortError — трек сменили; NotSupportedError — обработает событие error (с повтором)
       const name = (e as DOMException).name;
       if (name !== 'AbortError' && name !== 'NotSupportedError') this.on.error('Не удалось начать воспроизведение');
@@ -287,7 +294,9 @@ export class AudioEngine {
   }
 
   async play() {
+    const generation = ++this.generation;
     await this.resume();
+    if (generation !== this.generation) return;
     const d = this.cur;
     d.want = true;
     // Поток упал или завис — перезапрашиваем, а не жмём play впустую
@@ -300,10 +309,12 @@ export class AudioEngine {
   }
 
   pause() {
+    this.generation++;
     this.cancelFade();
     this.cur.want = false;
     clearTimeout(this.cur.watchdog);
     this.cur.el.pause();
+    this.on.state('paused');
   }
 
   seek(sec: number) {
@@ -313,6 +324,7 @@ export class AudioEngine {
   }
 
   stop() {
+    this.generation++;
     for (const d of this.decks) {
       d.want = false;
       clearTimeout(d.watchdog);

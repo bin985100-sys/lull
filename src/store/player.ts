@@ -234,7 +234,7 @@ function srcOf(t: Track) {
 }
 
 function hintOf(t: Track) {
-  return { title: t.title, artist: t.artists?.[0]?.name ?? '' };
+  return { title: t.title, artist: t.artists?.[0]?.name ?? '', duration: t.durationSec };
 }
 
 function schedulePersist() {
