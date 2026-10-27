@@ -44,6 +44,7 @@ export async function startSync(userId: string) {
   const later = () => { clearTimeout(timer); if (!stopped) timer = setTimeout(() => void sync(), 800); };
 
   api.storeGet = async <T,>(key: string): Promise<T | undefined> => {
+    if (key === 'recentSearches') return get<T>(local(key));
     if (key === 'library') return structuredClone(view) as T;
     if (key in stateKeys) {
       const value = await get<T>(local(key));
@@ -54,6 +55,7 @@ export async function startSync(userId: string) {
     return get<T>(key);
   };
   api.storeSet = (key, value) => {
+    if (key === 'recentSearches') return set(local(key), value);
     if (key !== 'library' && !(key in stateKeys)) return set(key, value);
     // Snapshot immediately; callers often pass mutable arrays from their stores.
     const snapshot = structuredClone(value);

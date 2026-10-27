@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cloud } from './client';
 import { useSyncStatus } from './sync';
 
@@ -9,8 +9,16 @@ export function AccountSection() {
   const sync = useSyncStatus((s) => s.status);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [identity, setIdentity] = useState('');
+  useEffect(() => {
+    let active = true;
+    void cloud?.auth.getSession().then(({ data }) => {
+      if (active) setIdentity(data.session?.user.email ?? '');
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   return <div style={{ padding: 20 }}>
-    <h3>Твой аккаунт Lull</h3><p>{sync}</p>
+    <h3>Твой аккаунт Lull</h3>{identity && <p>{identity}</p>}<p role="status">{sync}</p>
     <p>Любимые треки, плейлисты и очередь доступны на других устройствах после входа в тот же аккаунт Google.</p>
     <button type="button" className="btn" disabled={busy} onClick={() => {
       setBusy(true);

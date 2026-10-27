@@ -37,6 +37,7 @@ const initial = { likes: [{ track: track('a'), addedAt: 1 }], playlists: [], sav
 cache.set('library', initial);
 let sync = await startSync('alice');
 assert.equal(visible.likes[0].track.id, 'a', 'First account imports the guest library');
+await __fixture.api.storeSet('recentSearches', ['private search']);
 offline = true;
 await __fixture.api.storeSet('library', { ...initial, likes: [] });
 await sync.flush(); sync.stop();
@@ -50,6 +51,7 @@ assert.deepEqual(visible.likes.map(v => v.track.id), ['b'], 'Reconnection preser
 sync.stop(); Object.assign(__fixture.api, original);
 sync = await startSync('bob');
 assert.deepEqual(visible.likes, [], 'Second account does not inherit the first account or guest library');
+assert.equal(await __fixture.api.storeGet('recentSearches'), undefined, 'Search history is account-local too');
 assert.equal(tables.lull_library_entries.size, 2);
 sync.stop();
 console.log('Account sync: offline durable deletion, restart, concurrent remote add and account switching passed');
