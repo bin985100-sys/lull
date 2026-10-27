@@ -18,7 +18,7 @@ try {
   const page = browser.contexts()[0].pages().find(p => p.url().startsWith('file:')) ?? browser.contexts()[0].pages()[0];
   const failures = [];
   page.on('pageerror', e => failures.push(e.message));
-  await page.waitForFunction(() => document.querySelector('#root')?.children.length && window.api, { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector('#root')?.children.length && window.api, null, { timeout: 30000 });
   const result = await page.evaluate(async () => {
     const home = await window.api.home();
     if (!home.some(section => section.items.length)) throw new Error('Empty home catalogue');
