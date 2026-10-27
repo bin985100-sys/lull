@@ -1,6 +1,12 @@
 name: Сборки Lull
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Build all platforms or Android only
+        type: choice
+        options: [all, android]
+        default: all
   push:
     tags: ['v*']
 permissions:
@@ -9,6 +15,7 @@ env:
   LULL_VERSION: '1.0.0'
 jobs:
   web:
+    if: inputs.platform != 'android'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -30,6 +37,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: Lull-API, path: dist-server/lull-api.mjs, if-no-files-found: error }
   windows:
+    if: inputs.platform != 'android'
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -46,6 +54,7 @@ jobs:
         if: always()
         with: { name: Windows-test-results, path: test-results }
   macos:
+    if: inputs.platform != 'android'
     strategy:
       fail-fast: false
       matrix:
@@ -118,16 +127,7 @@ jobs:
           arch: x86_64
           profile: pixel_7_pro
           disable-animations: true
-          script: |
-            (cd android && ./gradlew connectedDebugAndroidTest --no-daemon)
-            adb uninstall website.lull.app
-            adb install android/app/build/outputs/apk/release/app-release.apk
-            adb shell am start -W -n website.lull.app/.MainActivity
-            sleep 10
-            mkdir -p test-results
-            adb shell pidof website.lull.app
-            adb exec-out screencap -p > test-results/android-release.png
-            adb logcat -d > test-results/android-logcat.txt
+          script: bash scripts/test-android.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
