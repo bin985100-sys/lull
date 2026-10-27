@@ -55,7 +55,14 @@ try {
       await page.locator('input').first().fill('Daft Punk');
       await page.locator('input').first().press('Enter');
       await page.waitForFunction(() => document.querySelectorAll('.trow').length > 0, null, { timeout: 60000 });
+      assert.equal(await page.evaluate(() => [...document.querySelectorAll('.page .section')].every(section => section.getBoundingClientRect().right <= innerWidth + 1)), true, 'Search sections must fit the phone screen');
       await page.screenshot({ path: `test-results/${name}-search.png`, fullPage: true });
+      if (process.argv.includes('--layout-only')) {
+        assert.deepEqual(errors, [], `${name} renderer exceptions`);
+        fs.writeFileSync(`test-results/${name}-layout.json`, JSON.stringify({ mobileLayout: true, search: true, stagedCorsFix, audioVerified: false, rendererErrors: errors }, null, 2));
+        console.log(name, 'layout and search passed; audio not checked in this run');
+        continue;
+      }
       const start = Date.now();
       await page.locator('.trow .tt').first().click();
       await page.waitForFunction(() => window.__qaAudio.some(audio => !audio.paused && audio.currentTime > 0.3), null, { timeout: 60000 });

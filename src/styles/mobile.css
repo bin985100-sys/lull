@@ -45,6 +45,9 @@ body:has(.app.mobile) { user-select: none; -webkit-tap-highlight-color: transpar
 @keyframes m-spin { to { transform: rotate(360deg); } }
 
 /* контент */
+.app.mobile .section { min-width: 0; max-width: 100%; }
+.app.mobile .section > .card { min-width: 0; max-width: 100%; }
+.app.mobile .section > .card > span { min-width: 0; }
 .app.mobile .hrow { grid-auto-columns: 148px; gap: 14px; }
 .app.mobile .hrow.more { -webkit-mask-image: none; mask-image: none; }
 .app.mobile .hrow-nav { display: none; }
