@@ -27,9 +27,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 // Приложение переименовано из Player в Lull — библиотека и настройки остаются в старой папке, если она есть
 {
+  const requestedData = app.commandLine.getSwitchValue('user-data-dir');
   const old = path.join(app.getPath('appData'), 'Player');
   const cur = path.join(app.getPath('appData'), 'Lull');
-  if (fs.existsSync(old) && !fs.existsSync(cur)) app.setPath('userData', old);
+  if (requestedData && path.isAbsolute(requestedData)) app.setPath('userData', requestedData);
+  else if (fs.existsSync(old) && !fs.existsSync(cur)) app.setPath('userData', old);
   else app.setPath('userData', cur);
   app.setName('Lull');
 }

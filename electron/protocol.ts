@@ -4,6 +4,7 @@ import { Readable } from 'node:stream';
 import { relayApi, xfetch } from './relay';
 import { soundcloudFallback } from './soundcloud';
 import { preparePlayback, forgetPreparedAudio } from './playback';
+import { brokerResponse } from './audio-broker';
 import { fetchRange, hintFor, invalidateStream, markInnertubeFailed, noteForbidden, rememberHint, resolveStream, withTimeout, type ResolvedStream } from './yt';
 
 /**
@@ -31,6 +32,10 @@ function parseRange(header: string | null, total: number): [number, number | und
 
 async function streamResponse(id: string, range: string | null): Promise<Response> {
   const prepared = await preparePlayback(id);
+  if (prepared.kind === 'broker') {
+    try { return await brokerResponse(prepared, range); }
+    catch (error) { forgetPreparedAudio(id); throw error; }
+  }
   if (prepared.kind === 'soundcloud') {
     const response = await relayApi(`/sc/file?url=${encodeURIComponent(prepared.url)}`, { headers: range ? { Range: range } : {} });
     if (response.status === 403 || response.status === 404 || response.status >= 500) {

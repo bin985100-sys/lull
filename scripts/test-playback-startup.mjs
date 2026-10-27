@@ -59,8 +59,9 @@ globalThis.__lullPlaybackTest = {
 try {
   await build({ entryPoints: ['electron/playback.ts'], outfile: 'work/playback-test.mjs', bundle: true, platform: 'node', format: 'esm',
     plugins: [{ name: 'isolated-audio-sources', setup(builder) {
-      builder.onResolve({ filter: /^\.\/(downloads|soundcloud|yt)$/ }, (args) => ({ path: args.path, namespace: 'audio-test' }));
+      builder.onResolve({ filter: /^\.\/(downloads|soundcloud|yt|audio-broker)$/ }, (args) => ({ path: args.path, namespace: 'audio-test' }));
       builder.onLoad({ filter: /.*/, namespace: 'audio-test' }, (args) => {
+        if (args.path === './audio-broker') return { contents: 'export const prepareBroker=async()=>{throw new Error("Broker unavailable in legacy regression fixture")}' };
         const names = args.path === './downloads' ? ['localFileFor'] : args.path === './soundcloud' ? ['scFileFor', 'soundcloudFallback', 'prepareSoundcloud'] : ['hintFor', 'resolveStream', 'fetchRange', 'invalidateStream', 'noteForbidden', 'withTimeout'];
         return { contents: names.map((name) => `export const ${name} = (...args) => globalThis.__lullPlaybackTest.${name}(...args);`).join('\n'), loader: 'js' };
       });

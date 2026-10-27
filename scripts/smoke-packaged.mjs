@@ -1,13 +1,16 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import assert from 'node:assert/strict';
 
 const executable = process.argv[2];
 assert.ok(executable, 'Pass the packaged app executable');
 fs.mkdirSync('test-results', { recursive: true });
 const log = fs.openSync('test-results/packaged.log', 'w');
-const child = spawn(executable, ['--remote-debugging-port=9222'], { stdio: ['ignore', log, log], env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' } });
+const testProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'lull-smoke-'));
+const child = spawn(executable, [...(process.argv[3] ? [process.argv[3]] : []), '--remote-debugging-port=9222', `--user-data-dir=${testProfile}`], { stdio: ['ignore', log, log], env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' } });
 let browser;
 try {
   for (let attempt = 0; attempt < 60; attempt++) {

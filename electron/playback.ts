@@ -4,8 +4,10 @@ import { localFileFor } from './downloads';
 import { scFileFor, soundcloudFallback, prepareSoundcloud, type ScRemote } from './soundcloud';
 import { fetchRange, hintFor, invalidateStream, noteForbidden, resolveStream, withTimeout, type ResolvedStream } from './yt';
 import { firstPlayable } from './stream-selection';
+import { prepareBroker, type BrokerAudio } from './audio-broker';
 
 export type PreparedAudio =
+  | BrokerAudio
   | { kind: 'local'; file: string; size: number; mime: string; durationSec: number }
   | ({ kind: 'soundcloud' } & ScRemote)
   | { kind: 'remote'; stream: ResolvedStream };
@@ -58,14 +60,14 @@ export function preparePlayback(id: string, prefetch = false): Promise<PreparedA
   const running = pending.get(id);
   if (running) return running;
   const started = Date.now();
-  const primary = checkedRemote(id, prefetch);
-  const task = firstPlayable(primary, async () => {
+  const legacy = () => firstPlayable(checkedRemote(id, prefetch), async () => {
     const stream = await prepareSoundcloud(id, hintFor(id));
     if (stream) return { kind: 'soundcloud' as const, ...stream };
     await soundcloudFallback(id, hintFor(id));
     return localAudio(id);
-  }, prefetch ? 1000 : 0).then((source) => {
-    chosen.set(id, { source, until: source.kind === 'remote' ? source.stream.expiresAt : Infinity });
+  }, prefetch ? 1000 : 0);
+  const task = firstPlayable<PreparedAudio>(prepareBroker(id, hintFor(id)), legacy, 800).then((source) => {
+    chosen.set(id, { source, until: source.kind === 'remote' ? source.stream.expiresAt : source.kind === 'broker' ? source.expiresAt : Infinity });
     if (chosen.size > 200) chosen.delete(chosen.keys().next().value as string);
     console.log(`[audio] ${id}: ${source.kind}, ready in ${((Date.now() - started) / 1000).toFixed(1)} s`);
     return source;
@@ -75,6 +77,7 @@ export function preparePlayback(id: string, prefetch = false): Promise<PreparedA
 }
 
 export function playbackMeta(id: string, audio: PreparedAudio): StreamMeta {
+  if (audio.kind === 'broker') return audio.meta;
   if (audio.kind !== 'remote') return { id, mime: audio.mime, contentLength: audio.size,
     durationSec: audio.durationSec, bitrate: 0, loudnessDb: 0 };
   const { url: _url, expiresAt: _exp, headers: _headers, via: _via, formatId: _format, ...meta } = audio.stream;

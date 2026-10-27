@@ -16,7 +16,8 @@ on:
 permissions:
   contents: write
 env:
-  LULL_VERSION: '1.0.0'
+  LULL_VERSION: '1.0.1'
+  LULL_VERSION_CODE: '2'
   VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
   VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
   VITE_ACCOUNTS_ENABLED: ${{ vars.VITE_ACCOUNTS_ENABLED || 'false' }}
@@ -33,6 +34,7 @@ jobs:
       - run: npm run typecheck
       - run: node scripts/test-packaged-parser.mjs && node scripts/test-stream-selection.mjs && node scripts/test-playback-startup.mjs
       - run: node scripts/test-native-media-session.mjs
+      - run: node scripts/test-desktop-broker.mjs
       - run: node scripts/test-account-library.mjs && node scripts/test-account-sync.mjs && node scripts/test-player-cancellation.mjs
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
