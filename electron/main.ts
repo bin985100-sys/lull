@@ -1,6 +1,5 @@
-import { localFileFor } from './downloads';
 import { healProxy, installRelayCertCheck, relayHealth, xfetch } from './relay';
-import { soundcloudFallback } from './soundcloud';
+import { preparePlayback, playbackMeta } from './playback';
 import { ensureYtDlp } from './ytdlp';
 import { diagnose } from './diagnose';
 import { logDir, startFileLog } from './log';
@@ -127,15 +126,10 @@ function registerIpc() {
     if (hint) ytApi.rememberHint(id, hint);
     // Заготовка заранее не удалась — это не ошибка для пользователя, не засоряем журнал
     const s = prefetch
-      ? await ytApi.resolveStream(id, { prefetch }).catch(() => {
-          // Трек недоступен в YouTube — заранее готовим запасной вариант с SoundCloud
-          if (!localFileFor(id)) void soundcloudFallback(id, ytApi.hintFor(id));
-          return null;
-        })
-      : await ytApi.resolveStream(id, { prefetch });
+      ? await preparePlayback(id, true).catch(() => null)
+      : await preparePlayback(id);
     if (!s) return null;
-    const { url: _url, expiresAt: _exp, ...meta } = s;
-    return meta;
+    return playbackMeta(id, s);
   });
   handle(IPC.visitorData, () => ytApi.getVisitorData());
   handle(IPC.setPoToken, (token: string, visitor: string) => ytApi.setPoToken(token, visitor));

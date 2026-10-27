@@ -59,14 +59,14 @@ export function startBridges() {
     api.overlayPush({
       track: p.current() ?? null,
       lyrics: l.trackId === p.current()?.id ? l.current() : null,
-      position: audioEngine.position,
-      playing: p.playing,
+      position: p.loading ? p.position : audioEngine.position,
+      playing: p.playing && !p.loading && audioEngine.isPlaying,
       offset: l.offset,
       at: Date.now()
     });
   };
   // Позицию оверлей «доигрывает» сам; периодическая синхронизация — раз в полсекунды
   setInterval(push, 500);
-  usePlayer.subscribe((s, p) => (s.playing !== p.playing || s.index !== p.index) && push());
+  usePlayer.subscribe((s, p) => (s.playing !== p.playing || s.loading !== p.loading || s.index !== p.index) && push());
   useLyrics.subscribe(push);
 }

@@ -16,3 +16,5 @@ android/capacitor-cordova-android-plugins/build/
 *.jks
 relay.local
 qa/
+work/
+test-results/

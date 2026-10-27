@@ -1,91 +1,148 @@
-# Сборки Lull: Windows (.exe), macOS (.dmg), Android (.apk) и веб-версия.
-# Запуск: вкладка Actions → «Сборки Lull» → Run workflow, или тег v* (тогда ещё и GitHub Release со ссылками).
 name: Сборки Lull
-
 on:
   workflow_dispatch:
   push:
     tags: ['v*']
-
 permissions:
   contents: write
-
 env:
-  LULL_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '1.0.0' }}
-
+  LULL_VERSION: '1.0.0'
 jobs:
-  windows:
-    runs-on: windows-latest
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: node scripts/test-packaged-parser.mjs && node scripts/test-stream-selection.mjs && node scripts/test-playback-startup.mjs
+      - run: npm run build:web && npm run build:api
+      - run: npx playwright install --with-deps chromium webkit
+      - run: node scripts/smoke-web.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: Web-test-results, path: test-results }
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-Web, path: dist-web, if-no-files-found: error }
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-API, path: dist-server/lull-api.mjs, if-no-files-found: error }
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
       - run: npm ci
       - run: npm run dist
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false', LULL_RELAY: '${{ secrets.LULL_RELAY }}' }
+      - run: node scripts/smoke-packaged.mjs release/win-unpacked/Lull.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: Windows-test-results, path: test-results }
       - uses: actions/upload-artifact@v4
         with: { name: Lull-Windows, path: release/*.exe, if-no-files-found: error }
-
   macos:
-    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, arch: arm64 }
+          - { runner: macos-15-intel, arch: x64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with: { node-version: 24, cache: npm }
       - run: npm ci
-      - run: npm run dist:mac
+      - run: npm run build && npx electron-builder --mac dmg --${{ matrix.arch }}
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false', LULL_RELAY: '${{ secrets.LULL_RELAY }}' }
+      - name: Verify DMG and run mounted application
+        run: |
+          hdiutil verify release/Lull-mac-${{ matrix.arch }}.dmg
+          mkdir -p "$RUNNER_TEMP/lull-mount"
+          hdiutil attach release/Lull-mac-${{ matrix.arch }}.dmg -readonly -nobrowse -mountpoint "$RUNNER_TEMP/lull-mount"
+          file "$RUNNER_TEMP/lull-mount/Lull.app/Contents/MacOS/Lull"
+          node scripts/smoke-packaged.mjs "$RUNNER_TEMP/lull-mount/Lull.app/Contents/MacOS/Lull"
+          hdiutil detach "$RUNNER_TEMP/lull-mount"
       - uses: actions/upload-artifact@v4
-        with: { name: Lull-macOS, path: release/*.dmg, if-no-files-found: error }
-
+        if: always()
+        with: { name: 'macOS-${{ matrix.arch }}-test-results', path: test-results }
+      - uses: actions/upload-artifact@v4
+        with: { name: 'Lull-macOS-${{ matrix.arch }}', path: release/*.dmg, if-no-files-found: error }
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with: { node-version: 24, cache: npm }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
+      - uses: android-actions/setup-android@v3
       - run: npm ci
-      - run: npm run build:web
-      - run: npx cap sync android
-      - name: Ключ подписи
-        env: { KS: '${{ secrets.LULL_KEYSTORE_B64 }}' }
-        run: if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/lull.jks"; echo "LULL_KEYSTORE=$RUNNER_TEMP/lull.jks" >> "$GITHUB_ENV"; fi
-      - name: APK
+      - run: npm run build:web && npx cap sync android
+      - name: Configure release signing
+        env:
+          KS: ${{ secrets.LULL_KEYSTORE_B64 }}
+          PASSWORD: ${{ secrets.LULL_KEYSTORE_PASSWORD }}
+        run: |
+          test -n "$KS" && test -n "$PASSWORD"
+          printf '%s' "$KS" | base64 -d > "$RUNNER_TEMP/lull.jks"
+          echo "LULL_KEYSTORE=$RUNNER_TEMP/lull.jks" >> "$GITHUB_ENV"
+      - name: Build APKs
         working-directory: android
         env:
           LULL_KEYSTORE_PASSWORD: ${{ secrets.LULL_KEYSTORE_PASSWORD }}
           LULL_VERSION_CODE: ${{ github.run_number }}
-        run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon
-      - run: mv android/app/build/outputs/apk/release/*.apk Lull.apk
+        run: chmod +x gradlew && ./gradlew assembleRelease assembleDebug assembleDebugAndroidTest --no-daemon
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          disable-animations: true
+          script: |
+            (cd android && ./gradlew connectedDebugAndroidTest --no-daemon)
+            adb uninstall website.lull.app
+            adb install android/app/build/outputs/apk/release/app-release.apk
+            adb shell am start -W -n website.lull.app/.MainActivity
+            sleep 10
+            mkdir -p test-results
+            adb shell pidof website.lull.app
+            adb exec-out screencap -p > test-results/android-release.png
+            adb logcat -d > test-results/android-logcat.txt
       - uses: actions/upload-artifact@v4
-        with: { name: Lull-Android, path: '*.apk', if-no-files-found: error }
-
-  web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run build:web && npm run build:api
+        if: always()
+        with:
+          name: Android-test-results
+          path: |
+            test-results
+            android/app/build/reports/androidTests
+            android/app/build/outputs/androidTest-results
+      - run: cp android/app/build/outputs/apk/release/app-release.apk Lull.apk
       - uses: actions/upload-artifact@v4
-        with: { name: Lull-Web, path: dist-web }
-      - uses: actions/upload-artifact@v4
-        with: { name: Lull-API, path: dist-server/lull-api.mjs }
-
-  # Выпуск на GitHub: ссылки .../releases/latest/download/<файл> на лендинге всегда ведут на свежую сборку
+        with: { name: Lull-Android, path: Lull.apk, if-no-files-found: error }
   release:
-    needs: [windows, macos, android]
+    needs: [windows, macos, android, web]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
-        with: { path: out, merge-multiple: true }
+        with: { path: out, merge-multiple: true, pattern: 'Lull-*' }
       - uses: softprops/action-gh-release@v2
         with:
+          target_commitish: ${{ github.sha }}
           tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build-{0}', github.run_number) }}
-          name: Lull ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('· сборка {0}', github.run_number) }}
+          name: Lull · сборка ${{ github.run_number }}
           make_latest: true
           files: |
             out/*.exe

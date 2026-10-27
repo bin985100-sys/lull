@@ -17,6 +17,7 @@ interface Deck {
   /** Сколько раз уже перезапрашивали поток */
   tries: number;
   watchdog?: ReturnType<typeof setTimeout>;
+  startedAt?: number;
 }
 
 /** Сколько ждём начала звука, прежде чем перезапросить поток */
@@ -78,6 +79,10 @@ export class AudioEngine {
     d.el.addEventListener('playing', () => {
       clearTimeout(d.watchdog);
       d.tries = 0;
+      if (d.startedAt !== undefined) {
+        console.log(`[playback] ${d.key}: started after ${Math.round(performance.now() - d.startedAt)} ms`);
+        d.startedAt = undefined;
+      }
       if (isActive()) this.on.state('playing');
     });
     d.el.addEventListener('pause', () => isActive() && !this.fading && this.on.state('paused'));
@@ -194,6 +199,7 @@ export class AudioEngine {
 
   /** Загрузить трек в активную деку. Если он уже предзагружен во второй — просто переключаемся. */
   async load(key: string, url: string, opts: { autoplay: boolean; startAt?: number }) {
+    const startedAt = performance.now();
     this.cancelFade();
     await this.resume();
     const old = this.cur;
@@ -208,6 +214,7 @@ export class AudioEngine {
       this.cur.el.src = url;
     }
     const d = this.cur;
+    d.startedAt = opts.autoplay ? startedAt : undefined;
     d.tries = 0;
     d.want = opts.autoplay;
     d.el.playbackRate = this.rate;
@@ -318,6 +325,10 @@ export class AudioEngine {
 
   get position() {
     return this.cur.el.currentTime;
+  }
+  get isPlaying() {
+    const el = this.cur.el;
+    return !el.paused && !el.ended && el.readyState >= 3;
   }
   get duration() {
     return this.cur.el.duration || 0;
