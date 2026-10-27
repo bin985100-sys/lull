@@ -21,6 +21,7 @@ import type { OverlayOptions, OverlayState } from '../shared/types';
 import { clearImageCache, handleMediaScheme, registerMediaScheme } from './protocol';
 import { flushStore, storeGet, storeSet } from './store';
 import * as ytApi from './yt';
+import { receiveAccountUrl, registerAccountIpc } from './account';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -179,7 +180,10 @@ function registerIpc() {
   handle(IPC.setHotkeys, (m) => setHotkeys(m, () => win));
 }
 
-app.on('second-instance', () => {
+app.on('open-url', (e, url) => { e.preventDefault(); receiveAccountUrl(url, win?.webContents); });
+for (const arg of process.argv) if (arg.startsWith('lull://auth/')) receiveAccountUrl(arg);
+app.on('second-instance', (_event, argv) => {
+  for (const arg of argv) if (arg.startsWith('lull://auth/')) receiveAccountUrl(arg, win?.webContents);
   if (devUrl) {
     console.log('[app] запущена новая копия в режиме разработки — закрываюсь');
     app.exit(0);
@@ -209,6 +213,8 @@ app.whenReady().then(async () => {
   setTimeout(() => void ensureYtDlp(), 4000);
   handleMediaScheme();
   registerIpc();
+  registerAccountIpc(() => win?.webContents);
+  if (app.isPackaged) app.setAsDefaultProtocolClient('lull');
   createWindow();
   const s = storeGet<{ discordRpc?: boolean; discordClientId?: string }>('settings');
   const discordId = s?.discordClientId || DISCORD_CLIENT_ID;

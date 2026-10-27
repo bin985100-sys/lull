@@ -21,6 +21,9 @@ import type {
 
 /** Контракт между preload (window.api) и интерфейсом. */
 export interface Api {
+  accountStorage?: { get(key: string): Promise<string | null>; set(key: string, value: string | null): Promise<void> };
+  accountCallback?(): Promise<string | null>;
+  onAccountCallback?(cb: (url: string) => void): () => void;
   platform: string;
 
   // каталог
@@ -105,6 +108,10 @@ export interface Api {
 }
 
 export const IPC = {
+  accountStorageGet: 'account:storage:get',
+  accountStorageSet: 'account:storage:set',
+  accountCallback: 'account:callback:get',
+  accountCallbackEvent: 'account:callback',
   home: 'yt:home',
   homeChips: 'yt:home-chips',
   charts: 'yt:charts',

@@ -53,4 +53,32 @@ async function bootApp() {
   setTimeout(() => void initPoToken(), 1500);
 }
 
-void (location.hash.startsWith('#/overlay') ? bootOverlay() : bootApp());
+async function boot() {
+  const { accountsEnabled, cloud, initializeAccount } = await import('./account/client');
+  const { isMock } = await import('./api');
+  if (!accountsEnabled || isMock) return bootApp();
+  const { LoginScreen } = await import('./account/LoginScreen');
+  const showLogin = (error = '') => root.render(<LoginScreen key={error} error={error} />);
+  let bootedUser: string | undefined;
+  const authenticated = async (userId: string) => {
+    if (bootedUser === userId) return;
+    if (bootedUser) { location.reload(); return; }
+    bootedUser = userId;
+    const { startSync } = await import('./account/sync');
+    const sync = await startSync(userId);
+    const { setBeforeSignOut } = await import('./account/AccountSection');
+    setBeforeSignOut(sync.flush);
+    await bootApp();
+  };
+  try {
+    const session = await initializeAccount(showLogin);
+    if (session) await authenticated(session.user.id); else showLogin();
+    cloud?.auth.onAuthStateChange((event, next) => {
+      // Leave the auth callback before requesting other Supabase APIs.
+      if (event === 'SIGNED_IN' && next) setTimeout(() => void authenticated(next.user.id).catch((e: Error) => showLogin(e.message)), 0);
+      if (event === 'SIGNED_OUT' && bootedUser) location.reload();
+    });
+  } catch (e) { showLogin(e instanceof Error ? e.message : 'Не удалось войти'); }
+}
+
+void (location.hash.startsWith('#/overlay') ? bootOverlay() : boot());

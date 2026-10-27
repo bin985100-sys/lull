@@ -24,6 +24,9 @@ const on = <T>(ch: string, cb: (v: T) => void) => {
 };
 
 const api: Api = {
+  accountStorage: { get: (key) => invoke(IPC.accountStorageGet, key), set: (key, value) => invoke(IPC.accountStorageSet, key, value) },
+  accountCallback: () => invoke(IPC.accountCallback),
+  onAccountCallback: (cb) => on(IPC.accountCallbackEvent, cb),
   platform: process.platform,
   home: (chip) => invoke(IPC.home, chip),
   homeChips: () => invoke(IPC.homeChips),

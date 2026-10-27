@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 result=0
-(cd android && ./gradlew connectedDebugAndroidTest --no-daemon) || result=$?
+(cd android && ./gradlew :app:connectedDebugAndroidTest --no-daemon) || result=$?
 # Test the signed release too, even when a catalogue assertion fails.
 adb uninstall website.lull.app || true
 adb install android/app/build/outputs/apk/release/app-release.apk || exit 1

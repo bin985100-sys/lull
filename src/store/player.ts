@@ -67,6 +67,7 @@ const shuffleArr = <T,>(a: T[]): T[] => {
 };
 
 let lastTimeUpdate = 0;
+let lastQueueSave = 0;
 let preloadedFor = -1;
 let crossfadedFor = -1;
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
@@ -157,6 +158,10 @@ function trackListen(position: number) {
 
 function onProgress(position: number, duration: number) {
   trackListen(position);
+  if (performance.now() - lastQueueSave > 5000) {
+    lastQueueSave = performance.now();
+    schedulePersist();
+  }
   const s = usePlayer.getState();
   const st = useSettings.getState();
   if (!duration || !Number.isFinite(duration)) return;
@@ -199,13 +204,9 @@ function afterTrackStart(track: Track) {
   void api
     .prepareStream(track.id)
     .then((m) => {
+      if (usePlayer.getState().current()?.id !== track.id) return;
       engine.setNormalization(st.normalize ? m.loudnessDb : null);
       if (!track.durationSec && m.durationSec) usePlayer.setState({ duration: m.durationSec });
-      // Заранее получаем ссылку на следующий трек — переключение будет мгновенным
-      const s = usePlayer.getState();
-      const ni = nextIndexOf(s);
-      // и на следующий за ним — чтобы быстрое пролистывание тоже не ждало
-      if (ni != null && s.queue[ni]) for (const q of s.queue.slice(ni, ni + 3)) void api.prepareStream(q.id, true, hintOf(q)).catch(() => {});
     })
     .catch(() => {});
 }
@@ -221,6 +222,10 @@ async function loadCurrent(autoplay: boolean, startAt?: number) {
   htmlEngine.expectedDuration = track.durationSec ?? 0;
   // Подсказка в основной процесс: если ролик недоступен, он найдёт замену той же песни
   void api.prepareStream(track.id, false, hintOf(track)).catch(() => {});
+  // Start the next preparations immediately, independently of the current
+  // track's resolver. A slow first track must not delay every later skip.
+  const ni = nextIndexOf(s);
+  if (ni != null) for (const q of s.queue.slice(ni, ni + 3)) void api.prepareStream(q.id, true, hintOf(q)).catch(() => {});
   await htmlEngine.load(track.id, srcOf(track), { autoplay, startAt });
   if (token !== loadToken) return;
   afterTrackStart(track);

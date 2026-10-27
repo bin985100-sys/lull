@@ -5,6 +5,8 @@ import fs from 'node:fs';
 
 fs.mkdirSync('test-results', { recursive: true });
 const stagedCorsFix = process.argv.includes('--stage-cors-fix');
+const query = process.argv.find(x => x.startsWith('--query='))?.slice(8) ?? 'Daft Punk';
+const suffix = process.argv.find(x => x.startsWith('--label='))?.slice(8).replace(/[^a-z0-9_-]/gi, '') ?? '';
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--outDir', 'dist-web', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], { stdio: 'ignore' });
 try {
   for (let i = 0; i < 60; i++) {
@@ -53,7 +55,7 @@ try {
       assert.equal(await page.locator('.inst-back').count(), 0, 'Installed application must not show install prompts');
       await page.screenshot({ path: `test-results/${name}-home.png`, fullPage: true });
       await page.locator('.m-tab').filter({ hasText: 'Поиск' }).click();
-      await page.locator('input').first().fill('Daft Punk');
+      await page.locator('input').first().fill(query);
       await page.locator('input').first().press('Enter');
       await page.getByRole('heading', { name: 'Треки', exact: true }).waitFor({ timeout: 60000 });
       await page.waitForFunction(() => document.querySelectorAll('.trow').length > 0, null, { timeout: 60000 });
@@ -75,9 +77,10 @@ try {
       const playbackMs = Date.now() - start;
       await page.screenshot({ path: `test-results/${name}-playing.png`, fullPage: true });
       assert.deepEqual(errors, [], `${name} renderer exceptions`);
-      const result = { mobileLayout: true, search: true, playbackMs, stagedCorsFix, rendererErrors: errors };
+      const title = await page.locator('.trow .tt').first().innerText();
+      const result = { mobileLayout: true, search: true, query, title, playbackMs, stagedCorsFix, rendererErrors: errors };
       console.log(name, JSON.stringify(result));
-      fs.writeFileSync(`test-results/${name}.json`, JSON.stringify(result, null, 2));
+      fs.writeFileSync(`test-results/${name}${suffix ? '-' + suffix : ''}.json`, JSON.stringify(result, null, 2));
     } finally { await browser.close(); }
   }
 } finally { server.kill(); }

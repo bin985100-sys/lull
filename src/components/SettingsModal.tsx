@@ -13,6 +13,8 @@ import { EQ_FREQS } from '../player/engine';
 import { IClose, ISearch, IChevronLeft } from './icons';
 import { BrandIcon, type Brand } from './BrandIcon';
 import { DiscordSection, YoutubeSection } from './Integrations';
+import { accountsEnabled } from '../account/client';
+import { AccountSection } from '../account/AccountSection';
 
 const NAV_BRAND: Record<string, Brand> = { youtube: 'ytmusic', discord: 'discord' };
 
@@ -24,9 +26,11 @@ const ALL_SECTIONS: { title: string; items: [string, string][] }[] = [
   { title: 'Приложение', items: [['relay', 'Сервер Lull'], ['storage', 'Хранилище и кеш'], ['about', 'О приложении']] }
 ];
 // В веб-версии и на телефоне нет глобальных клавиш, оверлея, Discord и входа в YouTube
-const SECTIONS = isDesktop ? ALL_SECTIONS : ALL_SECTIONS.map((g) => ({ ...g, items: g.items.filter(([id]) => !DESKTOP_ONLY.has(id)) })).filter((g) => g.items.length);
+const SECTIONS = ALL_SECTIONS.map((g) => ({ ...g, items: g.items.filter(([id]) => (isDesktop || !DESKTOP_ONLY.has(id)) && (!accountsEnabled || id !== 'youtube')) })).filter((g) => g.items.length);
+if (accountsEnabled) SECTIONS.unshift({ title: 'Аккаунт', items: [['account', 'Аккаунт Lull']] });
 
 const TITLES: Record<string, [string, string]> = {
+  account: ['Аккаунт Lull', 'Библиотека и синхронизация между устройствами.'],
   play: ['Воспроизведение', 'Очередь, переходы между треками и вывод звука.'],
   sound: ['Звук и эквалайзер', 'Эквалайзер на 10 полос и выравнивание громкости.'],
   keys: ['Горячие клавиши', 'Глобальные сочетания работают везде, остальные — когда окно приложения активно. Нажми на сочетание, чтобы его изменить.'],
@@ -432,7 +436,8 @@ export function SettingsModal() {
                 {section === 'keys' && <KeysSection />}
                 {section === 'look' && <LookSection />}
                 {section === 'discord' && <DiscordSection />}
-                {section === 'youtube' && <YoutubeSection />}
+                {section === 'youtube' && !accountsEnabled && <YoutubeSection />}
+                {section === 'account' && accountsEnabled && <AccountSection />}
                 {section === 'overlay' && <OverlaySection />}
                 {section === 'relay' && <RelaySection />}
                 {section === 'storage' && <StorageSection />}
