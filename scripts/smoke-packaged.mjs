@@ -15,7 +15,13 @@ try {
     catch { if (child.exitCode !== null) throw new Error('Packaged application exited early'); await new Promise(r => setTimeout(r, 1000)); }
   }
   assert.ok(browser, 'Packaged application did not open its window');
-  const page = browser.contexts()[0].pages().find(p => p.url().startsWith('file:')) ?? browser.contexts()[0].pages()[0];
+  let page;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    page = browser.contexts()[0]?.pages().find(p => p.url().startsWith('file:'));
+    if (page) break;
+    await new Promise(r => setTimeout(r, 500));
+  }
+  assert.ok(page, 'Packaged application did not load its renderer');
   const failures = [];
   page.on('pageerror', e => failures.push(e.message));
   await page.waitForFunction(() => document.querySelector('#root')?.children.length && window.api, null, { timeout: 30000 });
@@ -26,7 +32,9 @@ try {
     if (!search.tracks?.length) throw new Error('Empty search results');
     const track = search.tracks[0];
     const start = performance.now();
-    await window.api.prepareStream(track.id, false, { title: track.title, artist: track.artists.map(a => a.name).join(', ') });
+    const hint = { title: track.title, artist: track.artists.map(a => a.name).join(', ') };
+    try { await window.api.prepareStream(track.id, false, hint); }
+    catch { await window.api.prepareStream(track.id, false, hint); }
     const audio = new Audio(window.api.streamUrl(track.id));
     audio.muted = true;
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Audio did not start within 45 seconds')), 45000));

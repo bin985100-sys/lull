@@ -38,12 +38,12 @@ jobs:
       - run: npm ci
       - run: npm run dist -- --publish never
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false', LULL_RELAY: '${{ secrets.LULL_RELAY }}' }
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-Windows, path: release/*.exe, if-no-files-found: error }
       - run: node scripts/smoke-packaged.mjs release/win-unpacked/Lull.exe
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: Windows-test-results, path: test-results }
-      - uses: actions/upload-artifact@v4
-        with: { name: Lull-Windows, path: release/*.exe, if-no-files-found: error }
   macos:
     strategy:
       fail-fast: false
@@ -60,6 +60,8 @@ jobs:
       - run: npm ci
       - run: npm run build && npx electron-builder --mac dmg --${{ matrix.arch }} --publish never
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false', LULL_RELAY: '${{ secrets.LULL_RELAY }}' }
+      - uses: actions/upload-artifact@v4
+        with: { name: 'Lull-macOS-${{ matrix.arch }}', path: release/*.dmg, if-no-files-found: error }
       - name: Verify DMG and run mounted application
         run: |
           hdiutil verify release/Lull-mac-${{ matrix.arch }}.dmg
@@ -71,8 +73,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: 'macOS-${{ matrix.arch }}-test-results', path: test-results }
-      - uses: actions/upload-artifact@v4
-        with: { name: 'Lull-macOS-${{ matrix.arch }}', path: release/*.dmg, if-no-files-found: error }
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -100,6 +100,11 @@ jobs:
           LULL_KEYSTORE_PASSWORD: ${{ secrets.LULL_KEYSTORE_PASSWORD }}
           LULL_VERSION_CODE: ${{ github.run_number }}
         run: chmod +x gradlew && ./gradlew assembleRelease assembleDebug assembleDebugAndroidTest --no-daemon
+      - name: Verify APK signature
+        run: '"$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose --print-certs android/app/build/outputs/apk/release/app-release.apk'
+      - run: cp android/app/build/outputs/apk/release/app-release.apk Lull.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-Android, path: Lull.apk, if-no-files-found: error }
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -130,9 +135,6 @@ jobs:
             test-results
             android/app/build/reports/androidTests
             android/app/build/outputs/androidTest-results
-      - run: cp android/app/build/outputs/apk/release/app-release.apk Lull.apk
-      - uses: actions/upload-artifact@v4
-        with: { name: Lull-Android, path: Lull.apk, if-no-files-found: error }
   release:
     needs: [windows, macos, android, web]
     runs-on: ubuntu-latest
