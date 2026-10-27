@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { IPC } from '../shared/api';
 import type { SearchFilter, Track } from '../shared/types';
 import { configureDiscord, discordStatus, setDiscordActivity } from './discord';
-import { DISCORD_CLIENT_ID } from '../shared/config';
+import { ACCOUNTS_ENABLED, DISCORD_CLIENT_ID } from '../shared/config';
 import { dirSize, download, downloadsDir, listDownloads, removeDownload } from './downloads';
 import { lyrics } from './lyrics';
 import { accountState, login, logout, restoreAuth, selectChannel } from './auth';
@@ -170,11 +170,11 @@ function registerIpc() {
   handle(IPC.diagnose, (t: Track) => diagnose(t));
   handle(IPC.openLogs, () => shell.openPath(logDir()).then(() => undefined));
 
-  handle(IPC.ytLogin, () => login(win ?? undefined));
+  handle(IPC.ytLogin, () => ACCOUNTS_ENABLED ? Promise.reject(new Error('Вход доступен через аккаунт Lull')) : login(win ?? undefined));
   handle(IPC.ytLogout, () => logout());
   handle(IPC.ytAccount, () => accountState());
   handle(IPC.ytSelectChannel, (id: string | null) => selectChannel(id));
-  handle(IPC.ytLibrary, () => ytApi.accountLibrary());
+  handle(IPC.ytLibrary, () => ACCOUNTS_ENABLED ? { playlists: [], liked: [] } : ytApi.accountLibrary());
   handle(IPC.discordStatus, () => discordStatus());
   ipcMain.handle(IPC.importPlaylist, (e, url: string) => importPlaylist(url, e.sender));
   handle(IPC.overlayConfigure, (o: OverlayOptions) => configureOverlay(o, path.join(here, 'preload.cjs'), loadApp));
@@ -222,7 +222,8 @@ app.whenReady().then(async () => {
   const discordId = s?.discordClientId || DISCORD_CLIENT_ID;
   if (s?.discordRpc && discordId) void configureDiscord(true, discordId);
   // Восстанавливаем вход в YouTube и прогреваем сессию
-  void restoreAuth().finally(() => void ytApi.yt().catch(() => {}));
+  if (ACCOUNTS_ENABLED) void ytApi.yt().catch(() => {});
+  else void restoreAuth().finally(() => void ytApi.yt().catch(() => {}));
   restoreOverlay(path.join(here, 'preload.cjs'), loadApp);
 });
 

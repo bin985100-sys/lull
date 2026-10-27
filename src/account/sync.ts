@@ -75,6 +75,12 @@ export async function startSync(userId: string) {
         }
         view = next;
       } else statePending.set(stateKeys[key], key === 'settings' ? publicSettings(snapshot) : snapshot);
+      if (key === 'settings') {
+        const native = snapshot as Record<string, unknown>;
+        const current = await get<Record<string, unknown>>('settings') ?? {};
+        for (const key of ['quality', 'lang', 'relay', 'relayOn', 'discordRpc', 'discordClientId']) if (key in native) current[key] = native[key];
+        await set('settings', current);
+      }
       await set(local(key), snapshot);
       await saveOutbox(); later();
     });

@@ -19,3 +19,5 @@ export const BUILD = '2026-10-28 · 34';
 // Строка сервера Lull подставляется при сборке: файл relay.local (не в git) или переменная LULL_RELAY (секрет в GitHub)
 declare const __LULL_RELAY__: string;
 export const RELAY_DEFAULT: string = typeof __LULL_RELAY__ === 'string' ? __LULL_RELAY__ : '';
+declare const __LULL_ACCOUNTS_ENABLED__: boolean;
+export const ACCOUNTS_ENABLED = typeof __LULL_ACCOUNTS_ENABLED__ === 'boolean' && __LULL_ACCOUNTS_ENABLED__;

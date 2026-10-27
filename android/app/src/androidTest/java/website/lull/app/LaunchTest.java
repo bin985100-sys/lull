@@ -9,6 +9,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONTokener;
+import org.json.JSONObject;
+import android.os.SystemClock;
+import android.view.MotionEvent;
 import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
@@ -32,7 +35,20 @@ public class LaunchTest {
         for (int i=0;i<120;i++) { found=evaluate(instrumentation, activity,"!!document.querySelector('.trow .tt')"); if (found.equals("true")) break; Thread.sleep(500); }
         assertEquals("Search returns playable tracks", "true", found);
         long started=System.currentTimeMillis();
-        evaluate(instrumentation, activity,"document.querySelector('.trow .tt').click(); 'clicked'");
+        JSONObject point = new JSONObject(evaluate(instrumentation, activity,
+            "JSON.stringify((()=>{const r=document.querySelector('.trow .tt').getBoundingClientRect();return {x:(r.left+r.width/2)/innerWidth,y:(r.top+r.height/2)/innerHeight}})())"));
+        final float[] tap = new float[2];
+        instrumentation.runOnMainSync(() -> {
+            int[] origin = new int[2]; activity.getBridge().getWebView().getLocationOnScreen(origin);
+            tap[0] = origin[0] + (float)point.optDouble("x") * activity.getBridge().getWebView().getWidth();
+            tap[1] = origin[1] + (float)point.optDouble("y") * activity.getBridge().getWebView().getHeight();
+        });
+        // A real platform gesture is required by WebView autoplay policy.
+        // evaluateJavascript(...click()) is untrusted and cannot test playback.
+        long down = SystemClock.uptimeMillis();
+        instrumentation.sendPointerSync(MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, tap[0], tap[1], 0));
+        SystemClock.sleep(80);
+        instrumentation.sendPointerSync(MotionEvent.obtain(down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, tap[0], tap[1], 0));
         String playing="false";
         while(System.currentTimeMillis()-started<45000) {
             playing=evaluate(instrumentation, activity,"window.__qaAudio.some(a=>!a.paused&&a.currentTime>0.3)");
@@ -40,7 +56,8 @@ public class LaunchTest {
             Thread.sleep(250);
         }
         System.out.println("LULL_ANDROID_PLAYBACK_MS="+(System.currentTimeMillis()-started));
-        assertEquals("Real WebView decoder advances playback", "true", playing);
+        String details = evaluate(instrumentation, activity,"JSON.stringify({audio:window.__qaAudio.map(a=>({time:a.currentTime,paused:a.paused,ready:a.readyState,error:a.error?.code})),text:document.body.innerText.slice(-1500)})");
+        assertEquals("Real WebView decoder advances playback: " + details, "true", playing);
     }
     @Test public void catalogueAndMobileNavigationLoad() throws Exception {
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();

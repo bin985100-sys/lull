@@ -53,6 +53,10 @@ export async function initializeAccount(onError: (message: string) => void) {
   } else if (location.pathname === '/auth/callback') await acceptCallback(location.href);
   const { data, error } = await cloud.auth.getSession();
   if (error) throw error;
+  if (data.session) {
+    const verified = await cloud.auth.getClaims(data.session.access_token);
+    if (verified.error || verified.data?.claims.sub !== data.session.user.id) throw new Error('Не удалось подтвердить вход. Войди снова.');
+  }
   return data.session;
 }
 

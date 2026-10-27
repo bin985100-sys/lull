@@ -3,6 +3,7 @@ import { isProxyDead } from './relay';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ACCOUNTS_ENABLED } from '../shared/config';
 
 /**
  * Основной способ получить аудио, когда YouTube не пускает встроенный клиент: yt-dlp.
@@ -183,6 +184,7 @@ export function resetYtDlpCookies() {
   cookiesCache = null;
 }
 async function cookiesFile(): Promise<string | null> {
+  if (ACCOUNTS_ENABLED) return null;
   if (cookiesCache && Date.now() - cookiesCache.at < 10 * 60_000) return cookiesCache.file;
   let file: string | null = null;
   try {
