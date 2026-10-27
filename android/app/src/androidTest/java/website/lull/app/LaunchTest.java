@@ -26,7 +26,9 @@ public class LaunchTest {
                 instrumentation.runOnMainSync(() -> activity.getBridge().getWebView().evaluateJavascript(
                     "JSON.stringify({native:!!window.Capacitor?.isNativePlatform?.(),tabs:document.querySelectorAll('.m-tab').length,content:document.querySelectorAll('.card[role=link],.trow').length,error:document.body.innerText.includes('Не получилось загрузить')})",
                     result -> { value.set(result); done.countDown(); }));
-                assertTrue("WebView did not respond", done.await(5, TimeUnit.SECONDS));
+                // An evaluation queued during the initial document navigation
+                // can be discarded; retry after the WebView finishes loading.
+                if (!done.await(5, TimeUnit.SECONDS)) continue;
                 state = value.get();
                 if (state.contains("\\\"native\\\":true") && state.contains("\\\"tabs\\\":4") && !state.contains("\\\"content\\\":0") && state.contains("\\\"error\\\":false")) return;
                 Thread.sleep(500);

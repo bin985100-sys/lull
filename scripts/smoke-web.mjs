@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 fs.mkdirSync('test-results', { recursive: true });
+const stagedCorsFix = process.argv.includes('--stage-cors-fix');
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--outDir', 'dist-web', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], { stdio: 'ignore' });
 try {
   for (let i = 0; i < 60; i++) {
@@ -13,16 +14,39 @@ try {
   for (const [name, engine, device] of [['android', chromium, 'Pixel 7'], ['iphone', webkit, 'iPhone 13']]) {
     const browser = await engine.launch();
     try {
-      const context = await browser.newContext({ ...devices[device] });
-      await context.addInitScript(() => { Object.defineProperty(navigator, 'standalone', { get: () => true }); });
+      const context = await browser.newContext({ ...devices[device], serviceWorkers: stagedCorsFix ? 'block' : 'allow' });
+      if (stagedCorsFix) {
+        // Preview the separately regression-tested server header fix. Production
+        // checks never use this option and still fail until the server is updated.
+        await context.route('https://api.lull.website/api/**', async route => {
+          if (new URL(route.request().url()).pathname.startsWith('/api/stream/')) return route.continue();
+          try {
+            const response = await route.fetch({ timeout: 60000 });
+            await route.fulfill({ response, headers: { ...response.headers(), 'access-control-allow-origin': 'http://127.0.0.1:5173', vary: 'Origin' } });
+          } catch { await route.abort().catch(() => {}); }
+        });
+      }
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'standalone', { get: () => true });
+        window.__qaAudio = [];
+        const original = HTMLMediaElement.prototype.play;
+        HTMLMediaElement.prototype.play = function () {
+          this.muted = true;
+          if (!window.__qaAudio.includes(this)) window.__qaAudio.push(this);
+          return original.call(this);
+        };
+      });
       const page = await context.newPage();
       const errors = [];
+      const network = [];
       page.on('pageerror', e => errors.push(e.message));
+      page.on('console', message => { if (message.type() === 'error') network.push(message.text()); });
+      page.on('requestfailed', request => network.push(request.url() + ': ' + request.failure()?.errorText));
       await page.goto('http://127.0.0.1:5173');
       await page.locator('.m-tabs').waitFor();
       await page.waitForFunction(() => document.querySelectorAll('.card[role="link"],.trow').length > 0, null, { timeout: 60000 }).catch(async error => {
         await page.screenshot({ path: `test-results/${name}-failure.png`, fullPage: true });
-        throw new Error(error.message + '\n' + await page.locator('body').innerText());
+        throw new Error(error.message + '\n' + await page.locator('body').innerText() + '\n' + network.join('\n'));
       });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Horizontal overflow');
       assert.equal(await page.locator('.inst-back').count(), 0, 'Installed application must not show install prompts');
@@ -32,8 +56,15 @@ try {
       await page.locator('input').first().press('Enter');
       await page.waitForFunction(() => document.querySelectorAll('.trow').length > 0, null, { timeout: 60000 });
       await page.screenshot({ path: `test-results/${name}-search.png`, fullPage: true });
+      const start = Date.now();
+      await page.locator('.trow .tt').first().click();
+      await page.waitForFunction(() => window.__qaAudio.some(audio => !audio.paused && audio.currentTime > 0.3), null, { timeout: 60000 });
+      const playbackMs = Date.now() - start;
+      await page.screenshot({ path: `test-results/${name}-playing.png`, fullPage: true });
       assert.deepEqual(errors, [], `${name} renderer exceptions`);
-      fs.writeFileSync(`test-results/${name}.json`, JSON.stringify({ mobileLayout: true, search: true, rendererErrors: errors }, null, 2));
+      const result = { mobileLayout: true, search: true, playbackMs, stagedCorsFix, rendererErrors: errors };
+      console.log(name, JSON.stringify(result));
+      fs.writeFileSync(`test-results/${name}.json`, JSON.stringify(result, null, 2));
     } finally { await browser.close(); }
   }
 } finally { server.kill(); }

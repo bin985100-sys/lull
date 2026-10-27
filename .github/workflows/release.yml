@@ -18,6 +18,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: node scripts/test-packaged-parser.mjs && node scripts/test-stream-selection.mjs && node scripts/test-playback-startup.mjs
+      - run: node scripts/test-native-media-session.mjs
       - run: npm run build:web && npm run build:api
       - run: npx playwright install --with-deps chromium webkit
       - run: node scripts/smoke-web.mjs
