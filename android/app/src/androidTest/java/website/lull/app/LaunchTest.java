@@ -24,7 +24,7 @@ public class LaunchTest {
                 CountDownLatch done = new CountDownLatch(1);
                 AtomicReference<String> value = new AtomicReference<>("");
                 instrumentation.runOnMainSync(() -> activity.getBridge().getWebView().evaluateJavascript(
-                    "JSON.stringify({native:!!window.Capacitor?.isNativePlatform?.(),tabs:document.querySelectorAll('.m-tab').length,content:document.querySelectorAll('.card,.track-row').length,error:document.body.innerText.includes('Не получилось загрузить')})",
+                    "JSON.stringify({native:!!window.Capacitor?.isNativePlatform?.(),tabs:document.querySelectorAll('.m-tab').length,content:document.querySelectorAll('.card[role=link],.trow').length,error:document.body.innerText.includes('Не получилось загрузить')})",
                     result -> { value.set(result); done.countDown(); }));
                 assertTrue("WebView did not respond", done.await(5, TimeUnit.SECONDS));
                 state = value.get();

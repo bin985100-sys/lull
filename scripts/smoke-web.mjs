@@ -20,13 +20,14 @@ try {
       page.on('pageerror', e => errors.push(e.message));
       await page.goto('http://127.0.0.1:4173');
       await page.locator('.m-tabs').waitFor();
-      await page.waitForFunction(() => document.querySelectorAll('.card').length > 0 || document.querySelectorAll('.track-row').length > 0, { timeout: 60000 });
+      await page.waitForFunction(() => document.querySelectorAll('.card[role="link"],.trow').length > 0, { timeout: 60000 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Horizontal overflow');
       assert.equal(await page.locator('.inst-back').count(), 0, 'Installed application must not show install prompts');
       await page.screenshot({ path: `test-results/${name}-home.png`, fullPage: true });
       await page.locator('.m-tab').filter({ hasText: 'Поиск' }).click();
       await page.locator('input').first().fill('Daft Punk');
-      await page.waitForFunction(() => document.querySelectorAll('.track-row').length > 0, { timeout: 60000 });
+      await page.locator('input').first().press('Enter');
+      await page.waitForFunction(() => document.querySelectorAll('.trow').length > 0, { timeout: 60000 });
       await page.screenshot({ path: `test-results/${name}-search.png`, fullPage: true });
       assert.deepEqual(errors, [], `${name} renderer exceptions`);
       fs.writeFileSync(`test-results/${name}.json`, JSON.stringify({ mobileLayout: true, search: true, rendererErrors: errors }, null, 2));
