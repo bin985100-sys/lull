@@ -54,8 +54,13 @@ try {
       await page.locator('.m-tab').filter({ hasText: 'Поиск' }).click();
       await page.locator('input').first().fill('Daft Punk');
       await page.locator('input').first().press('Enter');
+      await page.getByRole('heading', { name: 'Треки', exact: true }).waitFor({ timeout: 60000 });
       await page.waitForFunction(() => document.querySelectorAll('.trow').length > 0, null, { timeout: 60000 });
-      assert.equal(await page.evaluate(() => [...document.querySelectorAll('.page .section')].every(section => section.getBoundingClientRect().right <= innerWidth + 1)), true, 'Search sections must fit the phone screen');
+      await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.scroll > div')).opacity) > 0.99);
+      assert.equal(await page.evaluate(() => {
+        const sections = [...document.querySelectorAll('.page .section')];
+        return sections.length > 0 && sections.every(section => section.getBoundingClientRect().right <= innerWidth + 1);
+      }), true, 'Search sections must fit the phone screen');
       await page.screenshot({ path: `test-results/${name}-search.png`, fullPage: true });
       if (process.argv.includes('--layout-only')) {
         assert.deepEqual(errors, [], `${name} renderer exceptions`);
