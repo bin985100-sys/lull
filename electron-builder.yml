@@ -23,7 +23,7 @@ nsis:
   shortcutName: Lull
   runAfterFinish: true
   deleteAppDataOnUninstall: false
-  artifactName: Lull-Setup-${version}.${ext}
+  artifactName: Lull-Setup.${ext}
 mac:
   icon: build/icon.png
   category: public.app-category.music
@@ -33,7 +33,7 @@ mac:
   hardenedRuntime: false
   gatekeeperAssess: false
 dmg:
-  artifactName: Lull-${version}-${arch}.${ext}
+  artifactName: Lull-mac-${arch}.${ext}
   title: Lull
 linux:
   icon: build/icon.png

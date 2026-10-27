@@ -58,7 +58,7 @@ jobs:
           LULL_KEYSTORE_PASSWORD: ${{ secrets.LULL_KEYSTORE_PASSWORD }}
           LULL_VERSION_CODE: ${{ github.run_number }}
         run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon
-      - run: mv android/app/build/outputs/apk/release/*.apk "Lull-${LULL_VERSION#v}.apk"
+      - run: mv android/app/build/outputs/apk/release/*.apk Lull.apk
       - uses: actions/upload-artifact@v4
         with: { name: Lull-Android, path: '*.apk', if-no-files-found: error }
 
@@ -75,8 +75,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: Lull-API, path: dist-server/lull-api.mjs }
 
+  # Выпуск на GitHub: ссылки .../releases/latest/download/<файл> на лендинге всегда ведут на свежую сборку
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: [windows, macos, android]
     runs-on: ubuntu-latest
     steps:
@@ -84,7 +84,9 @@ jobs:
         with: { path: out, merge-multiple: true }
       - uses: softprops/action-gh-release@v2
         with:
-          name: Lull ${{ github.ref_name }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build-{0}', github.run_number) }}
+          name: Lull ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('· сборка {0}', github.run_number) }}
+          make_latest: true
           files: |
             out/*.exe
             out/*.dmg
