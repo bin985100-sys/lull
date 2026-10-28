@@ -7,7 +7,7 @@ const cover = color => 'data:image/svg+xml;base64,' + Buffer.from(`<svg xmlns="h
 const tracks = [0, 1, 2].map((n) => ({ id: `ui-${n}`, title: n ? 'Следующий трек' : 'Очень длинное название композиции, которое должно помещаться на любом телефоне', artists: [{ name: 'Исполнитель с длинным именем' }], durationSec: 240, thumb: cover(['#dd5522', '#2277dd', '#33cc77'][n]) }));
 const browser = await chromium.launch();
 try {
-  for (const [width, height] of [[320,568], [360,800], [393,852], [430,932], [1280,800]]) {
+  for (const [width, height] of [[320,568], [360,800], [393,852], [430,932], [740,390], [1280,800]]) {
     const context = await browser.newContext({ viewport: { width, height }, hasTouch: width < 760 });
     try {
       const page = await context.newPage();
@@ -57,8 +57,13 @@ try {
       }
       await page.locator('.wave-chip').filter({ hasText: 'Плеер' }).click();
       await page.locator('.np-play').waitFor();
+      await page.waitForFunction(() => Math.abs(document.querySelector('.np').getBoundingClientRect().top) < 0.5);
       await checkWidth(['.np-cover-wrap', '.np-meta', '.np-ctrls', '.np-ctrls > button']);
       await page.screenshot({ path: `test-results/responsive/player-${width}.png` });
+      if (width < 760) {
+        const controls = await page.locator('.np-ctrls,.np-bottom').evaluateAll(nodes => nodes.map(el => { const r=el.getBoundingClientRect();return {class:el.className,top:r.top,bottom:r.bottom}; }));
+        assert.ok(controls.every(r => r.top>=0&&r.bottom<=height+1), `${width}: controls must be visible without scrolling: ${JSON.stringify(controls)}`);
+      }
       // A failed image must not poison the next track's artwork.
       await page.evaluate(() => {
         const p = window.__stores.usePlayer;
