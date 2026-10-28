@@ -32,7 +32,7 @@ function webApp(API: string, BUILD: string): Plugin {
       return html
         .replace(/<meta name="viewport"[^>]*>/, '')
         .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, head)
-        .replace('</body>', `<script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'))</script>\n  </body>`);
+        .replace('</body>', `<script>if('serviceWorker' in navigator)addEventListener('load',()=>{if(!window.Capacitor?.isNativePlatform?.())navigator.serviceWorker.register('/sw.js').catch(e=>console.warn('Offline shell unavailable',e))})</script>\n  </body>`);
     },
     closeBundle() {
       const f = 'dist-web/sw.js';

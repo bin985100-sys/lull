@@ -53,7 +53,7 @@ public class LaunchTest {
         String found="false";
         for(int i=0;i<120;i++) {
             if(activityIdentity()!=activity) return false;
-            found=evaluate("!!document.querySelector('.trow .tt')");
+            found=evaluate("!!document.querySelector('[aria-label=\"Тип результатов\"]') && !!document.querySelector('.trow .tt')");
             if(found.equals("true")) break;
             SystemClock.sleep(500);
         }
@@ -68,7 +68,15 @@ public class LaunchTest {
         evaluate("document.activeElement?.blur();document.querySelector('.trow .tt').scrollIntoView({block:'center'});'visible'");
         SystemClock.sleep(500);
         if(activityIdentity()!=activity) return false;
-        JSONObject point=new JSONObject(evaluate("JSON.stringify((()=>{const r=document.querySelector('.trow .tt').getBoundingClientRect();return{x:(r.left+r.width/2)/innerWidth,y:(r.top+r.height/2)/innerHeight}})())"));
+        String coordinates="null";
+        for(int i=0;i<20;i++) {
+            if(activityIdentity()!=activity) return false;
+            coordinates=evaluate("JSON.stringify((()=>{const el=document.querySelector('.trow .tt');if(!el)return null;el.scrollIntoView({block:'center'});const r=el.getBoundingClientRect();return{x:(r.left+r.width/2)/innerWidth,y:(r.top+r.height/2)/innerHeight}})())");
+            if(coordinates.startsWith("{")) break;
+            SystemClock.sleep(500);
+        }
+        assertTrue("Search track remains mounted before native tap: "+coordinates,coordinates.startsWith("{"));
+        JSONObject point=new JSONObject(coordinates);
         assertTrue("Track must be in viewport: "+point,point.optDouble("x")>0&&point.optDouble("x")<1&&point.optDouble("y")>0&&point.optDouble("y")<1);
         float[] tap=new float[2];
         scenario.onActivity(current -> {
