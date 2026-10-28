@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { signIn } from './client';
 import './account.css';
+import googleLogo from '../assets/providers/google.png';
+import discordLogo from '../assets/providers/discord.svg';
 
 export function LoginButtons({ error: initialError = '' }: { error?: string }) {
   const [busy, setBusy] = useState<'google' | 'discord' | null>(null);
@@ -9,7 +11,7 @@ export function LoginButtons({ error: initialError = '' }: { error?: string }) {
     {(['google', 'discord'] as const).map(provider => <button className="account-provider" key={provider} type="button" disabled={!!busy} onClick={() => {
       setBusy(provider); setError('');
       void signIn(provider).catch((e: Error) => setError(e.message)).finally(() => setBusy(null));
-    }}>{busy === provider ? 'Открываем вход…' : `Продолжить с ${provider === 'google' ? 'Google' : 'Discord'}`}</button>)}
+    }}><span className="account-provider-label">{busy === provider ? 'Открываем вход…' : `Продолжить с ${provider === 'google' ? 'Google' : 'Discord'}`}</span><span className={`account-provider-logo ${provider}`} aria-hidden="true"><img src={provider === 'google' ? googleLogo : discordLogo} alt="" draggable={false}/></span></button>)}
     {error && <p role="alert">{error}</p>}
   </>;
 }
