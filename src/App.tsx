@@ -31,6 +31,7 @@ import { useUi } from './store/ui';
 function Ambient() {
   const track = usePlayer((s) => s.current());
   const setTint = useUi((s) => s.setTint);
+  const tint = useUi((s) => s.tint);
   const homeCovers = useUi((s) => s.homeCovers);
   const pageArt = useUi((s) => s.pageArt);
   const bg = useSettings((s) => s.background);
@@ -64,8 +65,8 @@ function Ambient() {
     return () => { active = false; };
   }, [pageArt, track?.thumb, setTint]);
   useEffect(() => {
-    document.documentElement.style.setProperty('--tint', useUi.getState().tint);
-  });
+    document.documentElement.style.setProperty('--tint', tint);
+  }, [tint]);
 
   return (
     <div className="ambient-wrap" aria-hidden="true">
@@ -200,7 +201,7 @@ function Shell() {
       {!mobile && <Rail />}
       <div className="main">
         {mobile && location.pathname === '/' && <MobileHeader />}
-        {mobile && (!isRoot || isSearch || location.pathname !== '/') && (
+        {mobile && (!isRoot || isSearch) && (
           <div className="m-top">
             {!isRoot && <BackButton />}
             <div ref={setSlot} style={{ display: 'contents' }} />

@@ -7,7 +7,7 @@ import { useUi } from '../store/ui';
 import { Cover } from './Cover';
 import { IHome, IHomeFill, ILibrary, INext, IPause, IPlay, ISearch, ISliders, IWaveNav } from './icons';
 
-const QUERY = '(max-width: 760px)';
+const QUERY = '(max-width: 760px), (max-height: 500px) and (pointer: coarse)';
 
 /** Телефон или узкое окно: нижняя навигация и мини-плеер вместо боковой панели. */
 export function useIsMobile() {

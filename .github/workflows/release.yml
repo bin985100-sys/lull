@@ -43,6 +43,7 @@ jobs:
       - run: python scripts/test-audio-broker.py
       - run: npm run build:web && npm run build:api
       - run: npx playwright install --with-deps chromium webkit
+      - run: node scripts/test-mobile-safe-area.mjs
       - run: VITE_ACCOUNTS_ENABLED=true npx vite build --mode web --outDir work/account-gate-dist --emptyOutDir && node scripts/test-account-gate.mjs
       - run: node scripts/smoke-web.mjs
       - uses: actions/upload-artifact@v4

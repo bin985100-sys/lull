@@ -40,7 +40,7 @@ export function Backdrop({ src, mode, palette, animated, strong }: { src?: strin
   const gradient = <LiveBackground colors={palette} intensity={strong ? 0.95 : 0.6} animated={animated} scale={0.45} />;
   if (mode === 'gradient' || !src || failedSrc === src) return gradient;
   if (!hasWebGL)
-    return <img src={api.imageUrl(src)} alt="" className="kawarp" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: `blur(60px) saturate(${mode === 'mono' ? 0 : 1.5}) brightness(.6)`, transform: 'scale(1.3)' }} />;
+    return <img src={api.imageUrl(src)} onError={() => setFailedSrc(src)} alt="" className="kawarp" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: `blur(60px) saturate(${mode === 'mono' ? 0 : 1.5}) brightness(.6)`, transform: 'scale(1.3)' }} />;
   return (
     <GlGuard fallback={gradient} resetKey={src}>
     <Kawarp

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Живой фон: WebGL-шейдер с четырьмя цветовыми пятнами, которые медленно плывут по
@@ -88,6 +88,7 @@ interface Props {
 
 export function LiveBackground({ colors, intensity = 0.6, animated = true, energy, scale = 0.5, className }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const [contextRevision, setContextRevision] = useState(0);
   const target = useRef<number[]>([]);
   const props = useRef({ intensity, animated, energy });
   props.current = { intensity, animated, energy };
@@ -99,11 +100,28 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
 
   useEffect(() => {
     const el = canvas.current!;
+    const lost = (event: Event) => {
+      event.preventDefault();
+      el.dataset.fallback = '1';
+      el.width = el.height = 0;
+    };
+    const restored = () => setContextRevision(revision => revision + 1);
+    el.addEventListener('webglcontextlost', lost);
+    el.addEventListener('webglcontextrestored', restored);
+    return () => {
+      el.removeEventListener('webglcontextlost', lost);
+      el.removeEventListener('webglcontextrestored', restored);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = canvas.current!;
     const gl = el.getContext('webgl', { antialias: false, alpha: false, premultipliedAlpha: false, powerPreference: 'low-power' });
     if (!gl) {
       el.dataset.fallback = '1';
       return;
     }
+    delete el.dataset.fallback;
     const compile = (type: number, src: string) => {
       const s = gl.createShader(type)!;
       gl.shaderSource(s, src);
@@ -112,14 +130,19 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
       return s;
     };
     const prog = gl.createProgram()!;
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+    const vertex = compile(gl.VERTEX_SHADER, VERT);
+    const fragment = compile(gl.FRAGMENT_SHADER, FRAG);
+    gl.attachShader(prog, vertex);
+    gl.attachShader(prog, fragment);
     gl.linkProgram(prog);
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
     // Слабая видеокарта/телефон: шейдер не собрался — показываем CSS-градиент вместо белого холста
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS) || gl.isContextLost()) {
       el.dataset.fallback = '1';
       el.width = 0;
       el.height = 0;
+      gl.deleteProgram(prog);
       return;
     }
     gl.useProgram(prog);
@@ -157,6 +180,7 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
     resize();
 
     const frame = (now: number) => {
+      if (gl.isContextLost()) return;
       raf = requestAnimationFrame(frame);
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
@@ -184,9 +208,10 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
+      gl.deleteBuffer(buf);
+      gl.deleteProgram(prog);
     };
-  }, [scale]);
+  }, [scale, contextRevision]);
 
   const fallback = `radial-gradient(60% 70% at 20% 10%, ${colors[0]}99, transparent 70%), radial-gradient(60% 70% at 85% 30%, ${colors[1] ?? colors[0]}88, transparent 70%), radial-gradient(70% 70% at 50% 100%, ${colors[2] ?? colors[0]}66, transparent 70%), #0B0B0E`;
   return <canvas ref={canvas} className={`livebg ${className ?? ''}`} aria-hidden="true" style={{ background: fallback }} />;
