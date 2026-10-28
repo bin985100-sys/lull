@@ -101,7 +101,7 @@ body:has(.app.mobile) { user-select: none; -webkit-tap-highlight-color: transpar
   .np-seg button { flex: 1; min-width: 0; gap: 4px; padding: 0 7px; font-size: 12px; min-height: 44px; }
   .np-seg button > span:not(.np-seg-bg) { display: none; }
   .np-lyrtools, .np-head .winctl { display: none !important; }
-  .np-grid { display: flex; flex-direction: column; padding: 0; gap: 0; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+  .np-grid { display: flex; flex-direction: column; padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left); gap: 0; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
   .np-grid::-webkit-scrollbar { display: none; }
   .np-player { width: 100%; min-width: 0; flex-shrink: 0; min-height: calc(100dvh - 76px - var(--safe-top)); padding: 12px 0 24px; justify-content: flex-start; }
   .np-player > * { width: calc(100% - 32px); min-width: 0; }

@@ -100,6 +100,14 @@ try {
           return Number(style.opacity) > .99 && style.transform === 'none';
         });
         await page.screenshot({ path: `test-results/mobile-safe-area/${engine.name()}-wave-${width}.png` });
+        await page.locator('.wave-chip').filter({hasText:'Плеер'}).click();
+        await page.waitForFunction(() => Math.abs(document.querySelector('.np')?.getBoundingClientRect().top ?? 100) < .5);
+        await check(['.np-cover-wrap', '.np-meta', '.np-meta > button', '.np-seek', '.np-ctrls', '.np-ctrls button', '.np-bottom']);
+        const playerControls = await page.locator('.np-ctrls, .np-bottom').evaluateAll(nodes => nodes.map(el => {const r=el.getBoundingClientRect(); return {top:r.top,bottom:r.bottom};}));
+        assert.ok(playerControls.every(r=>r.top>=top && r.bottom<=height-bottom+1), `${engine.name()} ${width}: full-player controls overlap safe area: ${JSON.stringify(playerControls)}`);
+        await page.screenshot({ path: `test-results/mobile-safe-area/${engine.name()}-player-${width}.png` });
+        await page.getByRole('button',{name:'Свернуть плеер',exact:true}).click();
+        await page.locator('.np').waitFor({state:'detached'});
         await page.evaluate(async tracks => {
           const { api } = await import('/src/api.ts');
           api.artist = async () => ({ id:'safe-artist', name:'Очень длинное имя исполнителя для проверки краёв', thumb:tracks[0].thumb, verified:true, topTracks:tracks, sections:[] });
