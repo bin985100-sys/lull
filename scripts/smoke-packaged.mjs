@@ -35,7 +35,7 @@ try {
     if (!search.tracks?.length) throw new Error('Empty search results');
     const track = search.tracks[0];
     const start = performance.now();
-    const hint = { title: track.title, artist: track.artists.map(a => a.name).join(', ') };
+    const hint = { title: track.title, artist: track.artists[0]?.name ?? '', duration: track.durationSec };
     try { await window.api.prepareStream(track.id, false, hint); }
     catch { await window.api.prepareStream(track.id, false, hint); }
     const audio = new Audio(window.api.streamUrl(track.id));

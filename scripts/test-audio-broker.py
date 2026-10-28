@@ -13,6 +13,21 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 class BrokerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_inaccessible_first_match_does_not_hide_accessible_recording(self):
+        with tempfile.TemporaryDirectory() as folder, ThreadPoolExecutor(1) as pool:
+            audio = Path(folder) / 'ready.mp3'; audio.write_bytes(b'audio')
+            async def unavailable(*args): raise RuntimeError('No primary')
+            def search(query): return {'entries': [{'url': f'https://soundcloud.com/artist/{name}', 'title': 'Artist Example', 'uploader': 'Artist', 'duration': 180} for name in ('private', 'public')]}
+            attempted = []
+            def download(url):
+                attempted.append(url)
+                if url.endswith('/private'): raise RuntimeError('Recording unavailable')
+                return audio
+            broker = module.AudioBroker(unavailable, search, download, pool)
+            chosen = await broker.prepare('abcdefghijk', 'aac', {'title': 'Example', 'artist': 'Artist', 'duration': 180})
+            self.assertEqual(chosen['file'], str(audio))
+            self.assertEqual(len(attempted), 2)
+
     async def test_local_file_survives_url_ttl_and_broker_restart(self):
         with tempfile.TemporaryDirectory() as folder, ThreadPoolExecutor(1) as pool:
             root = Path(folder) / 'sc'; root.mkdir()

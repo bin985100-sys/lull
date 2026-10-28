@@ -14,11 +14,12 @@ def normalize(value):
     return re.sub(r'[^\w]+', ' ', value).strip()
 
 
-def matching_recording(entries, hint):
+def matching_recordings(entries, hint):
     title, artist = normalize(hint.get('title', '')), normalize(hint.get('artist', ''))
     if not title or not artist:
-        return None
+        return []
     duration = float(hint.get('duration') or 0)
+    matches = []
     for entry in entries:
         if not entry:
             continue
@@ -28,8 +29,12 @@ def matching_recording(entries, hint):
         if not url.startswith(('https://soundcloud.com/', 'https://api.soundcloud.com/', 'https://api-v2.soundcloud.com/')):
             continue
         if title in name and (artist in name or artist in uploader or uploader and uploader in artist) and seconds > 40 and (not duration or abs(seconds - duration) <= 15):
-            return {**entry, 'url': url}
-    return None
+            matches.append({**entry, 'url': url})
+    return matches
+
+
+def matching_recording(entries, hint):
+    return next(iter(matching_recordings(entries, hint)), None)
 
 
 class AudioBroker:
@@ -101,12 +106,19 @@ class AudioBroker:
                 raise RuntimeError('No recording metadata')
             loop = asyncio.get_running_loop()
             found = await loop.run_in_executor(self.pool, self.search, f"{hint['artist']} {hint['title']}")
-            pick = matching_recording(found.get('entries') or [], hint)
-            if not pick:
+            picks = matching_recordings(found.get('entries') or [], hint)
+            if not picks:
                 raise RuntimeError('Matching recording not found')
-            path = await loop.run_in_executor(self.pool, self.download, pick['url'])
-            mime = {'.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.mp4': 'audio/mp4', '.opus': 'audio/ogg', '.ogg': 'audio/ogg'}.get(path.suffix, 'audio/mpeg')
-            return {'file': str(path), 'mime': mime, 'size': path.stat().st_size, 'duration': pick.get('duration') or 0}
+            for pick in picks[:3]:
+                try:
+                    path = await loop.run_in_executor(self.pool, self.download, pick['url'])
+                    mime = {'.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.mp4': 'audio/mp4', '.opus': 'audio/ogg', '.ogg': 'audio/ogg'}.get(path.suffix, 'audio/mpeg')
+                    return {'file': str(path), 'mime': mime, 'size': path.stat().st_size, 'duration': pick.get('duration') or 0}
+                except Exception as error:
+                    # An unavailable/protected first result must not suppress
+                    # another accessible match of the same recording.
+                    logging.getLogger('lull-relay').info('Matching audio source unavailable: %s', str(error)[:240])
+            raise RuntimeError('Matching recordings are unavailable')
         tasks = {asyncio.create_task(primary()), asyncio.create_task(alternate())}
         remaining = set(tasks)
         deadline = asyncio.get_running_loop().time() + self.timeout
