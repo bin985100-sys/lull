@@ -2,6 +2,8 @@
 import asyncio
 import re
 import time
+import json
+import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from aiohttp import web
@@ -31,10 +33,34 @@ def matching_recording(entries, hint):
 
 
 class AudioBroker:
-    def __init__(self, resolve, search, download, pool, timeout=12):
+    def __init__(self, resolve, search, download, pool, timeout=12, cache_dir=None):
         self.resolve, self.search, self.download, self.pool = resolve, search, download, pool
         self.timeout = timeout
         self.cache, self.pending, self.hints = {}, {}, {}
+        self.cache_dir = Path(cache_dir).resolve() if cache_dir else None
+        self.index = self.cache_dir.parent / 'prepared-audio.json' if self.cache_dir else None
+        if self.index and self.index.is_file():
+            try:
+                saved = json.loads(self.index.read_text())
+                for raw_key, value in list(saved.items())[-1000:]:
+                    quality, video_id = raw_key.split(':', 1)
+                    path = Path(value['file']).resolve()
+                    if quality in ('aac', 'auto', 'low') and re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id) and path.is_relative_to(self.cache_dir) and path.is_file() and value['mime'].startswith('audio/'):
+                        self.cache[(video_id, quality)] = {**value, 'file': str(path), 'size': path.stat().st_size, 'until': 0}
+            except (OSError, ValueError, TypeError, KeyError, AttributeError):
+                logging.getLogger('lull-relay').warning('Prepared audio index could not be restored')
+
+    def save_files(self):
+        if not self.index:
+            return
+        saved = {f'{quality}:{video_id}': {name: value[name] for name in ('file', 'mime', 'size', 'duration')}
+                 for (video_id, quality), value in self.cache.items() if 'file' in value}
+        try:
+            temporary = self.index.with_suffix('.tmp')
+            temporary.write_text(json.dumps(saved))
+            temporary.replace(self.index)
+        except OSError:
+            logging.getLogger('lull-relay').warning('Prepared audio index could not be saved')
 
     async def prepare(self, video_id, quality, hint=None):
         key = (video_id, quality)
@@ -43,7 +69,9 @@ class AudioBroker:
             if len(self.hints) > 1000:
                 self.hints.pop(next(iter(self.hints)), None)
         cached = self.cache.get(key)
-        if cached and cached['until'] > time.time() and ('file' not in cached or Path(cached['file']).is_file()):
+        # A local remuxed file does not expire like a signed provider URL.
+        # Keep its video mapping until the disk cache actually evicts the file.
+        if cached and (Path(cached['file']).is_file() if 'file' in cached else cached['until'] > time.time()):
             return cached
         if key not in self.pending:
             if len(self.pending) >= 32:
@@ -98,6 +126,8 @@ class AudioBroker:
                         oldest = next(iter(self.cache))
                         self.cache.pop(oldest, None)
                         self.hints.pop(oldest, None)
+                    if 'file' in result:
+                        self.save_files()
                     return result
             raise RuntimeError('No playable recording available')
         finally:
@@ -109,10 +139,10 @@ class AudioBroker:
                     task.cancel()
 
 
-def install_audio_broker(app, resolve, search, download, pool, get_session, cors):
+def install_audio_broker(app, resolve, search, download, pool, get_session, cors, cache_dir=None):
     # YouTube extraction must not occupy every worker needed by the alternate.
     fallback_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='lull-audio-alternate')
-    broker = AudioBroker(resolve, search, download, fallback_pool)
+    broker = AudioBroker(resolve, search, download, fallback_pool, cache_dir=cache_dir)
     async def close_workers(_app):
         fallback_pool.shutdown(wait=False, cancel_futures=True)
     app.on_cleanup.append(close_workers)
@@ -166,6 +196,6 @@ def install_audio_broker(app, resolve, search, download, pool, get_session, cors
         return response
     app.router.add_get('/api/prepare/{vid}', prepare)
     app.router.add_get('/api/stream/{vid}', stream)
-    async def health(_request): return web.json_response({'ok': True, 'audio_broker': 'v1'})
+    async def health(_request): return web.json_response({'ok': True, 'audio_broker': 'v1', 'prepared_cache': 'persistent-v1' if cache_dir else 'memory'})
     app.router.add_get('/api/audio-health', health)
     return broker

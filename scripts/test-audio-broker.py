@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import json
 from aiohttp import web
 from aiohttp.test_utils import TestServer, TestClient
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +13,28 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 class BrokerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_local_file_survives_url_ttl_and_broker_restart(self):
+        with tempfile.TemporaryDirectory() as folder, ThreadPoolExecutor(1) as pool:
+            root = Path(folder) / 'sc'; root.mkdir()
+            audio = root / 'ready.mp3'; audio.write_bytes(b'audio')
+            async def unavailable(*args): raise RuntimeError('No primary')
+            def search(query): return {'entries': [{'url': 'https://soundcloud.com/artist/example', 'title': 'Artist Example', 'uploader': 'Artist', 'duration': 180}]}
+            first = module.AudioBroker(unavailable, search, lambda url: audio, pool, cache_dir=root)
+            chosen = await first.prepare('abcdefghijk', 'aac', {'title': 'Example', 'artist': 'Artist'})
+            chosen['until'] = 0
+            self.assertIs(await first.prepare('abcdefghijk', 'aac'), chosen)
+            def forbidden(*args): raise AssertionError('A prepared local track must not be resolved or downloaded again')
+            restored = module.AudioBroker(forbidden, forbidden, forbidden, pool, cache_dir=root)
+            self.assertEqual((await restored.prepare('abcdefghijk', 'aac'))['file'], str(audio.resolve()))
+
+    async def test_index_rejects_files_outside_audio_cache(self):
+        with tempfile.TemporaryDirectory() as folder, ThreadPoolExecutor(1) as pool:
+            root = Path(folder) / 'sc'; root.mkdir()
+            outside = Path(folder) / 'private.mp3'; outside.write_bytes(b'private')
+            (Path(folder) / 'prepared-audio.json').write_text(json.dumps({'aac:abcdefghijk': {'file': str(outside), 'mime': 'audio/mpeg', 'size': 7, 'duration': 180}}))
+            broker = module.AudioBroker(None, None, None, pool, cache_dir=root)
+            self.assertEqual(broker.cache, {})
+
     async def test_alternate_wins_once_and_late_primary_cannot_replace_it(self):
         with tempfile.TemporaryDirectory() as folder, ThreadPoolExecutor(2) as pool:
             audio = Path(folder) / 'ready.mp3'

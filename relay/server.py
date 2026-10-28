@@ -509,7 +509,7 @@ def main():
             raise
         app.router.add_get("/api/stream/{vid}", api_stream)
     else:
-        install_audio_broker(app, get_stream, _sc_search_sync, sc_download_sync, pool, lambda: session, cors)
+        install_audio_broker(app, get_stream, _sc_search_sync, sc_download_sync, pool, lambda: session, cors, cache_dir=SC_DIR)
     app.router.add_route("*", "/api/{tail:.*}", api_proxy)
     app.on_startup.append(on_start)
     app.on_cleanup.append(on_stop)
