@@ -36,12 +36,14 @@ jobs:
       - run: node scripts/test-native-media-session.mjs
       - run: node scripts/test-desktop-broker.mjs
       - run: node scripts/test-account-library.mjs && node scripts/test-account-sync.mjs && node scripts/test-player-cancellation.mjs
+      - run: node scripts/test-youtube-import.mjs
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install aiohttp
       - run: python scripts/test-audio-broker.py
       - run: npm run build:web && npm run build:api
       - run: npx playwright install --with-deps chromium webkit
+      - run: VITE_ACCOUNTS_ENABLED=true npx vite build --mode web --outDir work/account-gate-dist --emptyOutDir && node scripts/test-account-gate.mjs
       - run: node scripts/smoke-web.mjs
       - uses: actions/upload-artifact@v4
         if: always()

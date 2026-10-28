@@ -40,7 +40,7 @@ assert.equal(visible.likes[0].track.id, 'a', 'First account imports the guest li
 await __fixture.api.storeSet('recentSearches', ['private search']);
 offline = true;
 await __fixture.api.storeSet('library', { ...initial, likes: [] });
-await sync.flush(); sync.stop();
+await assert.rejects(sync.flush(), /Изменения сохранены/); sync.stop();
 assert.equal(cache.get('account_alice_outbox')[0].deleted, true, 'Offline removal survives process restart');
 Object.assign(__fixture.api, original);
 offline = false;

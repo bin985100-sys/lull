@@ -9,6 +9,8 @@ const stateKeys: Record<string, string> = { queue: 'queue', settings: 'preferenc
 const preferences = new Set(['autoplay','gapless','crossfade','quality','normalize','eqEnabled','eqPreset','eqGains','background','speed','pitch','animatedBg','doubleClick','restoreQueue','uiSounds','waveIntro','lang']);
 const publicSettings = (v: unknown) => Object.fromEntries(Object.entries((v ?? {}) as object).filter(([k]) => preferences.has(k)));
 const status = (message: string) => useSyncStatus.setState({ status: message });
+let currentFlush: (() => Promise<void>) | undefined;
+export async function flushAccount() { await currentFlush?.(); }
 
 /** Account-local durable outbox; retries never discard a newer local edit. */
 export async function startSync(userId: string) {
@@ -59,7 +61,7 @@ export async function startSync(userId: string) {
     if (key !== 'library' && !(key in stateKeys)) return set(key, value);
     // Snapshot immediately; callers often pass mutable arrays from their stores.
     const snapshot = structuredClone(value);
-    localWrite = localWrite.then(async () => {
+    localWrite = localWrite.catch(() => {}).then(async () => {
       if (key === 'library') {
         const next = snapshot as LibraryData;
         for (const row of diff(flatten(view), flatten(next))) pending.set(entryKey(row), row);
@@ -84,7 +86,7 @@ export async function startSync(userId: string) {
       await set(local(key), snapshot);
       await saveOutbox(); later();
     });
-    return localWrite;
+    return localWrite.catch(() => { status('Не удалось сохранить изменения на устройстве. Проверь свободное место.'); });
   };
 
   async function sync() {
@@ -159,8 +161,13 @@ export async function startSync(userId: string) {
   const online = () => void sync();
   window.addEventListener('online', online);
   const poll = setInterval(online, 30_000);
+  const flush = async () => {
+    await localWrite; await sync();
+    if (pending.size || statePending.size) throw new Error('Изменения сохранены на устройстве, но ещё не отправлены. Проверь подключение и повтори.');
+  };
+  currentFlush = flush;
   return {
-    flush: async () => { await localWrite; await sync(); },
+    flush,
     stop: () => { stopped = true; clearTimeout(timer); clearInterval(poll); window.removeEventListener('online', online); void db.removeChannel(channel); }
   };
 }

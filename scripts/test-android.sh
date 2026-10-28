@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 result=0
+adb shell input keyevent 82 || true
+adb shell wm dismiss-keyguard || true
 (cd android && ./gradlew :app:connectedDebugAndroidTest --no-daemon) || result=$?
 # Test the signed release too, even when a catalogue assertion fails.
 adb uninstall website.lull.app || true

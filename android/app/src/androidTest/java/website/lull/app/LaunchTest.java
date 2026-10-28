@@ -34,10 +34,19 @@ public class LaunchTest {
         String found = "false";
         for (int i=0;i<120;i++) { found=evaluate(instrumentation, activity,"!!document.querySelector('.trow .tt')"); if (found.equals("true")) break; Thread.sleep(500); }
         assertEquals("Search returns playable tracks", "true", found);
+        instrumentation.runOnMainSync(() -> {
+            if (activity.getCurrentFocus() != null) activity.getCurrentFocus().clearFocus();
+            android.view.inputmethod.InputMethodManager keyboard = (android.view.inputmethod.InputMethodManager)activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+            keyboard.hideSoftInputFromWindow(activity.getBridge().getWebView().getWindowToken(), 0);
+        });
+        SystemClock.sleep(700);
+        evaluate(instrumentation, activity,"document.activeElement?.blur();document.querySelector('.trow .tt').scrollIntoView({block:'center'});'visible'");
+        SystemClock.sleep(500);
         long started=System.currentTimeMillis();
         JSONObject point = new JSONObject(evaluate(instrumentation, activity,
             "JSON.stringify((()=>{const r=document.querySelector('.trow .tt').getBoundingClientRect();return {x:(r.left+r.width/2)/innerWidth,y:(r.top+r.height/2)/innerHeight}})())"));
         final float[] tap = new float[2];
+        assertTrue("Track must be inside viewport: " + point, point.optDouble("x") > 0 && point.optDouble("x") < 1 && point.optDouble("y") > 0 && point.optDouble("y") < 1);
         instrumentation.runOnMainSync(() -> {
             int[] origin = new int[2]; activity.getBridge().getWebView().getLocationOnScreen(origin);
             tap[0] = origin[0] + (float)point.optDouble("x") * activity.getBridge().getWebView().getWidth();

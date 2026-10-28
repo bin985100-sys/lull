@@ -41,6 +41,12 @@ const readStore = <T>(k: string): T | undefined => {
 };
 const timers = new Map<string, number>();
 const writeStore = (k: string, v: unknown) => {
+  if (k.startsWith('account_')) {
+    // A queued cloud edit must survive an immediate tab close or restart.
+    localStorage.setItem(PREFIX + k, JSON.stringify(v));
+    mem.set(k, v);
+    return;
+  }
   mem.set(k, v);
   clearTimeout(timers.get(k));
   timers.set(

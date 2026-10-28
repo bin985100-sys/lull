@@ -69,6 +69,7 @@ async function boot() {
     const { setBeforeSignOut } = await import('./account/AccountSection');
     setBeforeSignOut(sync.flush);
     await bootApp();
+    void import('./account/youtube').then((m) => m.importYoutube()).catch(() => {});
   };
   try {
     const session = await initializeAccount(showLogin);

@@ -5,7 +5,12 @@ import './account.css';
 export function LoginScreen({ error: initialError = '' }: { error?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
-  return <main className="account-screen"><section className="account-card">
+  return <main className="account-screen">
+    {window.api && <header className="account-window"><span>Lull</span><div>
+      <button type="button" aria-label="Свернуть" onClick={() => window.api?.windowMinimize()}>−</button>
+      <button type="button" aria-label="Закрыть" onClick={() => window.api?.windowClose()}>×</button>
+    </div></header>}
+    <section className="account-card">
     <div className="account-brand">Lull</div>
     <h1>Твоя музыка с тобой</h1>
     <p>Войди, чтобы сохранить любимые треки и продолжить слушать на другом устройстве.</p>

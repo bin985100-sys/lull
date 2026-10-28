@@ -11,7 +11,7 @@ function webApp(API: string, BUILD: string): Plugin {
   return {
     name: 'lull-web-app',
     transformIndexHtml(html) {
-      const csp = `default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data: ${API}; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https://sluzyoctsnncbwfqybca.supabase.co wss://sluzyoctsnncbwfqybca.supabase.co ${API} https://lull.website; font-src 'self' data:; manifest-src 'self'`;
+      const csp = `default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data: ${API}; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://sluzyoctsnncbwfqybca.supabase.co wss://sluzyoctsnncbwfqybca.supabase.co ${API} https://lull.website; font-src 'self' data:; manifest-src 'self'`;
       const head = [
         `<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />`,
         `<meta http-equiv="Content-Security-Policy" content="${csp}" />`,
