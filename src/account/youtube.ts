@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { cloud } from './client';
+import { cloud, sessionProvider } from './client';
 import { api } from '../api';
 import { useLibrary } from '../store/library';
 import { flushAccount } from './sync';
@@ -30,6 +30,12 @@ async function performImport(once: boolean) {
     const { data: { session }, error } = await cloud.auth.getSession();
     if (error) throw error;
     if (!session) throw new Error('Сначала войди в Google');
+    // provider_token belongs to the most recent OAuth provider. Never send a
+    // Discord token to Google, including for an account with linked identities.
+    if (await sessionProvider(session) !== 'google') {
+      useYoutubeImport.setState({ message: 'Для переноса библиотеки YouTube подключи Google в аккаунте' });
+      return;
+    }
     const profile = await cloud.from('lull_profiles').select('youtube_imported_at').eq('user_id', session.user.id).maybeSingle();
     if (profile.error) throw profile.error;
     if (once && profile.data?.youtube_imported_at) { useYoutubeImport.setState({ message: 'Музыка YouTube уже перенесена' }); return; }

@@ -16,7 +16,13 @@ Enable YouTube Data API v3 in the same Google Cloud project. After the first log
 
 Supabase redirect allowlist includes `https://app.lull.website/auth/callback` and `lull://auth/callback`. The web server must serve the application shell at `/auth/callback`. Desktop and Android register the custom protocol. Login opens in the system browser, uses PKCE and exchanges the code through Supabase. Desktop sessions are encrypted with Electron safeStorage; Android uses an Android Keystore AES-GCM key and excludes app data from backups. Web sessions use the browser's origin-local storage.
 
-Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` and, **after end-to-end verification**, `VITE_ACCOUNTS_ENABLED=true` for all build jobs. The account gate is disabled in existing builds until the provider is configured; enabling it earlier would lock everyone out. Fixture-only development mode remains separate from production web builds.
+Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` and, **after end-to-end verification**, `VITE_ACCOUNTS_ENABLED=true` for all build jobs. The account gate is disabled in existing builds until providers are configured; enabling it earlier would lock everyone out. Fixture-only development mode remains separate from production web builds.
+
+Discord is an alternative OAuth sign-up/sign-in provider (no password form). Create a Discord application and register the same Supabase callback, then enable Discord in Supabase with its client ID and secret. Keep all provider secrets in Supabase, never in Vite variables or native packages. Enable manual identity linking so an authenticated Discord account can connect Google even when its Google email differs. Existing accounts with the same verified email follow Supabase's automatic identity linking rules.
+
+Google login requests YouTube read-only consent in the same flow and starts the import automatically after application boot. Discord login does not request or imply YouTube access: users may explicitly connect Google from their account. Linked accounts retain the Lull user ID and library. OAuth callback handling binds the provider token hash to the provider and user; the primary `app_metadata.provider` alone does not identify a linked account's current token. Discord tokens must never be sent to Google APIs. This connection imports the supported YouTube library; it does not grant unrestricted YouTube Music streaming or bypass source availability.
+
+Provisioned Google Cloud project: `lull-513010`, OAuth Web client `Lull`. Google provider is enabled in Supabase. The consent app remains in Testing with the owner email registered; public rollout requires complete branding, required scopes/API enablement and Google's applicable verification. Do not enable the mandatory production gate based only on provider configuration or fixture tests.
 
 ## Data handling
 
