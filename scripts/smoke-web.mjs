@@ -55,7 +55,7 @@ try {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Horizontal overflow');
       assert.equal(await page.locator('.inst-back').count(), 0, 'Installed application must not show install prompts');
       await page.screenshot({ path: `test-results/${name}-home.png`, fullPage: true });
-      await page.locator('.m-tab').filter({ hasText: 'Поиск' }).click();
+      await page.locator('.m-tabs').getByRole('link', { name: 'Поиск', exact: true }).click();
       await page.locator('input').first().fill(query);
       await page.locator('input').first().press('Enter');
       await page.getByRole('heading', { name: 'Треки', exact: true }).waitFor({ timeout: 60000 });
