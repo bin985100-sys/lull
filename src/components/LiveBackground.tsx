@@ -187,10 +187,40 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
     ro.observe(el);
     resize();
 
+    // Probe the actual fragment shader with a known warm palette. A context
+    // can exist even when a mobile driver produces an unusable dark frame.
+    gl.getError();
+    gl.uniform2f(uRes, el.width, el.height);
+    gl.uniform1f(uTime, 0);
+    gl.uniform3fv(uC, new Float32Array([0.9, 0.12, 0.05, 0.9, 0.12, 0.05, 0.9, 0.12, 0.05, 0.9, 0.12, 0.05]));
+    gl.uniform1f(uEnergy, 0);
+    gl.uniform1f(uIntensity, 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const pixel = new Uint8Array(4);
+    gl.readPixels(Math.floor(el.width / 2), Math.floor(el.height / 2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    if (gl.getError() !== gl.NO_ERROR || pixel[0] < 20 || pixel[0] < pixel[2] + 10) {
+      el.dataset.fallback = '1';
+      el.dataset.fallbackReason = 'shader-probe';
+      el.width = el.height = 0;
+      ro.disconnect();
+      gl.deleteBuffer(buf);
+      gl.deleteProgram(prog);
+      return;
+    }
+    delete el.dataset.fallbackReason;
+
     const frame = (now: number) => {
       if (gl.isContextLost()) return;
       raf = requestAnimationFrame(frame);
       const elapsed = Math.max(0, (now - last) / 1000);
+      if (!document.hidden && elapsed > 0.5) {
+        el.dataset.fallback = '1';
+        el.dataset.fallbackReason = 'slow-frames';
+        el.width = el.height = 0;
+        ro.disconnect();
+        cancelAnimationFrame(raf);
+        return;
+      }
       const dt = Math.min(0.1, elapsed);
       const blend = 1 - Math.exp(-elapsed * 2.2);
       last = now;
@@ -214,7 +244,7 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
       gl.uniform1f(uIntensity, curIntensity);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
-    raf = requestAnimationFrame(frame);
+    frame(performance.now());
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
@@ -224,5 +254,5 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
   }, [scale, contextRevision, animated]);
 
   const fallback = `radial-gradient(60% 70% at 20% 10%, ${colors[0]}99, transparent 70%), radial-gradient(60% 70% at 85% 30%, ${colors[1] ?? colors[0]}88, transparent 70%), radial-gradient(70% 70% at 50% 100%, ${colors[2] ?? colors[0]}66, transparent 70%), #0B0B0E`;
-  return <canvas ref={canvas} className={`livebg ${className ?? ''}`} aria-hidden="true" style={{ background: fallback }} />;
+  return <div className="livebg-shell" data-animated={animated ? '1' : undefined} aria-hidden="true" style={{ background: fallback }}><canvas ref={canvas} className={`livebg ${className ?? ''}`} /></div>;
 }

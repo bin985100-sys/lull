@@ -7,7 +7,8 @@ const port=process.env.LULL_BACKGROUND_TEST_PORT||'5193';
 const base=`http://127.0.0.1:${port}`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',port,'--strictPort'],{stdio:'ignore'});
 const animated=process.argv.includes('--animated');
-const root=`test-results/background-modes/${animated?'animated':'still'}`;fs.mkdirSync(root,{recursive:true});
+const brokenGpu=process.argv.includes('--broken-gpu');
+const root=`test-results/background-modes/${brokenGpu?'broken-gpu':animated?'animated':'still'}`;fs.mkdirSync(root,{recursive:true});
 const tracks=['#ee3311','#1155ee'].map((color,index)=>({id:`background-${index}`,title:'Background test',artists:[{name:'QA'}],durationSec:240,thumb:'data:image/svg+xml;base64,'+Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="${color}"/><circle cx="${index?230:60}" cy="80" r="65" fill="white"/></svg>`).toString('base64')}));
 const results=[];
 try{
@@ -15,12 +16,13 @@ try{
   for(const engine of [chromium,webkit]){
     const browser=await engine.launch();
     try{
-      for(const width of [393,1280])for(const gpu of [true,false]){
+      for(const width of brokenGpu?[393]:[393,1280])for(const gpu of brokenGpu?[true]:[true,false]){
         const page=await browser.newPage({viewport:{width,height:852}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
         if(!gpu)await page.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...args){return /webgl/.test(kind)?null:original.call(this,kind,...args);};});
+        if(brokenGpu)await page.addInitScript(()=>{if(window.WebGLRenderingContext)WebGLRenderingContext.prototype.readPixels=function(...args){window.__blockedProbe=true;args[6].fill(0);};});
         await page.goto(base);await page.waitForFunction(()=>!!window.__stores);
         await page.addStyleTag({content:'.app > :not(.ambient-wrap){visibility:hidden!important}.ambient-wrap{opacity:1!important}'});
-        for(const mode of ['cover','blur','gradient','mono','black']){
+        for(const mode of brokenGpu?['gradient']:['cover','blur','gradient','mono','black']){
           const shots=[];
           for(const index of [0,1]){
             await page.evaluate(({mode,index,tracks,animated})=>{window.__stores.useSettings.setState({background:mode,animatedBg:animated,waveIntro:false,waveIntroSeen:true,waveStarted:true});window.__stores.usePlayer.setState({queue:tracks,index,source:{path:'/wave',label:'QA'},loading:false,playing:false});location.hash='#/wave';},{mode,index,tracks,animated});
@@ -38,7 +40,9 @@ try{
           }
           if(mode!=='black')assert.notEqual(shots[0],shots[1],`${engine.name()} ${width} ${gpu} ${mode}: artwork change must change rendered background`);
           assert.deepEqual(errors,[],`${engine.name()} ${width} ${mode}: page errors`);
-          results.push({engine:engine.name(),width,gpuRequested:gpu,animated,mode,passed:true});
+          const rendering=await page.locator('.ambient-wrap canvas').evaluateAll(nodes=>nodes.map(c=>({fallback:c.dataset.fallback||null,reason:c.dataset.fallbackReason||null})));
+          if(brokenGpu&&await page.evaluate(()=>!!window.__blockedProbe))assert.ok(rendering.some(r=>r.fallback==='1'&&r.reason==='shader-probe'),'A broken shader must switch to the working colour fallback');
+          results.push({engine:engine.name(),width,gpuRequested:gpu,animated,mode,rendering,passed:true});
           console.log(`PASS ${engine.name()} ${width} ${gpu?'gpu':'fallback'} ${mode}`);
         }
         await page.close();

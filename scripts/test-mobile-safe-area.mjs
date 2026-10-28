@@ -28,9 +28,9 @@ try {
         const extension = gl.getExtension('WEBGL_lose_context');
         window.__restoreBackground = () => extension?.restoreContext();
         window.__loseBackground = () => extension?.loseContext();
-        return { available:true, lost:gl.isContextLost(), fallback:canvas.dataset.fallback, restorable:!!extension };
+        return { available:true, lost:gl.isContextLost(), fallback:canvas.dataset.fallback, reason:canvas.dataset.fallbackReason, restorable:!!extension };
       });
-      if (gpu.available) {
+      if (gpu.available && !gpu.fallback) {
         assert.equal(gpu.lost, false, 'React cleanup must not destroy the reused WebGL context');
         assert.equal(gpu.fallback, undefined, 'Background shader must initialise');
         if (gpu.restorable) {
@@ -39,10 +39,15 @@ try {
           await gpuPage.evaluate(() => window.__restoreBackground());
           await gpuPage.waitForFunction(() => {
             const canvas = document.querySelector('.ambient-wrap .livebg');
-            return !canvas.dataset.fallback && !canvas.getContext('webgl').isContextLost() && canvas.width > 0;
+            const restored = !canvas.getContext('webgl').isContextLost();
+            const fallback = canvas.dataset.fallback === '1' && ['shader-probe','slow-frames'].includes(canvas.dataset.fallbackReason);
+            return restored && (fallback || (!canvas.dataset.fallback && canvas.width > 0));
           });
         }
         console.log(`PASS ${engine.name()}: WebGL initialisation and ${gpu.restorable ? 'context recovery' : 'available context'}`);
+      } else if (gpu.available) {
+        assert.ok(['shader-probe', 'slow-frames'].includes(gpu.reason), `Unexpected GPU fallback: ${JSON.stringify(gpu)}`);
+        console.log(`PASS ${engine.name()}: CSS fallback for detected ${gpu.reason}; actual colours tested below`);
       } else console.log(`INFO ${engine.name()}: WebGL unavailable; colour fallback tested below`);
       await gpuPage.close();
       for (const [width, height, top, bottom, side] of [[320,568,0,0,0], [393,852,59,34,0], [430,932,59,34,0], [852,393,0,21,59]]) {
