@@ -172,8 +172,8 @@ function registerIpc() {
 
   handle(IPC.ytLogin, () => ACCOUNTS_ENABLED ? Promise.reject(new Error('Вход доступен через аккаунт Lull')) : login(win ?? undefined));
   handle(IPC.ytLogout, () => logout());
-  handle(IPC.ytAccount, () => accountState());
-  handle(IPC.ytSelectChannel, (id: string | null) => selectChannel(id));
+  handle(IPC.ytAccount, () => ACCOUNTS_ENABLED ? { signedIn: false, channels: [] } : accountState());
+  handle(IPC.ytSelectChannel, (id: string | null) => ACCOUNTS_ENABLED ? Promise.reject(new Error('Используется аккаунт Lull')) : selectChannel(id));
   handle(IPC.ytLibrary, () => ACCOUNTS_ENABLED ? { playlists: [], liked: [] } : ytApi.accountLibrary());
   handle(IPC.discordStatus, () => discordStatus());
   ipcMain.handle(IPC.importPlaylist, (e, url: string) => importPlaylist(url, e.sender));

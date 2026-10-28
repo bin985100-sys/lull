@@ -121,6 +121,7 @@ export async function startSync(userId: string) {
         if (error) throw error;
         for (const row of batch) {
           remote.set(entryKey(row), row);
+          rows.set(entryKey(row), row);
           if (pending.get(entryKey(row)) === row) pending.delete(entryKey(row));
         }
       }
