@@ -398,7 +398,7 @@ export function SettingsModal() {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+        <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, pointerEvents: 'none' }} transition={{ duration: 0.2 }} onMouseDown={(e) => e.target === e.currentTarget && close()}>
           <motion.div role="dialog" aria-modal="true" aria-labelledby="set-title" className={`dialog ${mobile ? (mBody ? 'm-set body' : 'm-set nav') : ''}`} initial={{ opacity: 0, y: 16, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.985 }} transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}>
             <aside className="set-nav">
               {mobile && (

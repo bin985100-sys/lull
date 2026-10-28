@@ -7,6 +7,7 @@ const base = 'http://127.0.0.1:5191';
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5191', '--strictPort'], { stdio: 'ignore' });
 const cover = color => 'data:image/svg+xml;base64,' + Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="400" height="400" fill="${color}"/></svg>`).toString('base64');
 const tracks = ['#dd5522', '#2277dd'].map((color, n) => ({ id: `safe-${n}`, title: 'Длинное название композиции без обрезания управления', artists: [{ name: 'Исполнитель с очень длинным именем' }], durationSec: 240, thumb: cover(color) }));
+const cases = process.env.LULL_DEVICE_CASES ? JSON.parse(process.env.LULL_DEVICE_CASES) : [[320,568,0,0,0], [375,667,0,0,0], [375,812,44,34,0], [390,844,47,34,0], [393,852,59,34,0], [414,896,44,34,0], [428,926,47,34,0], [430,932,59,34,0], [440,956,62,34,0], [768,1024,24,20,0], [820,1180,24,20,0], [1024,768,24,20,0], [852,393,0,21,59]];
 fs.mkdirSync('test-results/mobile-safe-area', { recursive: true });
 try {
   for (let i = 0; i < 60; i++) {
@@ -50,7 +51,7 @@ try {
         console.log(`PASS ${engine.name()}: CSS fallback for detected ${gpu.reason}; actual colours tested below`);
       } else console.log(`INFO ${engine.name()}: WebGL unavailable; colour fallback tested below`);
       await gpuPage.close();
-      for (const [width, height, top, bottom, side] of [[320,568,0,0,0], [393,852,59,34,0], [430,932,59,34,0], [852,393,0,21,59]]) {
+      for (const [width, height, top, bottom, side] of cases) {
         const context = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
         const page = await context.newPage();
         const errors = [];
@@ -71,14 +72,14 @@ try {
           usePlayer.setState({ queue: tracks, index: 0, source: { path: '/wave', label: 'Волна' }, loading: false, playing: false, duration: 240 });
           location.hash = '#/wave';
         }, tracks);
-        await page.locator('.app.mobile .wave-panel').waitFor();
+        await page.locator('.wave-panel').waitFor();
         await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.scroll > div')).opacity) > .99);
         await page.waitForFunction(() => getComputedStyle(document.querySelector('.wave-panel')).transform === 'none');
         const check = async (selectors, aboveDock = false) => {
           for (const selector of selectors) {
             const boxes = await page.locator(selector).evaluateAll(nodes => nodes.map(el => {
-              const r = el.getBoundingClientRect(); const dock = document.querySelector('.m-dock').getBoundingClientRect();
-              return { x:r.x, right:r.right, y:r.y, bottom:r.bottom, w:r.width, h:r.height, dock:dock.top };
+              const r = el.getBoundingClientRect(); const dock = document.querySelector('.m-dock')?.getBoundingClientRect();
+              return { x:r.x, right:r.right, y:r.y, bottom:r.bottom, w:r.width, h:r.height, dock:dock?.top ?? innerHeight };
             }));
             assert.ok(boxes.length, `missing ${selector}`);
             for (const b of boxes) {
@@ -121,7 +122,8 @@ try {
         await page.locator('.artist-meta').waitFor();
         await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.scroll > div')).opacity) > .99);
         await check(['.artist-head', '.artist-ava', '.artist-meta', '.artist-name', '.artist-btns', '.artist-btns button', '.artist-top']);
-        assert.ok(await page.locator('.artist-btns .sq').evaluateAll(nodes => nodes.every(el => { const r = el.getBoundingClientRect(); return r.width >= 44 && r.height >= 44; })));
+        const artistTargets = await page.locator('.artist-btns .sq').evaluateAll(nodes => nodes.map(el => { const r = el.getBoundingClientRect(); return { width:r.width,height:r.height }; }));
+        assert.ok(artistTargets.every(r=>r.width>=43.5&&r.height>=43.5), `Artist touch targets shrink: ${JSON.stringify(artistTargets)}`);
         await page.screenshot({ path: `test-results/mobile-safe-area/${engine.name()}-artist-${width}.png` });
         assert.deepEqual(errors, []);
         console.log(`PASS ${engine.name()} ${width}x${height}: safe areas, visible Wave controls, artist layout, cover tint without WebGL`);

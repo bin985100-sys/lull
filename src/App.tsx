@@ -6,7 +6,7 @@ import { ContextMenu } from './components/ContextMenu';
 import { PlayerBar } from './components/PlayerBar';
 import { InstallSheet } from './web/InstallSheet';
 import { isWebBuild } from './api';
-import { MiniPlayer, MobileHeader, MobileTabBar, useIsMobile } from './components/MobileChrome';
+import { MiniPlayer, MobileHeader, MobileTabBar, useIsMobile, useViewportFit } from './components/MobileChrome';
 import { PlaylistDialog } from './components/PlaylistDialog';
 import { SettingsModal } from './components/SettingsModal';
 import { ISearch } from './components/icons';
@@ -173,6 +173,7 @@ function useHotkeys() {
 }
 
 function Shell() {
+  useViewportFit();
   const location = useLocation();
   const scroller = useRef<HTMLDivElement>(null);
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);

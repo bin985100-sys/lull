@@ -32,7 +32,7 @@ export function PlaylistDialog() {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="backdrop" style={{ zIndex: 90 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(e) => e.target === e.currentTarget && close(null)}>
+        <motion.div className="backdrop" style={{ zIndex: 90 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, pointerEvents: 'none' }} onMouseDown={(e) => e.target === e.currentTarget && close(null)}>
           <motion.form
             role="dialog"
             aria-modal="true"

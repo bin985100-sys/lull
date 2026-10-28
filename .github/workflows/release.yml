@@ -46,6 +46,8 @@ jobs:
       - run: npm run build:web && npm run build:api
       - run: npx playwright install --with-deps chromium webkit
       - run: node scripts/test-mobile-safe-area.mjs
+      - run: node scripts/test-iphone-flows.mjs
+      - run: node scripts/test-tablet-viewport.mjs
       - run: node scripts/test-background-modes.mjs
       - run: node scripts/test-background-modes.mjs --animated
       - run: node scripts/test-background-modes.mjs --animated --broken-gpu
