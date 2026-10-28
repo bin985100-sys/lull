@@ -36,6 +36,7 @@ export interface EngineEvents {
 export class AudioEngine {
   private generation = 0;
   private ctx: AudioContext | null = null;
+  private graphUnavailable = false;
   private decks: [Deck, Deck];
   private active = 0;
   private eq: BiquadFilterNode[] = [];
@@ -149,11 +150,24 @@ export class AudioEngine {
 
   /** Граф создаётся лениво: AudioContext нужен только после первого запуска. */
   private ensureGraph() {
-    if (this.ctx) return;
+    if (this.ctx || this.graphUnavailable) return;
     // iPhone: играть как музыкальное приложение — в фоне, при заблокированном экране и с выключенным звонком
     const nav = navigator as Navigator & { audioSession?: { type: string } };
     if (nav.audioSession) nav.audioSession.type = 'playback';
-    const ctx = new AudioContext({ latencyHint: 'playback' });
+    const Context = globalThis.AudioContext ?? (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Context) {
+      this.graphUnavailable = true;
+      this.setVolume(this.volume);
+      return;
+    }
+    let ctx: AudioContext;
+    try { ctx = new Context({ latencyHint: 'playback' }); }
+    catch {
+      // The media elements can still play when the optional effects graph is unavailable.
+      this.graphUnavailable = true;
+      this.setVolume(this.volume);
+      return;
+    }
     this.ctx = ctx;
     // Звонок или другое приложение прервали звук — после возврата продолжаем
     const revive = () => {
@@ -195,7 +209,7 @@ export class AudioEngine {
 
   private async resume() {
     this.ensureGraph();
-    if (this.ctx!.state === 'suspended') await this.ctx!.resume();
+    if (this.ctx?.state === 'suspended') await this.ctx.resume();
   }
 
   /** Загрузить трек в активную деку. Если он уже предзагружен во второй — просто переключаемся. */
@@ -221,9 +235,11 @@ export class AudioEngine {
     d.tries = 0;
     d.want = opts.autoplay;
     d.el.playbackRate = this.rate;
-    d.fade!.gain.cancelScheduledValues(0);
-    d.fade!.gain.value = 1;
-    this.idle.fade!.gain.value = 0;
+    if (d.fade && this.idle.fade) {
+      d.fade.gain.cancelScheduledValues(0);
+      d.fade.gain.value = 1;
+      this.idle.fade.gain.value = 0;
+    }
     if (opts.startAt) d.el.currentTime = opts.startAt;
     else if (d.el.currentTime > 0.5) d.el.currentTime = 0;
     this.on.state('loading');
@@ -248,6 +264,7 @@ export class AudioEngine {
     const generation = ++this.generation;
     await this.resume();
     if (generation !== this.generation) return;
+    if (!this.ctx) return this.load(key, url, { autoplay: true });
     const ctx = this.ctx!;
     if (this.idle.key !== key) this.preload(key, url);
     const from = this.cur;

@@ -15,6 +15,7 @@ try {
   }
   for (const [name, engine, device] of [['android', chromium, 'Pixel 7'], ['iphone', webkit, 'iPhone 13']]) {
     if (process.argv.includes('--chromium-only') && name !== 'android') continue;
+    if (process.argv.includes('--webkit-only') && name !== 'iphone') continue;
     const browser = await engine.launch();
     try {
       const context = await browser.newContext({ ...devices[device], serviceWorkers: stagedCorsFix ? 'block' : 'allow' });
@@ -73,7 +74,13 @@ try {
       }
       const start = Date.now();
       await page.locator('.trow .tt').first().click();
-      await page.waitForFunction(() => window.__qaAudio.some(audio => !audio.paused && audio.currentTime > 0.3), null, { timeout: 60000 });
+      await page.waitForFunction(() => window.__qaAudio.some(audio => !audio.paused && audio.currentTime > 0.3), null, { timeout: 60000 }).catch(async error => {
+        const audio = await page.evaluate(() => window.__qaAudio.map(a => ({ paused:a.paused, time:a.currentTime, ready:a.readyState, network:a.networkState, error:a.error?.message, buffered:Array.from({ length:a.buffered.length }, (_, i) => [a.buffered.start(i), a.buffered.end(i)]) })));
+        const failure = { query, elapsedMs:Date.now() - start, audio, rendererErrors:errors, network };
+        fs.writeFileSync(`test-results/${name}-audio-failure.json`, JSON.stringify(failure, null, 2));
+        await page.screenshot({ path:`test-results/${name}-audio-failure.png`, fullPage:true });
+        throw new Error(error.message + '\n' + JSON.stringify(failure));
+      });
       const playbackMs = Date.now() - start;
       await page.screenshot({ path: `test-results/${name}-playing.png`, fullPage: true });
       assert.deepEqual(errors, [], `${name} renderer exceptions`);

@@ -95,6 +95,10 @@ try {
           const img = document.querySelector('.wave-cover img.cover.ready');
           return img && Number(getComputedStyle(img).opacity) > .99;
         });
+        await page.waitForFunction(() => {
+          const style = getComputedStyle(document.querySelector('.wave-info'));
+          return Number(style.opacity) > .99 && style.transform === 'none';
+        });
         await page.screenshot({ path: `test-results/mobile-safe-area/${engine.name()}-wave-${width}.png` });
         await page.evaluate(async tracks => {
           const { api } = await import('/src/api.ts');
