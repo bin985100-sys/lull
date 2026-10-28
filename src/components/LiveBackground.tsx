@@ -116,6 +116,13 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
 
   useEffect(() => {
     const el = canvas.current!;
+    // A stationary gradient can be drawn in CSS, including on mobile drivers
+    // that throttle WebGL frames. Colour changes still follow the cover.
+    if (!animated) {
+      el.dataset.fallback = '1';
+      el.width = el.height = 0;
+      return;
+    }
     const gl = el.getContext('webgl', { antialias: false, alpha: false, premultipliedAlpha: false, powerPreference: 'low-power' });
     if (!gl) {
       el.dataset.fallback = '1';
@@ -182,16 +189,18 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
     const frame = (now: number) => {
       if (gl.isContextLost()) return;
       raf = requestAnimationFrame(frame);
-      const dt = Math.min(0.1, (now - last) / 1000);
+      const elapsed = Math.max(0, (now - last) / 1000);
+      const dt = Math.min(0.1, elapsed);
+      const blend = 1 - Math.exp(-elapsed * 2.2);
       last = now;
       const { animated, energy, intensity } = props.current;
       // Плавный переход цветов к новой палитре (~1.5 с)
       const tgt = target.current;
       for (let i = 0; i < 12; i++) {
         const d = (tgt[i] ?? 0) - (current[i] ?? 0);
-        current[i] = (current[i] ?? 0) + d * Math.min(1, dt * 2.2);
+        current[i] = (current[i] ?? 0) + d * blend;
       }
-      curIntensity += (intensity - curIntensity) * Math.min(1, dt * 3);
+      curIntensity += (intensity - curIntensity) * (1 - Math.exp(-elapsed * 3));
       const en = energy ? energy() : 0;
       e += (en - e) * Math.min(1, dt * 8);
       // Движение равномерное и независимое от музыки
@@ -211,7 +220,7 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
       gl.deleteBuffer(buf);
       gl.deleteProgram(prog);
     };
-  }, [scale, contextRevision]);
+  }, [scale, contextRevision, animated]);
 
   const fallback = `radial-gradient(60% 70% at 20% 10%, ${colors[0]}99, transparent 70%), radial-gradient(60% 70% at 85% 30%, ${colors[1] ?? colors[0]}88, transparent 70%), radial-gradient(70% 70% at 50% 100%, ${colors[2] ?? colors[0]}66, transparent 70%), #0B0B0E`;
   return <canvas ref={canvas} className={`livebg ${className ?? ''}`} aria-hidden="true" style={{ background: fallback }} />;
