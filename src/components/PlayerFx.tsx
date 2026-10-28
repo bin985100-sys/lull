@@ -4,20 +4,15 @@ import type { LyricLine } from '../../shared/types';
 import { audioEngine } from '../store/player';
 
 /**
- * Кнопка «играть/пауза» с морфингом: две фигуры плавно перетекают
- * из половинок треугольника в две полоски паузы и обратно.
+ * One filled path per state avoids a rasterisation seam through the triangle.
  */
-const PLAY_L = 'M7 4.5 L12.5 7.9 L12.5 16.1 L7 19.5 Z';
-const PLAY_R = 'M12.5 7.9 L19.6 12 L19.6 12 L12.5 16.1 Z';
-const PAUSE_L = 'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z';
-const PAUSE_R = 'M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z';
+const PLAY = 'M7 4.5 L19.6 12 L7 19.5 Z';
+const PAUSE = 'M6 4.5 H10 V19.5 H6 Z M14 4.5 H18 V19.5 H14 Z';
 
 export function MorphPlayIcon({ playing, size = 26 }: { playing: boolean; size?: number }) {
-  const t = { type: 'spring' as const, stiffness: 380, damping: 30 };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <motion.path fill="currentColor" initial={false} animate={{ d: playing ? PAUSE_L : PLAY_L }} transition={t} />
-      <motion.path fill="currentColor" initial={false} animate={{ d: playing ? PAUSE_R : PLAY_R }} transition={t} />
+      <motion.path key={playing ? 'pause' : 'play'} fill="currentColor" d={playing ? PAUSE : PLAY} initial={{ opacity: .65, scale: .9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .16 }} style={{ transformOrigin: 'center' }} />
     </svg>
   );
 }

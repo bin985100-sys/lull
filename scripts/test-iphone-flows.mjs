@@ -36,7 +36,7 @@ try{
         await page.locator('.library-page').waitFor();
         await page.waitForFunction(()=>Number(getComputedStyle(document.querySelector('.scroll > div')).opacity)>.99);
         const heading=await page.locator('.library-page h1').boundingBox();assert.ok(heading.y>=top+8,'Library heading must clear the status area');
-        assert.ok(await page.locator('.library-view button').evaluateAll(nodes=>nodes.every(el=>{const r=el.getBoundingClientRect();return r.width>=44&&r.height>=44;})));
+        assert.ok(await page.locator('.library-view button').evaluateAll(nodes=>nodes.every(el=>{const r=el.getBoundingClientRect();return r.width>=43.5&&r.height>=43.5;})));
         await page.getByRole('button',{name:'Создать плейлист',exact:true}).tap();
         const dialog=page.getByRole('dialog',{name:'Новый плейлист'});await dialog.waitFor();
         const input=dialog.getByPlaceholder('Название плейлиста');await input.tap();

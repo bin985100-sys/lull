@@ -18,7 +18,8 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   height: var(--app-height, 100dvh);
-  --m-dock: calc(64px + var(--safe-bottom));
+  --nav-height: clamp(44px, calc((100vw - 24px - var(--safe-left) - var(--safe-right)) * 0.13873), 64px);
+  --m-dock: calc(var(--nav-height) + 16px + var(--safe-bottom));
 }
 .app.mobile .main { grid-column: 1; grid-row: 1; padding-left: var(--safe-left); padding-right: var(--safe-right); }
 .app.mobile .scroll { padding: 0 16px 24px; -webkit-overflow-scrolling: touch; scroll-behavior: auto; }
@@ -38,12 +39,25 @@ body:has(.app.mobile) { user-select: none; -webkit-tap-highlight-color: transpar
 .m-dock > * { pointer-events: auto; }
 .keyboard-open .app.mobile .m-dock { display: none; }
 .app.mobile input, .app.mobile textarea { user-select: text; -webkit-user-select: text; }
+.m-tabs-wrap { padding: 0 12px calc(16px + var(--safe-bottom)); }
 .m-tabs {
-  display: grid; grid-template-columns: repeat(4, 1fr); height: var(--m-dock); padding-bottom: var(--safe-bottom);
-  background: linear-gradient(180deg, rgba(11, 11, 14, 0.72), rgba(11, 11, 14, 0.94)); backdrop-filter: blur(30px) saturate(1.4);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative; isolation: isolate; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  height: var(--nav-height); padding: 0; border-radius: 999px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(19, 22, 27, .72), rgba(4, 7, 10, .82) 46%, rgba(13, 17, 22, .8));
+  backdrop-filter: blur(24px) saturate(1.15); -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  box-shadow: inset 0 0 0 1px rgba(204, 216, 233, .22), inset 0 1px 2px rgba(230, 240, 255, .15), inset 0 -1px 2px rgba(204, 216, 233, .12);
 }
-.m-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10.5px; font-weight: 600; color: rgba(245, 245, 247, 0.5); transition: color 0.2s; }
+.glass-nav-bubble {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; pointer-events: none;
+  background: radial-gradient(ellipse at 12% 8%, rgba(232, 239, 255, .33), transparent 51%), linear-gradient(180deg, rgba(130, 143, 168, .43), rgba(94, 104, 126, .24) 47%, rgba(119, 130, 154, .4));
+  backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow: inset 1px 1px 2px rgba(245, 248, 255, var(--edge-light, .36)), inset -1px -1px 2px rgba(218, 230, 255, .29), inset 0 0 8px rgba(188, 202, 231, .13);
+  will-change: transform, width;
+}
+.m-tab { position: relative; z-index: 1; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: center; color: #8c939f; transition: color .18s ease; }
+.m-tab > svg { width: calc(var(--nav-height) * .35); height: calc(var(--nav-height) * .35); overflow: visible; transition: transform .18s ease; }
+.m-tab:active > svg { transform: scale(.91); }
+.m-tab:focus-visible { outline: 2px solid rgba(255,255,255,.8); outline-offset: -3px; border-radius: 999px; }
 .m-tab.on { color: #fff; }
 
 .m-mini {
@@ -137,6 +151,9 @@ body:has(.app.mobile) { user-select: none; -webkit-tap-highlight-color: transpar
 
   .np-blyrics .blyrics--line { font-size: 26px !important; line-height: 1.25 !important; }
   .np-blyrics .blyrics-container { padding-bottom: 30vh; }
+  .np-panel-open .np-lyrics { padding: 16px 0 max(48px, var(--safe-bottom)); -webkit-mask-image: none; mask-image: none; }
+  .np-panel-open .np-lyrics .lyrics-plain { padding: 24px 0 0; font-size: clamp(22px, 6.3vw, 28px); line-height: 1.5; overflow-wrap: anywhere; }
+  .np-panel-open .np-lyrics .lyrics-note { align-self: flex-start; font-size: 12px; line-height: 1.4; padding: 8px 10px; }
 
   /* модальные окна на всю ширину */
   .modal, .dialog { width: calc(100vw - 24px) !important; max-width: none !important; max-height: calc(100dvh - 40px) !important; }
@@ -233,7 +250,7 @@ html.webapp, html.webapp body { overscroll-behavior: none; -webkit-touch-callout
 html.webapp img, html.webapp a { -webkit-user-drag: none; -webkit-touch-callout: none; }
 html.webapp input, html.webapp textarea { font-size: max(16px, 1em); } /* iOS не приближает поле при фокусе */
 html.webapp ::-webkit-scrollbar { width: 0; height: 0; }
-html.webapp .m-tab:active, html.webapp .m-mini-btn:active, html.webapp button:active { transform: scale(0.96); transition: transform 0.08s; }
+html.webapp .m-mini-btn:active, html.webapp button:active { transform: scale(0.96); transition: transform 0.08s; }
 
 /* предложение установить (только в браузере телефона) */
 .inst-back { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.5); display: flex; align-items: flex-end; }

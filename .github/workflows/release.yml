@@ -47,6 +47,10 @@ jobs:
       - run: npx playwright install --with-deps chromium webkit
       - run: node scripts/test-mobile-safe-area.mjs
       - run: node scripts/test-iphone-flows.mjs
+      - run: node scripts/test-glass-navigation.mjs
+      - run: node scripts/test-background-pause.mjs
+      - run: node scripts/test-account-entry.mjs
+      - run: node scripts/test-google-connection.mjs
       - run: node scripts/test-tablet-viewport.mjs
       - run: node scripts/test-background-modes.mjs
       - run: node scripts/test-background-modes.mjs --animated

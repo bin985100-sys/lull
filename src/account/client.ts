@@ -51,7 +51,8 @@ export function acceptCallback(raw: string): Promise<void> {
   const native = target.protocol === 'lull:' && target.hostname === 'auth' && target.pathname === '/callback';
   const web = target.origin === location.origin && target.pathname === '/auth/callback';
   if (!native && !web) return Promise.reject(new Error('Неверный адрес возврата'));
-  if (target.searchParams.has('error')) return Promise.reject(new Error(target.searchParams.get('error_description') || 'Вход отменён'));
+  const fragment = new URLSearchParams(target.hash.slice(1));
+  if (target.searchParams.has('error') || fragment.has('error')) return Promise.reject(new Error(target.searchParams.get('error_description') || fragment.get('error_description') || 'Вход отменён'));
   const code = target.searchParams.get('code');
   if (!code || !cloud) return Promise.resolve();
   return exchange ??= cloud.auth.exchangeCodeForSession(code).then(async ({ data, error }) => {
@@ -61,6 +62,10 @@ export function acceptCallback(raw: string): Promise<void> {
       await oauthStorage.setItem('lull-account-provider', JSON.stringify({ user: data.session.user.id, hash: await tokenHash(data.session.provider_token), provider }));
     }
     await oauthStorage.removeItem('lull-account-oauth-intent');
+    if (provider === 'google' && data.session) {
+      const { saveGoogleConnection } = await import('./google');
+      await saveGoogleConnection(data.session);
+    }
     if (web) history.replaceState(null, '', '/');
   }).finally(() => { exchange = undefined; });
 }

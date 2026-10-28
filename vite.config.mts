@@ -8,8 +8,10 @@ const SPLASH: [number, number, number][] = [[430, 932, 3], [393, 852, 3], [390, 
 
 /** Веб-сборка (vite --mode web): «как приложение из App Store» — полноэкранный режим, иконки, заставки, офлайн-оболочка. */
 function webApp(API: string, BUILD: string): Plugin {
+  let outDir = 'dist-web';
   return {
     name: 'lull-web-app',
+    configResolved(config) { outDir = config.build.outDir; },
     transformIndexHtml(html) {
       const csp = `default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data: ${API}; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://sluzyoctsnncbwfqybca.supabase.co wss://sluzyoctsnncbwfqybca.supabase.co ${API} https://lull.website; font-src 'self' data:; manifest-src 'self'`;
       const head = [
@@ -35,7 +37,7 @@ function webApp(API: string, BUILD: string): Plugin {
         .replace('</body>', `<script>if('serviceWorker' in navigator)addEventListener('load',()=>{if(!window.Capacitor?.isNativePlatform?.())navigator.serviceWorker.register('/sw.js').catch(e=>console.warn('Offline shell unavailable',e))})</script>\n  </body>`);
     },
     closeBundle() {
-      const f = 'dist-web/sw.js';
+      const f = `${outDir}/sw.js`;
       if (fs.existsSync(f)) fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace('__BUILD__', BUILD));
     }
   };

@@ -13,7 +13,7 @@ import { EQ_FREQS } from '../player/engine';
 import { IClose, ISearch, IChevronLeft } from './icons';
 import { BrandIcon, type Brand } from './BrandIcon';
 import { DiscordSection, YoutubeSection } from './Integrations';
-import { accountsEnabled } from '../account/client';
+import { cloud } from '../account/client';
 import { AccountSection } from '../account/AccountSection';
 
 const NAV_BRAND: Record<string, Brand> = { youtube: 'ytmusic', discord: 'discord' };
@@ -26,8 +26,8 @@ const ALL_SECTIONS: { title: string; items: [string, string][] }[] = [
   { title: 'Приложение', items: [['relay', 'Сервер Lull'], ['storage', 'Хранилище и кеш'], ['about', 'О приложении']] }
 ];
 // В веб-версии и на телефоне нет глобальных клавиш, оверлея, Discord и входа в YouTube
-const SECTIONS = ALL_SECTIONS.map((g) => ({ ...g, items: g.items.filter(([id]) => (isDesktop || !DESKTOP_ONLY.has(id)) && (!accountsEnabled || id !== 'youtube')) })).filter((g) => g.items.length);
-if (accountsEnabled) SECTIONS.unshift({ title: 'Аккаунт', items: [['account', 'Аккаунт Lull']] });
+const SECTIONS = ALL_SECTIONS.map((g) => ({ ...g, items: g.items.filter(([id]) => (isDesktop || !DESKTOP_ONLY.has(id)) && (!cloud || id !== 'youtube')) })).filter((g) => g.items.length);
+if (cloud) SECTIONS.unshift({ title: 'Аккаунт', items: [['account', 'Аккаунт Lull']] });
 
 const TITLES: Record<string, [string, string]> = {
   account: ['Аккаунт Lull', 'Библиотека и синхронизация между устройствами.'],
@@ -436,8 +436,8 @@ export function SettingsModal() {
                 {section === 'keys' && <KeysSection />}
                 {section === 'look' && <LookSection />}
                 {section === 'discord' && <DiscordSection />}
-                {section === 'youtube' && !accountsEnabled && <YoutubeSection />}
-                {section === 'account' && accountsEnabled && <AccountSection />}
+                {section === 'youtube' && !cloud && <YoutubeSection />}
+                {section === 'account' && cloud && <AccountSection />}
                 {section === 'overlay' && <OverlaySection />}
                 {section === 'relay' && <RelaySection />}
                 {section === 'storage' && <StorageSection />}

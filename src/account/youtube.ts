@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { cloud, sessionProvider } from './client';
+import { cloud } from './client';
+import { ensureGoogleConnection, requestYoutube, useGoogleConnection } from './google';
 import { api } from '../api';
 import { useLibrary } from '../store/library';
 import { flushAccount } from './sync';
@@ -30,25 +31,17 @@ async function performImport(once: boolean) {
     const { data: { session }, error } = await cloud.auth.getSession();
     if (error) throw error;
     if (!session) throw new Error('Сначала войди в Google');
-    // provider_token belongs to the most recent OAuth provider. Never send a
-    // Discord token to Google, including for an account with linked identities.
-    if (await sessionProvider(session) !== 'google') {
-      useYoutubeImport.setState({ message: 'Для переноса библиотеки YouTube подключи Google в аккаунте' });
+    // Google credentials live in Supabase Vault, independently of the current
+    // Lull login provider and Supabase's short-lived session access token.
+    if (!await ensureGoogleConnection(session)) {
+      useYoutubeImport.setState({ message: useGoogleConnection.getState().error || 'Для переноса библиотеки YouTube войди через Google' });
       return;
     }
     const profile = await cloud.from('lull_profiles').select('youtube_imported_at').eq('user_id', session.user.id).maybeSingle();
     if (profile.error) throw profile.error;
     if (once && profile.data?.youtube_imported_at) { useYoutubeImport.setState({ message: 'Музыка YouTube уже перенесена' }); return; }
-    const token = session.provider_token;
-    if (!token) throw new Error('Чтобы перенести музыку YouTube, войди через Google ещё раз и разреши доступ к YouTube');
     async function request<T>(resource: string, params: Record<string, string>): Promise<{ items: T[]; nextPageToken?: string }> {
-      const result = await fetch(`https://www.googleapis.com/youtube/v3/${resource}?${new URLSearchParams(params)}`, {
-        headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(12_000)
-      });
-      if (result.status === 401) throw new Error('Доступ Google истёк. Войди снова, чтобы перенести музыку');
-      if (result.status === 403) throw new Error('Google не разрешил чтение YouTube. Проверь согласие на доступ и включение YouTube Data API в проекте Google');
-      if (!result.ok) throw new Error(`YouTube временно недоступен (${result.status})`);
-      return result.json();
+      return requestYoutube<T>(resource, params);
     }
     async function pages<T>(resource: string, params: Record<string, string>): Promise<T[]> {
       const items: T[] = []; let next = ''; const seen = new Set<string>();

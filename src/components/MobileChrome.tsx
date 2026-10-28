@@ -1,11 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { GlassTabBar } from './GlassTabBar';
 import logoUrl from '../assets/logo.svg';
 import { usePlayer } from '../store/player';
 import { useUi } from '../store/ui';
 import { Cover } from './Cover';
-import { IHome, IHomeFill, ILibrary, INext, IPause, IPlay, ISearch, ISliders, IWaveNav } from './icons';
+import { INext, IPause, IPlay, ISliders } from './icons';
 
 const QUERY = '(max-width: 760px), (max-height: 500px) and (pointer: coarse)';
 
@@ -77,24 +77,7 @@ export function MobileHeader() {
 }
 
 export function MobileTabBar() {
-  const tab = (to: string, label: string, icon: (a: boolean) => ReactNode, end = false) => (
-    <NavLink to={to} end={end} className={({ isActive }) => `m-tab ${isActive ? 'on' : ''}`}>
-      {({ isActive }) => (
-        <>
-          {icon(isActive)}
-          <span>{label}</span>
-        </>
-      )}
-    </NavLink>
-  );
-  return (
-    <nav className="m-tabs" aria-label="Навигация">
-      {tab('/', 'Главная', (a) => (a ? <IHomeFill size={22} /> : <IHome size={22} />), true)}
-      {tab('/search', 'Поиск', (a) => <ISearch size={22} strokeWidth={a ? 2.6 : 2} />)}
-      {tab('/wave', 'Волна', (a) => <IWaveNav size={23} strokeWidth={a ? 2.6 : 2} />)}
-      {tab('/library', 'Библиотека', (a) => <ILibrary size={22} strokeWidth={a ? 2.6 : 2} />)}
-    </nav>
-  );
+  return <GlassTabBar />;
 }
 
 export function MiniPlayer() {

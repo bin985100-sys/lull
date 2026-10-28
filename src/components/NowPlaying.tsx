@@ -34,7 +34,7 @@ export function LyricsView({ lyr, loading, offset }: { lyr: Lyrics | null; loadi
   if (lyr?.plain)
     return (
       <div className="np-lyrics">
-        <div className="lyrics-note">Синхронного текста для этого трека не нашлось — показываю обычный, без подсветки строк</div>
+        <div className="lyrics-note">Текст без синхронизации</div>
         <div className="lyrics-plain">{lyr.plain}</div>
       </div>
     );

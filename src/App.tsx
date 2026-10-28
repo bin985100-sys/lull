@@ -29,6 +29,7 @@ import { useSettings } from './store/settings';
 import { useUi } from './store/ui';
 
 function Ambient() {
+  const covered = useUi((s) => s.nowPlaying);
   const track = usePlayer((s) => s.current());
   const setTint = useUi((s) => s.setTint);
   const tint = useUi((s) => s.tint);
@@ -70,7 +71,7 @@ function Ambient() {
 
   return (
     <div className="ambient-wrap" aria-hidden="true">
-      <Backdrop src={src} mode={bgMode} palette={palette} animated={animated} />
+      <Backdrop src={src} mode={bgMode} palette={palette} animated={animated} paused={covered} />
       <div className={`ambient-shade ${bgMode === 'gradient' ? '' : 'cover'}`} />
     </div>
   );
