@@ -59,7 +59,9 @@ function Ambient() {
     };
   }, [src]);
   useEffect(() => {
-    void coverPalette(pageArt ?? track?.thumb).then((p) => setTint(p[0]));
+    let active = true;
+    void coverPalette(pageArt ?? track?.thumb).then((p) => { if (active) setTint(p[0]); });
+    return () => { active = false; };
   }, [pageArt, track?.thumb, setTint]);
   useEffect(() => {
     document.documentElement.style.setProperty('--tint', useUi.getState().tint);
