@@ -21,6 +21,7 @@ import { VolumeControl, useScrub } from './PlayerBar';
 import { MorphPlayIcon } from './PlayerFx';
 import { SyncedLyrics } from './SyncedLyrics';
 import { Artists, EqBars } from './Tracks';
+import { useIsMobile } from './MobileChrome';
 
 // ---------------------------------------------------------------- текст песни
 
@@ -209,6 +210,8 @@ export function SeekBar() {
 // ---------------------------------------------------------------- экран
 
 export function NowPlaying() {
+  const mobile = useIsMobile();
+  const gridRef = useRef<HTMLElement>(null);
   const open = useUi((s) => s.nowPlaying);
   const panelRequested = useUi((s) => s.nowPlayingPanelRequested);
   const tab = useUi((s) => s.nowPlayingTab);
@@ -234,14 +237,8 @@ export function NowPlaying() {
   const lyrLoading = lyrState.loading;
   const lyr = lyrState.data;
   useEffect(() => {
-    if (!open || !panelRequested || !window.matchMedia('(max-width: 760px)').matches) return;
-    const timer = setTimeout(() => {
-      const grid = document.querySelector<HTMLElement>('.np-grid');
-      const side = document.querySelector<HTMLElement>('.np-side');
-      if (grid && side) grid.scrollTo({ top: side.offsetTop - grid.offsetTop, behavior: 'smooth' });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [open, panelRequested, tab]);
+    if (open && mobile && gridRef.current) gridRef.current.scrollTop = 0;
+  }, [open, mobile, panelRequested, tab]);
   const setVariant = (f: (v: number) => number) => lyrState.setVariant(f(variant));
   const setOffset = (f: number | ((o: number) => number)) => lyrState.setOffset(typeof f === 'function' ? f(offset) : f);
 
@@ -285,13 +282,13 @@ export function NowPlaying() {
           <div className="np-shade" aria-hidden="true" />
 
           <header className="np-head drag">
-            <button type="button" className="np-icon no-drag" aria-label="Свернуть плеер" onClick={close}><IChevronDown size={20} /></button>
+            <button type="button" className="np-icon no-drag" aria-label={mobile && panelRequested ? 'Вернуться к плееру' : 'Свернуть плеер'} onClick={() => mobile && panelRequested ? setNowPlaying(true) : close()}>{mobile && panelRequested ? <IChevronLeft size={20} /> : <IChevronDown size={20} />}</button>
             <div className="np-toolbar no-drag">
               <div className="np-seg" role="tablist" aria-label="Панель">
                 {([['lyrics', 'Текст', <ILyrics size={16} key="l" />], ['queue', 'Очередь', <IQueue size={16} key="q" />], ['related', 'Похожие', <IWave size={16} key="r" />]] as const).map(([t, l, icon]) => (
-                  <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => { setNowPlaying(true, t); if (window.matchMedia('(max-width: 760px)').matches) requestAnimationFrame(() => { const g = document.querySelector<HTMLElement>('.np-grid'); const side = document.querySelector<HTMLElement>('.np-side'); if (g && side) g.scrollTo({ top: side.offsetTop - g.offsetTop, behavior: 'smooth' }); }); }}>
+                  <button key={t} type="button" role="tab" aria-selected={tab === t && (!mobile || panelRequested)} className={tab === t && (!mobile || panelRequested) ? 'on' : ''} onClick={() => setNowPlaying(true, t)}>
                     {icon}{l}
-                    {tab === t && <motion.span layoutId="np-seg" className="np-seg-bg" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
+                    {tab === t && (!mobile || panelRequested) && <motion.span layoutId="np-seg" className="np-seg-bg" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
                   </button>
                 ))}
               </div>
@@ -321,7 +318,7 @@ export function NowPlaying() {
           </header>
 
           {track ? (
-            <main className="np-grid">
+            <main ref={gridRef} className={`np-grid${panelRequested ? ' np-panel-open' : ''}`}>
               <section className="np-player">
                 <SwipeCover track={track} onOpen={openAlbum} />
                 <div className="np-meta">

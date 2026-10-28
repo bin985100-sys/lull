@@ -40,12 +40,18 @@ try {
       await page.evaluate(() => window.__stores.usePlayer.setState({ loading: false, playing: false }));
       if (width < 760) {
         await page.locator('.wave-chip').filter({ hasText: 'Текст' }).click();
-        await page.waitForFunction(() => document.querySelector('.np-grid')?.scrollTop > 100);
+        await page.locator('.np-grid.np-panel-open').waitFor();
+        await page.locator('.np-player').waitFor({ state: 'hidden' });
         await page.locator('.np-lyrics').getByText('Первая строка', { exact: false }).waitFor();
         await checkWidth(['.np-head', '.np-seg button', '.np-side']);
         await page.screenshot({ path: `test-results/responsive/lyrics-${width}.png` });
         await page.getByRole('tab', { name: 'Очередь', exact: true }).click();
         assert.equal(await page.locator('.np-side').getAttribute('aria-label'), 'Очередь');
+        assert.equal(await page.locator('.np-side').evaluate(el => { const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1; }), true, 'Queue must be in the visible viewport, not below the cover');
+        await page.screenshot({ path: `test-results/responsive/queue-${width}.png` });
+        await page.getByRole('button', { name: 'Вернуться к плееру', exact: true }).click();
+        await page.locator('.np-player').waitFor({ state: 'visible' });
+        assert.equal(await page.locator('.np-seg [aria-selected="true"]').count(), 0);
         await page.getByRole('button', { name: 'Свернуть плеер', exact: true }).click();
         await page.locator('.np').waitFor({ state: 'detached' });
       }

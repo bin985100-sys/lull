@@ -85,7 +85,7 @@ body:has(.app.mobile) { user-select: none; -webkit-tap-highlight-color: transpar
 /* поиск поверх — на телефоне ведём на вкладку поиска */
 .app.mobile .sov { padding: calc(10px + env(safe-area-inset-top)) 12px 0; }
 
-/* полноэкранный плеер: обложка, управление, а ниже — текст/очередь (листается вниз) */
+/* Full player and its panels are separate mobile views. */
 @media (max-width: 760px) {
   .np { overflow: hidden; }
   .np-head { flex-shrink: 0; height: auto; padding: calc(10px + env(safe-area-inset-top)) 12px 6px; gap: 8px; z-index: 3; flex-wrap: nowrap; }
@@ -109,6 +109,10 @@ body:has(.app.mobile) { user-select: none; -webkit-tap-highlight-color: transpar
   .np-vol { display: none; }
   .np-side { flex-shrink: 0; height: calc(100dvh - 76px - env(safe-area-inset-top)); padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
   .np-side::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.25); margin: 0 auto 16px; }
+  .np-grid:not(.np-panel-open) .np-side { display: none; }
+  .np-panel-open .np-player { display: none; }
+  .np-panel-open .np-side { flex: 1; min-height: 0; height: auto; padding-top: 12px; }
+  .np-panel-open .np-side::before { display: none; }
 
   .np-blyrics .blyrics--line { font-size: 26px !important; line-height: 1.25 !important; }
   .np-blyrics .blyrics-container { padding-bottom: 30vh; }
