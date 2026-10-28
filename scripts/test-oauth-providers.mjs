@@ -17,12 +17,14 @@ await build({ entryPoints: ['src/account/client.ts'], outfile: 'work/oauth-provi
     b.onLoad({ filter: /.*/, namespace: 'fixture' }, a => ({ contents: a.path.includes('supabase') ? 'export const createClient=()=>globalThis.__oauthFixture' : 'export const Capacitor={isNativePlatform:()=>false};export const registerPlugin=()=>({})' }));
   } }]
 });
-const { signIn, acceptCallback, sessionProvider } = await import('../work/oauth-providers.mjs');
+const { signIn, acceptCallback, sessionProvider, waitForAccountCallback } = await import('../work/oauth-providers.mjs');
 assert.equal(await sessionProvider(session), null, 'Primary Discord identity does not identify a linked session token');
 await signIn('google', true);
 assert.ok(requested.options.scopes.includes('youtube.readonly'));
-await acceptCallback('lull://auth/callback?code=fixture-google');
+const callback = acceptCallback('lull://auth/callback?code=fixture-google');
+await waitForAccountCallback();
 assert.equal(await sessionProvider(session), 'google', 'Google linking binds the returned token, even with Discord as primary identity');
+await callback;
 await signIn('discord');
 assert.equal(requested.options.scopes, 'identify email');
 assert.equal(requested.options.queryParams, undefined);

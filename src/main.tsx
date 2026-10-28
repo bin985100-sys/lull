@@ -54,7 +54,7 @@ async function bootApp() {
 }
 
 async function boot() {
-  const { accountsEnabled, cloud, initializeAccount } = await import('./account/client');
+  const { accountsEnabled, cloud, initializeAccount, waitForAccountCallback } = await import('./account/client');
   const { isMock } = await import('./api');
   if (!accountsEnabled || isMock) return bootApp();
   const { LoginScreen } = await import('./account/LoginScreen');
@@ -76,7 +76,16 @@ async function boot() {
     if (session) await authenticated(session.user.id); else showLogin();
     cloud?.auth.onAuthStateChange((event, next) => {
       // Leave the auth callback before requesting other Supabase APIs.
-      if (event === 'SIGNED_IN' && next) setTimeout(() => void authenticated(next.user.id).catch((e: Error) => showLogin(e.message)), 0);
+      if (event === 'SIGNED_IN' && next) setTimeout(() => void (async () => {
+        // The token's provider is recorded after Supabase emits SIGNED_IN.
+        // Wait for that record before importing YouTube, including linking
+        // Google to an already running Discord session with the same user ID.
+        await waitForAccountCallback();
+        if (bootedUser === next.user.id) {
+          const { importYoutube } = await import('./account/youtube');
+          void importYoutube();
+        } else await authenticated(next.user.id);
+      })().catch((e: Error) => showLogin(e.message)), 0);
       if (event === 'SIGNED_OUT' && bootedUser) location.reload();
     });
   } catch (e) { showLogin(e instanceof Error ? e.message : 'Не удалось войти'); }

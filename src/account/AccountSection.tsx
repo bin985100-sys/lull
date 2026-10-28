@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { cloud, signIn, sessionProvider } from './client';
+import { cloud, signIn, sessionProvider, waitForAccountCallback } from './client';
 import { useSyncStatus } from './sync';
 import { importYoutube, useYoutubeImport } from './youtube';
 
@@ -16,7 +16,8 @@ export function AccountSection() {
   const [googleLinked, setGoogleLinked] = useState(false);
   useEffect(() => {
     let active = true;
-    void cloud?.auth.getSession().then(async ({ data }) => {
+    const refresh = () => cloud?.auth.getSession().then(async ({ data }) => {
+      await waitForAccountCallback();
       const provider = data.session ? await sessionProvider(data.session) : null;
       if (active) {
         setIdentity(data.session?.user.email ?? '');
@@ -24,7 +25,9 @@ export function AccountSection() {
         setGoogleLinked(data.session?.user.identities?.some(i => i.provider === 'google') ?? false);
       }
     }).catch(() => {});
-    return () => { active = false; };
+    void refresh();
+    const subscription = cloud?.auth.onAuthStateChange(() => { setTimeout(() => { if (active) void refresh(); }, 0); });
+    return () => { active = false; subscription?.data.subscription.unsubscribe(); };
   }, []);
   return <div style={{ padding: 20 }}>
     <h3>Твой аккаунт Lull</h3>{identity && <p>{identity}</p>}<p role="status">{sync}</p>

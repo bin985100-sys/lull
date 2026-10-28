@@ -45,6 +45,7 @@ export async function sessionProvider(session: Session): Promise<'google' | 'dis
 }
 
 let exchange: Promise<void> | undefined;
+export async function waitForAccountCallback() { await exchange; }
 export function acceptCallback(raw: string): Promise<void> {
   const target = new URL(raw);
   const native = target.protocol === 'lull:' && target.hostname === 'auth' && target.pathname === '/callback';
