@@ -91,7 +91,7 @@ export const httpApi: Api = {
   },
 
   streamUrl: (id) => `${API_BASE}/api/stream/${enc(id)}?${streamQuery(id)}`,
-  imageUrl: (src) => (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(src) ? `${API_BASE}/api/img?u=${enc(src)}&iv=2` : src),
+  imageUrl: (src) => (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(src) ? `${API_BASE}/api/img?u=${enc(src)}&iv=3` : src),
   prepareStream: (id, _prefetch, hint) => {
     if (hint) {
       streamHints.set(id, hint);

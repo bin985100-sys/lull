@@ -89,9 +89,14 @@ def client_ip(request: web.Request) -> str:
 
 def cors(request: web.Request, resp: web.StreamResponse) -> web.StreamResponse:
     origin = request.headers.get("Origin", "")
+    # Image tags can warm the HTTP cache without an Origin header. Their
+    # response must not later satisfy a CORS canvas/image request.
+    vary = [value.strip() for value in resp.headers.get("Vary", "").split(",") if value.strip()]
+    if not any(value.lower() == "origin" for value in vary):
+        vary.append("Origin")
+    resp.headers["Vary"] = ", ".join(vary)
     if origin in ORIGINS or origin.endswith(".vercel.app"):
         resp.headers["Access-Control-Allow-Origin"] = origin
-        resp.headers["Vary"] = "Origin"
         resp.headers["Access-Control-Expose-Headers"] = "Content-Range, Content-Length, Accept-Ranges"
     return resp
 
