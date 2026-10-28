@@ -60,7 +60,8 @@ void main(){
 
   // Мягкий блик сверху и затемнение по краям
   c += 0.05 * uIntensity * smoothstep(0.6, 1.0, uv.y);
-  float vig = smoothstep(1.25, 0.35, length((uv - vec2(0.5, 0.55)) * vec2(1.1, 1.3)));
+  // smoothstep requires ordered edges; reversed edges are driver-dependent.
+  float vig = 1.0 - smoothstep(0.35, 1.25, length((uv - vec2(0.5, 0.55)) * vec2(1.1, 1.3)));
   c *= mix(0.55, 1.0, vig);
 
   // Зерно, чтобы не было полос на градиентах
