@@ -33,7 +33,7 @@ public class AccountStoragePlugin extends Plugin {
     }
     private String key(PluginCall call) throws Exception {
         String key = call.getString("key", "");
-        if (!key.matches("lull-account(?:-[a-z-]+)?")) throw new Exception("Invalid key");
+        if (!key.matches("lull-account(?:-(?:user|provider|oauth-intent|code-verifier|flows-code-verifier|qa)|-flow-[a-zA-Z0-9_-]{8,64}-code-verifier)?")) throw new Exception("Invalid key");
         return key;
     }
     private SharedPreferences prefs() { return getContext().getSharedPreferences("lull-account", Context.MODE_PRIVATE); }

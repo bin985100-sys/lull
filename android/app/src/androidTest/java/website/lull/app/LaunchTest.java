@@ -13,6 +13,9 @@ import org.junit.runner.RunWith;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
@@ -37,7 +40,12 @@ public class LaunchTest {
     }
 
     private void verifyStorage() throws Exception {
-        evaluate("window.__storageCheck='pending'; (async()=>{try{const p=window.Capacitor.Plugins.AccountStorage;await p.set({key:'lull-account-qa',value:'test-session'});const r=await p.get({key:'lull-account-qa'});await p.set({key:'lull-account-qa',value:null});window.__storageCheck=r.value==='test-session'?'pass':'fail'}catch(e){window.__storageCheck=String(e)}})();'started'");
+        try (InputStream input=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("account-storage-probe.js")) {
+            ByteArrayOutputStream output=new ByteArrayOutputStream();byte[] bytes=new byte[8192];int count;
+            while((count=input.read(bytes))!=-1) output.write(bytes,0,count);
+            evaluate(new String(output.toByteArray(),StandardCharsets.UTF_8)+"; 'probe-ready'");
+        }
+        evaluate("window.__storageCheck='pending'; (async()=>{try{const p=window.Capacitor.Plugins.AccountStorage;const r=await LullAccountStorageProbe.runAccountStorageProbe({getItem:async key=>(await p.get({key})).value,setItem:(key,value)=>p.set({key,value}),removeItem:key=>p.set({key,value:null})});window.__storageCheck=r.pkceSlots===2?'pass':'fail';console.log('LULL_ANDROID_ACCOUNT_STORAGE='+JSON.stringify(r))}catch(e){window.__storageCheck=String(e)}})();'started'");
         String storage="pending";
         for(int i=0;i<40;i++) {
             storage=evaluate("window.__storageCheck");

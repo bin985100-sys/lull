@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { build } from 'esbuild';
 
 const executable = process.argv[2];
 assert.ok(executable, 'Pass the packaged app executable');
@@ -28,6 +29,12 @@ try {
   const failures = [];
   page.on('pageerror', e => failures.push(e.message));
   await page.waitForFunction(() => document.querySelector('#root')?.children.length && window.api, null, { timeout: 30000 });
+  const probe = await build({entryPoints:['scripts/account-storage-probe.mjs'],bundle:true,format:'iife',globalName:'LullAccountStorageProbe',platform:'browser',write:false});
+  await page.addScriptTag({content:probe.outputFiles[0].text});
+  const accountStorage = await page.evaluate(() => window.LullAccountStorageProbe.runAccountStorageProbe({
+    getItem:key=>window.api.accountStorage.get(key),setItem:(key,value)=>window.api.accountStorage.set(key,value),removeItem:key=>window.api.accountStorage.set(key,null)
+  }));
+  assert.equal(accountStorage.pkceSlots,2,'Packaged native storage must accept the actual SDK PKCE keys');
   const result = await page.evaluate(async () => {
     const home = await window.api.home();
     if (!home.some(section => section.items.length)) throw new Error('Empty home catalogue');
@@ -52,7 +59,7 @@ try {
   });
   await page.screenshot({ path: 'test-results/packaged-home.png' });
   assert.deepEqual(failures, [], 'Renderer exceptions');
-  fs.writeFileSync('test-results/packaged.json', JSON.stringify({ platform: process.platform, arch: process.arch, ...result }, null, 2));
+  fs.writeFileSync('test-results/packaged.json', JSON.stringify({ platform: process.platform, arch: process.arch, accountStorage, ...result }, null, 2));
   console.log(JSON.stringify(result));
 } finally {
   await browser?.close().catch(() => {});

@@ -2,6 +2,7 @@ import { app, ipcMain, safeStorage, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { IPC } from '../shared/api';
+import { assertAccountStorageKey } from '../shared/account-storage';
 
 let pending: string | null = null;
 export function receiveAccountUrl(raw: string, contents?: WebContents) {
@@ -15,7 +16,7 @@ export function receiveAccountUrl(raw: string, contents?: WebContents) {
 
 export function registerAccountIpc(contents: () => WebContents | undefined) {
   const file = (key: string) => {
-    if (!/^lull-account(?:-[a-z-]+)?$/.test(key)) throw new Error('Invalid account storage key');
+    assertAccountStorageKey(key);
     if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) throw new Error('Secure account storage unavailable');
     return path.join(app.getPath('userData'), 'account', `${key}.bin`);
   };

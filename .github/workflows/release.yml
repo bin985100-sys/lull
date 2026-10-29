@@ -5,7 +5,7 @@ on:
       platform:
         description: Build all platforms or Android only
         type: choice
-        options: [all, android]
+        options: [all, android, account-fix]
         default: all
       publish:
         description: Publish a release after all checks pass
@@ -32,6 +32,7 @@ jobs:
         with: { node-version: 24, cache: npm }
       - run: npm ci
       - run: npm run typecheck
+      - run: node scripts/test-account-storage.mjs
       - run: node scripts/test-packaged-parser.mjs && node scripts/test-stream-selection.mjs && node scripts/test-playback-startup.mjs
       - run: node scripts/test-native-media-session.mjs
       - run: node scripts/test-desktop-broker.mjs
@@ -46,16 +47,25 @@ jobs:
       - run: npm run build:web && npm run build:api
       - run: npx playwright install --with-deps chromium webkit
       - run: node scripts/test-mobile-safe-area.mjs
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-iphone-flows.mjs
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-glass-navigation.mjs
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-background-pause.mjs
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-account-entry.mjs
       - run: node scripts/test-google-connection.mjs
       - run: node scripts/test-tablet-viewport.mjs
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-background-modes.mjs
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-background-modes.mjs --animated
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-background-modes.mjs --animated --broken-gpu
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-image-cache.mjs
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-audio-compatibility.mjs
       - run: VITE_ACCOUNTS_ENABLED=true npx vite build --mode web --outDir work/account-gate-dist --emptyOutDir && node scripts/test-account-gate.mjs
       - run: node scripts/smoke-web.mjs
@@ -80,6 +90,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: Lull-Windows, path: release/*.exe, if-no-files-found: error }
       - run: node scripts/smoke-packaged.mjs release/win-unpacked/Lull.exe
+      - run: node scripts/test-native-signin.mjs release/win-unpacked/Lull.exe
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: Windows-test-results, path: test-results }
@@ -109,6 +120,7 @@ jobs:
           hdiutil attach release/Lull-mac-${{ matrix.arch }}.dmg -readonly -nobrowse -mountpoint "$RUNNER_TEMP/lull-mount"
           file "$RUNNER_TEMP/lull-mount/Lull.app/Contents/MacOS/Lull"
           node scripts/smoke-packaged.mjs "$RUNNER_TEMP/lull-mount/Lull.app/Contents/MacOS/Lull"
+          node scripts/test-native-signin.mjs "$RUNNER_TEMP/lull-mount/Lull.app/Contents/MacOS/Lull"
           hdiutil detach "$RUNNER_TEMP/lull-mount"
       - uses: actions/upload-artifact@v4
         if: always()
@@ -126,6 +138,7 @@ jobs:
         with: { packages: 'platform-tools', log-accepted-android-sdk-licenses: false }
       - run: npm ci
       - run: npm run build:web && npx cap sync android
+      - run: node scripts/build-account-storage-probe.mjs
       - name: Configure release signing
         env:
           KS: ${{ secrets.LULL_KEYSTORE_B64 }}

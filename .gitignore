@@ -22,3 +22,4 @@ __pycache__/
 *.pyc
 .env*
 !.env.example
+/android/app/src/androidTest/assets/account-storage-probe.js
