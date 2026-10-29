@@ -6,6 +6,7 @@ import { detectParser, PlainParser, type Lyric } from '@braccato/parsers';
 import { useEffect, useRef } from 'react';
 import type { Lyrics } from '../../shared/types';
 import { audioEngine, usePlayer } from '../store/player';
+import { lyricsPlayback, syncLyricsClock } from '../lib/lyricsClock';
 
 /** Превращаем любой вариант текста в формат рендерера (времена в мс). */
 export function toBraccato(l: Lyrics, durationSec: number): Lyric[] {
@@ -63,7 +64,10 @@ export interface LyricsClock {
   time(): number;
   playing(): boolean;
 }
-const engineClock: LyricsClock = { time: () => audioEngine.position, playing: () => usePlayer.getState().playing };
+const engineClock: LyricsClock = {
+  time: () => lyricsPlayback(usePlayer.getState(), audioEngine).time,
+  playing: () => lyricsPlayback(usePlayer.getState(), audioEngine).playing
+};
 
 export function SyncedLyrics({ lyrics, offset, layout = 'scroll', className, onSeek, clock = engineClock, durationSec, theme = THEME }: { lyrics: Lyrics; offset: number; layout?: 'scroll' | 'stage'; className?: string; onSeek?: (t: number) => void; clock?: LyricsClock; durationSec?: number; theme?: string }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -91,8 +95,7 @@ export function SyncedLyrics({ lyrics, offset, layout = 'scroll', className, onS
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
-      node.playing = clockRef.current.playing();
-      node.currentTime = clockRef.current.time() + offsetRef.current;
+      syncLyricsClock(node, clockRef.current.time() + offsetRef.current, clockRef.current.playing());
     };
     raf = requestAnimationFrame(tick);
     return () => {
@@ -104,7 +107,7 @@ export function SyncedLyrics({ lyrics, offset, layout = 'scroll', className, onS
 
   useEffect(() => {
     if (el.current) el.current.lyrics = toBraccato(lyrics, duration || 240);
-  }, [lyrics, duration, layout]);
+  }, [lyrics, duration, layout, theme]);
 
   return <div ref={scroller} className={`blyrics-scroller ${className ?? ''}`} />;
 }

@@ -1,9 +1,10 @@
 import { protocol } from 'electron';
 import fs from 'node:fs';
 import { Readable } from 'node:stream';
-import { localFileFor } from './downloads';
-import { xfetch } from './relay';
-import { soundcloudFallback, scFileFor } from './soundcloud';
+import { relayApi, xfetch } from './relay';
+import { soundcloudFallback } from './soundcloud';
+import { preparePlayback, forgetPreparedAudio } from './playback';
+import { brokerResponse } from './audio-broker';
 import { fetchRange, hintFor, invalidateStream, markInnertubeFailed, noteForbidden, rememberHint, resolveStream, withTimeout, type ResolvedStream } from './yt';
 
 /**
@@ -30,8 +31,27 @@ function parseRange(header: string | null, total: number): [number, number | und
 }
 
 async function streamResponse(id: string, range: string | null): Promise<Response> {
-  const local = localFileFor(id) ?? scFileFor(id);
-  if (local) {
+  const prepared = await preparePlayback(id);
+  if (prepared.kind === 'broker') {
+    try { return await brokerResponse(prepared, range); }
+    catch (error) { forgetPreparedAudio(id); throw error; }
+  }
+  if (prepared.kind === 'soundcloud') {
+    const response = await relayApi(`/sc/file?url=${encodeURIComponent(prepared.url)}`, { headers: range ? { Range: range } : {} });
+    if (response.status === 403 || response.status === 404 || response.status >= 500) {
+      forgetPreparedAudio(id);
+      void response.body?.cancel();
+      throw new Error(`Аудиосервер ответил ${response.status}`);
+    }
+    const headers: Record<string, string> = { ...cors, 'Content-Type': prepared.mime, 'Cache-Control': 'no-store' };
+    for (const name of ['Content-Length', 'Content-Range', 'Accept-Ranges']) {
+      const value = response.headers.get(name);
+      if (value) headers[name] = value;
+    }
+    return new Response(response.body, { status: response.status, headers });
+  }
+  if (prepared.kind === 'local') {
+    const local = prepared;
     const total = local.size;
     const [start, endReq] = parseRange(range, total);
     const end = Math.min(endReq ?? total - 1, total - 1);
@@ -48,7 +68,7 @@ async function streamResponse(id: string, range: string | null): Promise<Respons
   } catch (e) {
     // В YouTube трека нет ни в каком виде — последняя ступенька: та же песня с SoundCloud
     const sc = await soundcloudFallback(id, hintFor(id));
-    if (sc) return streamResponse(id, range);
+    if (sc) { forgetPreparedAudio(id); return streamResponse(id, range); }
     throw e;
   }
   const [start, endReq] = parseRange(range, total0);
@@ -57,7 +77,7 @@ async function streamResponse(id: string, range: string | null): Promise<Respons
   // по своей схеме media:// не всегда дозапрашивает продолжение — и решал, что трек кончился
   // примерно на первой минуте, перескакивая на следующий. Сам YouTube читаем кусками.
   const end = Math.min(endReq ?? total0 - 1, total0 - 1);
-  const first = await chunk(id, start, Math.min(start + CHUNK - 1, end));
+  const first = await chunk(id, start, Math.min(start + 64 * 1024 - 1, end));
   const s = first.stream;
   let pos = start + first.data.byteLength;
   let cancelled = false; // плеер перемотал или переключил трек — дальше не читаем
@@ -102,7 +122,8 @@ async function sameFile(id: string, fresh: boolean, attempt: number): Promise<Re
   if (fresh && attempt === 0) served.delete(id);
   const prev = served.get(id);
   const s = await resolveStream(id, attempt >= 2 || prev ? { preferDlp: attempt >= 2, formatId: prev?.formatId } : {});
-  if (prev && (s.contentLength !== prev.total || s.mime !== prev.mime) && attempt < 3) {
+  if (prev && (s.contentLength !== prev.total || s.mime !== prev.mime)) {
+    if (attempt >= 3) throw new Error('Не удалось обновить ссылку на тот же аудиофайл');
     console.warn(`[stream] ${id} — новая ссылка ведёт на другой файл (${s.contentLength} вместо ${prev.total}), беру тот же формат через yt-dlp`);
     invalidateStream(id);
     return sameFile(id, false, Math.max(attempt + 1, 2));

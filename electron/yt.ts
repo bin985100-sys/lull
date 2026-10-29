@@ -20,8 +20,11 @@ import type {
 } from '../shared/types';
 import { mainSettings, storeGet, storeSet } from './store';
 import { relayApi, relayOn, xfetch, markRelayDown } from './relay';
+import { installParserDiagnostics } from './yt-parser';
+import { selectStream, isVideoUnavailable } from './stream-selection';
 
 Log.setLevel(Log.Level.ERROR);
+installParserDiagnostics();
 
 // --- Интерпретатор JS для расшифровки ссылок (n/sig) ----------------------
 // Скрипт плеера YouTube выполняется в изолированном контексте vm с таймаутом.
@@ -914,15 +917,14 @@ export async function resolveStream(id: string, opts: { preferDlp?: boolean; pre
     const dlp = (x: string) => viaYtDlp(x, opts.formatId, opts.keep ? 'keep' : opts.background ? 'background' : 'play');
     // Нужен конкретный формат (докачка того же файла) — его умеет выбрать только yt-dlp
     const server = relayOn();
-    const first = server ? viaRelay : opts.preferDlp || opts.formatId || innertubeFails >= 2 || innertubeBlockedUntil() > Date.now() ? dlp : viaInnertube;
-    const second = server ? (innertubeFails >= 2 ? dlp : viaInnertube) : first === viaInnertube ? dlp : viaInnertube;
+    const first = opts.preferDlp || opts.formatId ? dlp : server ? viaRelay : innertubeFails >= 2 || innertubeBlockedUntil() > Date.now() ? dlp : viaInnertube;
+    const second = first === dlp ? (server ? viaRelay : viaInnertube) : first === viaRelay ? (innertubeFails >= 2 ? dlp : viaInnertube) : dlp;
     const name = (w: typeof first) => (w === viaInnertube ? 'встроенный клиент' : w === viaRelay ? 'сервер Lull' : 'yt-dlp');
     const errors: string[] = [];
     const attempt = (w: typeof first) =>
       w(id).then(
         (s) => {
           if (w === viaInnertube) innertubeFails = 0;
-          rememberStream(id, s);
           console.log(`[stream] ${id} — получен за ${((Date.now() - t0) / 1000).toFixed(1)} с (${name(w)})`);
           return s;
         },
@@ -944,17 +946,24 @@ export async function resolveStream(id: string, opts: { preferDlp?: boolean; pre
     // YouTube требует «подтвердить, что не бот» — встроенный клиент не запускаем вовсе, только yt-dlp
     // Ни один способ не сработал: если сам ролик недоступен — ищем ту же песню другим роликом
     const fail = async (): Promise<ResolvedStream> => {
-      const unavailable = UNAVAILABLE.test(errors.join(' '));
+      const unavailable = errors.some(isVideoUnavailable);
       const alt = unavailable ? await findAlternative(id) : null;
       if (alt) return resolveStream(alt, { ...opts, formatId: undefined }).then((s) => ({ ...s, id }));
       if (unavailable) deadIds.set(id, Date.now() + 6 * 3600_000);
       throw new Error(unavailable ? 'YouTube не отдаёт этот трек в твоём регионе' : errors.join(' | ') || 'Не удалось получить поток');
     };
-    if (!server && first === dlp && (innertubeFails >= 5 || innertubeBlockedUntil() > Date.now())) return p1.catch(fail);
+    if (opts.formatId || (!server && first === dlp && (innertubeFails >= 5 || innertubeBlockedUntil() > Date.now()))) {
+      return selectStream([p1], (s) => rememberStream(id, s)).catch(fail);
+    }
     // Иначе оба способа сразу и параллельно — берём того, кто ответил первым
-    const p2 = attempt(second);
+    const p2 = attempt(second).catch((error) => {
+      // A fast built-in-client failure must not leave playback waiting only
+      // for every server retry when local yt-dlp can still resolve the track.
+      if (server && second === viaInnertube) return attempt(dlp);
+      throw error;
+    });
     try {
-      return await Promise.any([p1, p2]);
+      return await selectStream([p1, p2], (s) => rememberStream(id, s));
     } catch {
       return fail();
     }
@@ -986,7 +995,6 @@ function saveAlts() {
     /* не критично */
   }
 }
-const UNAVAILABLE = /Video unavailable|not available|Private video|removed|blocked it in your country|This video has been/i;
 export function rememberHint(id: string, h: { title: string; artist: string; duration?: number }) {
   const prev = hints.get(id);
   hints.set(id, { ...prev, ...h, duration: h.duration || prev?.duration });
@@ -1141,7 +1149,13 @@ async function probe(url: string, len = 0): Promise<boolean> {
 }
 
 export function invalidateStream(id: string) {
-  streams.delete(id);
+  const seen = new Set<string>();
+  let key: string | undefined = id;
+  while (key && !seen.has(key)) {
+    seen.add(key);
+    streams.delete(key);
+    key = alts.get(key);
+  }
 }
 
 // --- Аккаунт -------------------------------------------------------------------------

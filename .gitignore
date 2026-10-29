@@ -16,3 +16,10 @@ android/capacitor-cordova-android-plugins/build/
 *.jks
 relay.local
 qa/
+work/
+test-results/
+__pycache__/
+*.pyc
+.env*
+!.env.example
+/android/app/src/androidTest/assets/account-storage-probe.js

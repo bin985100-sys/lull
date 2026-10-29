@@ -8,7 +8,7 @@ export async function initNative() {
     if (ui.menu) return ui.closeMenu();
     if (ui.settings) return ui.closeSettings();
     if (ui.search) return ui.setSearch(false);
-    if (ui.nowPlaying) return ui.setNowPlaying(false);
+    if (ui.nowPlaying) return ui.setNowPlaying(ui.nowPlayingPanelRequested);
     const h = location.hash.replace(/^#/, '') || '/';
     if (h !== '/' && !['/search', '/library', '/wave'].includes(h)) return history.back();
     if (h !== '/') return void (location.hash = '#/');

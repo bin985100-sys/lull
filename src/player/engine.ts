@@ -17,6 +17,7 @@ interface Deck {
   /** Сколько раз уже перезапрашивали поток */
   tries: number;
   watchdog?: ReturnType<typeof setTimeout>;
+  startedAt?: number;
 }
 
 /** Сколько ждём начала звука, прежде чем перезапросить поток */
@@ -33,7 +34,9 @@ export interface EngineEvents {
 }
 
 export class AudioEngine {
+  private generation = 0;
   private ctx: AudioContext | null = null;
+  private graphUnavailable = false;
   private decks: [Deck, Deck];
   private active = 0;
   private eq: BiquadFilterNode[] = [];
@@ -78,6 +81,10 @@ export class AudioEngine {
     d.el.addEventListener('playing', () => {
       clearTimeout(d.watchdog);
       d.tries = 0;
+      if (d.startedAt !== undefined) {
+        console.log(`[playback] ${d.key}: started after ${Math.round(performance.now() - d.startedAt)} ms`);
+        d.startedAt = undefined;
+      }
       if (isActive()) this.on.state('playing');
     });
     d.el.addEventListener('pause', () => isActive() && !this.fading && this.on.state('paused'));
@@ -143,11 +150,24 @@ export class AudioEngine {
 
   /** Граф создаётся лениво: AudioContext нужен только после первого запуска. */
   private ensureGraph() {
-    if (this.ctx) return;
+    if (this.ctx || this.graphUnavailable) return;
     // iPhone: играть как музыкальное приложение — в фоне, при заблокированном экране и с выключенным звонком
     const nav = navigator as Navigator & { audioSession?: { type: string } };
     if (nav.audioSession) nav.audioSession.type = 'playback';
-    const ctx = new AudioContext({ latencyHint: 'playback' });
+    const Context = globalThis.AudioContext ?? (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Context) {
+      this.graphUnavailable = true;
+      this.setVolume(this.volume);
+      return;
+    }
+    let ctx: AudioContext;
+    try { ctx = new Context({ latencyHint: 'playback' }); }
+    catch {
+      // The media elements can still play when the optional effects graph is unavailable.
+      this.graphUnavailable = true;
+      this.setVolume(this.volume);
+      return;
+    }
     this.ctx = ctx;
     // Звонок или другое приложение прервали звук — после возврата продолжаем
     const revive = () => {
@@ -189,13 +209,16 @@ export class AudioEngine {
 
   private async resume() {
     this.ensureGraph();
-    if (this.ctx!.state === 'suspended') await this.ctx!.resume();
+    if (this.ctx?.state === 'suspended') await this.ctx.resume();
   }
 
   /** Загрузить трек в активную деку. Если он уже предзагружен во второй — просто переключаемся. */
   async load(key: string, url: string, opts: { autoplay: boolean; startAt?: number }) {
+    const generation = ++this.generation;
+    const startedAt = performance.now();
     this.cancelFade();
     await this.resume();
+    if (generation !== this.generation) return;
     const old = this.cur;
     old.want = false;
     clearTimeout(old.watchdog);
@@ -208,12 +231,15 @@ export class AudioEngine {
       this.cur.el.src = url;
     }
     const d = this.cur;
+    d.startedAt = opts.autoplay ? startedAt : undefined;
     d.tries = 0;
     d.want = opts.autoplay;
     d.el.playbackRate = this.rate;
-    d.fade!.gain.cancelScheduledValues(0);
-    d.fade!.gain.value = 1;
-    this.idle.fade!.gain.value = 0;
+    if (d.fade && this.idle.fade) {
+      d.fade.gain.cancelScheduledValues(0);
+      d.fade.gain.value = 1;
+      this.idle.fade.gain.value = 0;
+    }
     if (opts.startAt) d.el.currentTime = opts.startAt;
     else if (d.el.currentTime > 0.5) d.el.currentTime = 0;
     this.on.state('loading');
@@ -235,7 +261,10 @@ export class AudioEngine {
 
   /** Плавный переход в предзагруженный трек. */
   async crossfade(key: string, url: string, seconds: number) {
+    const generation = ++this.generation;
     await this.resume();
+    if (generation !== this.generation) return;
+    if (!this.ctx) return this.load(key, url, { autoplay: true });
     const ctx = this.ctx!;
     if (this.idle.key !== key) this.preload(key, url);
     const from = this.cur;
@@ -270,9 +299,11 @@ export class AudioEngine {
   }
 
   private async safePlay(el: HTMLAudioElement) {
+    const generation = this.generation;
     try {
       await el.play();
     } catch (e) {
+      if (generation !== this.generation || this.cur.el !== el) return;
       // AbortError — трек сменили; NotSupportedError — обработает событие error (с повтором)
       const name = (e as DOMException).name;
       if (name !== 'AbortError' && name !== 'NotSupportedError') this.on.error('Не удалось начать воспроизведение');
@@ -280,7 +311,9 @@ export class AudioEngine {
   }
 
   async play() {
+    const generation = ++this.generation;
     await this.resume();
+    if (generation !== this.generation) return;
     const d = this.cur;
     d.want = true;
     // Поток упал или завис — перезапрашиваем, а не жмём play впустую
@@ -293,10 +326,12 @@ export class AudioEngine {
   }
 
   pause() {
+    this.generation++;
     this.cancelFade();
     this.cur.want = false;
     clearTimeout(this.cur.watchdog);
     this.cur.el.pause();
+    this.on.state('paused');
   }
 
   seek(sec: number) {
@@ -306,6 +341,7 @@ export class AudioEngine {
   }
 
   stop() {
+    this.generation++;
     for (const d of this.decks) {
       d.want = false;
       clearTimeout(d.watchdog);
@@ -318,6 +354,10 @@ export class AudioEngine {
 
   get position() {
     return this.cur.el.currentTime;
+  }
+  get isPlaying() {
+    const el = this.cur.el;
+    return !el.paused && !el.ended && el.readyState >= 3;
   }
   get duration() {
     return this.cur.el.duration || 0;

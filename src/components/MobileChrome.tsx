@@ -1,13 +1,55 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { GlassTabBar } from './GlassTabBar';
 import logoUrl from '../assets/logo.svg';
 import { usePlayer } from '../store/player';
 import { useUi } from '../store/ui';
 import { Cover } from './Cover';
-import { IHome, IHomeFill, ILibrary, INext, IPause, IPlay, ISearch, ISliders, IWaveNav } from './icons';
+import { INext, IPause, IPlay, ISliders } from './icons';
 
-const QUERY = '(max-width: 760px)';
+const QUERY = '(max-width: 760px), (max-height: 500px) and (pointer: coarse)';
+
+/** Safari overlays its keyboard without resizing the layout viewport. */
+export function useViewportFit() {
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const root = document.documentElement;
+    let frame = 0;
+    let baseline = window.innerHeight;
+    const update = () => {
+      const active = document.activeElement;
+      const editing = active instanceof HTMLElement && (active.matches('input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), textarea') || active.isContentEditable);
+      if (!editing) baseline = window.innerHeight;
+      const unzoomed = !viewport || Math.abs(viewport.scale - 1) < 0.01;
+      const height = unzoomed && viewport ? Math.min(window.innerHeight, viewport.height) : window.innerHeight;
+      const top = unzoomed && viewport ? Math.max(0, viewport.offsetTop) : 0;
+      root.style.setProperty('--app-height', `${Math.max(120, Math.round(height))}px`);
+      root.style.setProperty('--app-top', `${Math.round(top)}px`);
+      root.classList.toggle('keyboard-open', editing && height < baseline - 100);
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(update);
+    };
+    update();
+    viewport?.addEventListener('resize', schedule);
+    viewport?.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    document.addEventListener('focusin', schedule);
+    document.addEventListener('focusout', schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport?.removeEventListener('resize', schedule);
+      viewport?.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      document.removeEventListener('focusin', schedule);
+      document.removeEventListener('focusout', schedule);
+      root.style.removeProperty('--app-height');
+      root.style.removeProperty('--app-top');
+      root.classList.remove('keyboard-open');
+    };
+  }, []);
+}
 
 /** Телефон или узкое окно: нижняя навигация и мини-плеер вместо боковой панели. */
 export function useIsMobile() {
@@ -35,24 +77,7 @@ export function MobileHeader() {
 }
 
 export function MobileTabBar() {
-  const tab = (to: string, label: string, icon: (a: boolean) => ReactNode, end = false) => (
-    <NavLink to={to} end={end} className={({ isActive }) => `m-tab ${isActive ? 'on' : ''}`}>
-      {({ isActive }) => (
-        <>
-          {icon(isActive)}
-          <span>{label}</span>
-        </>
-      )}
-    </NavLink>
-  );
-  return (
-    <nav className="m-tabs" aria-label="Навигация">
-      {tab('/', 'Главная', (a) => (a ? <IHomeFill size={22} /> : <IHome size={22} />), true)}
-      {tab('/search', 'Поиск', (a) => <ISearch size={22} strokeWidth={a ? 2.6 : 2} />)}
-      {tab('/wave', 'Волна', (a) => <IWaveNav size={23} strokeWidth={a ? 2.6 : 2} />)}
-      {tab('/library', 'Библиотека', (a) => <ILibrary size={22} strokeWidth={a ? 2.6 : 2} />)}
-    </nav>
-  );
+  return <GlassTabBar />;
 }
 
 export function MiniPlayer() {

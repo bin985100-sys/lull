@@ -27,6 +27,14 @@ export function storeGet<T>(key: string): T | undefined {
 }
 
 export function storeSet(key: string, value: unknown) {
+  if (key.startsWith('account_')) {
+    fs.mkdirSync(dir(), { recursive: true });
+    const file = fileOf(key), temporary = file + '.tmp';
+    fs.writeFileSync(temporary, JSON.stringify(value), { mode: 0o600 });
+    fs.renameSync(temporary, file);
+    mem.set(key, value);
+    return;
+  }
   mem.set(key, value);
   clearTimeout(timers.get(key));
   timers.set(

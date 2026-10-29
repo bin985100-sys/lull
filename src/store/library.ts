@@ -26,7 +26,7 @@ export interface MonthStats {
 
 export const monthKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-interface LibraryData {
+export interface LibraryData {
   stats: Record<string, MonthStats>;
   likes: { track: Track; addedAt: number }[];
   playlists: LocalPlaylist[];
@@ -58,6 +58,7 @@ interface LibraryState extends LibraryData {
 const persist = (s: LibraryData) => api.storeSet('library', { likes: s.likes, playlists: s.playlists, saved: s.saved, history: s.history, stats: s.stats });
 
 export const useLibrary = create<LibraryState>((set, get) => {
+  let listening = false;
   const commit = (p: Partial<LibraryData>) => {
     set(p);
     void persist(get());
@@ -75,12 +76,13 @@ export const useLibrary = create<LibraryState>((set, get) => {
     hydrate: async () => {
       const [data, downloads] = await Promise.all([api.storeGet<Partial<LibraryData>>('library'), api.listDownloads()]);
       set({ likes: data?.likes ?? [], playlists: data?.playlists ?? [], saved: data?.saved ?? [], history: data?.history ?? [], stats: data?.stats ?? {}, downloads, hydrated: true });
-      api.onDownloadProgress((p) => {
+      if (!listening) api.onDownloadProgress((p) => {
         const progress = { ...get().progress };
         if (p.done) delete progress[p.id];
         else progress[p.id] = p;
         set({ progress });
       });
+      listening = true;
     },
 
     isLiked: (id) => get().likes.some((l) => l.track.id === id),

@@ -1,6 +1,7 @@
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { Cover } from '../components/Cover';
+import { useIsMobile } from '../components/MobileChrome';
 import { ICheck, IDislike, ILyrics, INext, IOpenPlayer, IPlay, IPlus, IPrev } from '../components/icons';
 import { VolumeControl } from '../components/PlayerBar';
 import { LyricsView, SeekBar } from '../components/NowPlaying';
@@ -35,6 +36,8 @@ export function WaveScreen() {
   const isWave = usePlayer((s) => s.source?.path === '/wave');
   const track = usePlayer((s) => s.current());
   const playing = usePlayer((s) => s.playing);
+  const loading = usePlayer((s) => s.loading);
+  const mobile = useIsMobile();
   const p = usePlayer.getState();
   const reasons = useWave((s) => s.reasons);
   const building = useWave((s) => s.building);
@@ -117,11 +120,11 @@ export function WaveScreen() {
       <WaveField colors={palette} playing={active && playing} anchor={anchor} />
       {intro !== 'off' && <WaveIntro covers={INTRO_COVERS} onButton={() => (setIntro('button'), useUi.getState().setIntroRunning(false))} onDone={() => setIntro('off')} />}
       <LayoutGroup>
-        <motion.div layout transition={spring} className="wave-main">
-          <motion.div layout transition={spring} ref={anchor} className="wave-cover">
+        <motion.div layout={!mobile} transition={spring} className="wave-main">
+          <motion.div layout={!mobile} transition={spring} ref={anchor} className="wave-cover">
             <AnimatePresence mode="popLayout" initial={false}>
               {active ? (
-                <motion.div key={track!.id} className="wave-cover-in" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.04, filter: 'blur(10px)' }} transition={{ duration: 0.55, ease: [0.2, 0.8, 0.2, 1] }}>
+                <motion.div key="artwork" className="wave-cover-in" initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
                   <Cover src={track!.thumb} size="100%" radius={26} eager />
                 </motion.div>
               ) : intro === 'run' ? null : starting && (useSettings.getState().waveStarted || useSettings.getState().waveIntroSeen) ? (
@@ -166,8 +169,8 @@ export function WaveScreen() {
                 <div className="wave-ctrls">
                   <button type="button" className="wave-btn ghost" aria-label="Не нравится" title="Не нравится — больше не попадётся" onClick={dislike}><IDislike size={21} /></button>
                   <button type="button" className="wave-btn ghost" aria-label="Предыдущий" onClick={() => p.prev()}><IPrev size={24} /></button>
-                  <motion.button type="button" className="wave-btn play" aria-label={playing ? 'Пауза' : 'Играть'} onClick={() => p.toggle()} whileTap={{ scale: 0.9 }}>
-                    <MorphPlayIcon playing={playing} size={30} />
+                  <motion.button type="button" className="wave-btn play" aria-label={loading ? 'Приостановить загрузку' : playing ? 'Пауза' : 'Играть'} aria-busy={loading} onClick={() => p.toggle()} whileTap={{ scale: 0.9 }}>
+                    {loading ? <span className="playback-spinner" aria-hidden="true" /> : <MorphPlayIcon playing={playing} size={30} />}
                   </motion.button>
                   <button type="button" className="wave-btn ghost" aria-label="Следующий" onClick={() => void p.next()}><INext size={24} /></button>
                   <motion.button type="button" className={`wave-btn ghost ${liked ? 'on' : ''}`} aria-label={liked ? 'Убрать из Любимого' : 'В Любимое'} aria-pressed={liked} onClick={() => toggleLike(track!)} whileTap={{ scale: 0.86 }}>
@@ -179,9 +182,9 @@ export function WaveScreen() {
                   </motion.button>
                 </div>
                 <div className="wave-sub-ctrls">
-                  <button type="button" className={`wave-chip ${lyricsOpen ? 'on' : ''}`} aria-pressed={lyricsOpen} onClick={() => setLyricsOpen(!lyricsOpen)}><ILyrics size={17} />Текст</button>
+                  <button type="button" className={`wave-chip ${lyricsOpen ? 'on' : ''}`} aria-pressed={lyricsOpen} onClick={() => mobile ? openPlayer(true, 'lyrics') : setLyricsOpen(!lyricsOpen)}><ILyrics size={17} />Текст</button>
                   <span className="wave-vol"><VolumeControl width={120} /></span>
-                  <button type="button" className="wave-chip" onClick={() => openPlayer(true, 'queue')}><IOpenPlayer size={17} />Плеер</button>
+                  <button type="button" className="wave-chip" onClick={() => openPlayer(true)}><IOpenPlayer size={17} />Плеер</button>
                 </div>
               </motion.div>
             )}

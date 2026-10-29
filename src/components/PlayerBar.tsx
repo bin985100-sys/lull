@@ -16,6 +16,7 @@ import { Artists } from './Tracks';
 /** Перетаскиваемая полоса: возвращает долю 0..1 под курсором. */
 export function useScrub(onCommit: (ratio: number) => void) {
   const ref = useRef<HTMLDivElement>(null);
+  const activePointer = useRef<number | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
   const ratioAt = (x: number) => {
     const r = ref.current!.getBoundingClientRect();
@@ -23,16 +24,20 @@ export function useScrub(onCommit: (ratio: number) => void) {
   };
   const onPointerDown = (e: RPointerEvent) => {
     if (e.button !== 0) return;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    activePointer.current = e.pointerId;
+    e.currentTarget.setPointerCapture(e.pointerId);
     setDrag(ratioAt(e.clientX));
   };
-  const onPointerMove = (e: RPointerEvent) => drag != null && setDrag(ratioAt(e.clientX));
+  const onPointerMove = (e: RPointerEvent) => activePointer.current === e.pointerId && setDrag(ratioAt(e.clientX));
   const onPointerUp = (e: RPointerEvent) => {
-    if (drag == null) return;
+    if (activePointer.current !== e.pointerId) return;
+    activePointer.current = null;
     onCommit(ratioAt(e.clientX));
     setDrag(null);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   };
-  return { ref, drag, handlers: { onPointerDown, onPointerMove, onPointerUp } };
+  const cancel = () => { activePointer.current = null; setDrag(null); };
+  return { ref, drag, handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: cancel, onLostPointerCapture: cancel } };
 }
 
 export function VolumeControl({ width = 96 }: { width?: number }) {

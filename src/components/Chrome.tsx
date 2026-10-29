@@ -1,15 +1,30 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
+import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion';
 import { api } from '../api';
 import logoUrl from '../assets/logo.svg';
 import { useUi } from '../store/ui';
-import { IClose, IHome, IHomeFill, ILibrary, IMinus, IRestore, ISearch, ISliders, ISquare, IWaveNav } from './icons';
+import { IClose, IMinus, IRestore, ISquare } from './icons';
+import { NavigationIcon, NavigationSettingsIcon, type NavigationIconName } from './NavigationIcon';
 
 export function Rail() {
   const openSettings = useUi((s) => s.openSettings);
-  const link = (to: string, label: string, icon: (active: boolean) => ReactNode, end = false) => (
+  const { pathname } = useLocation();
+  const index = pathname === '/' ? 0 : pathname.startsWith('/search') ? 1 : pathname.startsWith('/wave') ? 2 : pathname.startsWith('/library') ? 3 : -1;
+  const reduce = useReducedMotion();
+  const target = useMotionValue(Math.max(0, index) * 76);
+  const position = useSpring(target, { stiffness: 360, damping: 31, mass: .85 });
+  const stretchTarget = useTransform(() => reduce ? 1 : 1 + Math.min(Math.abs(target.get() - position.get()) / 76 * .08, .1));
+  const scaleY = useSpring(stretchTarget, { stiffness: 440, damping: 26, mass: .45 });
+  const scaleX = useTransform(scaleY, value => 1 - (value - 1) * .18);
+  useEffect(() => {
+    const offset = Math.max(0, index) * 76;
+    target.set(offset);
+    if (reduce) position.jump(offset);
+  }, [index, reduce, target, position]);
+  const link = (to: string, label: string, icon: NavigationIconName, end = false) => (
     <NavLink to={to} end={end} aria-label={label} title={label} className={({ isActive }) => `rail-btn no-drag ${isActive ? 'active' : ''}`}>
-      {({ isActive }) => icon(isActive)}
+      <NavigationIcon icon={icon} desktop/>
     </NavLink>
   );
   return (
@@ -18,14 +33,14 @@ export function Rail() {
         <img src={logoUrl} alt="Логотип" draggable={false} />
       </div>
       <div className="rail-panel no-drag">
-        {link('/', 'Главная', (a) => (a ? <IHomeFill size={21} /> : <IHome size={21} />), true)}
-        {link('/search', 'Поиск', (a) => <ISearch size={21} strokeWidth={a ? 2.6 : 2} />)}
-        {link('/library', 'Библиотека', (a) => <ILibrary size={21} strokeWidth={a ? 2.6 : 2} />)}
-        {link('/wave', 'Моя волна', (a) => <IWaveNav size={22} strokeWidth={a ? 2.6 : 2} />)}
-        <span style={{ flex: 1 }} />
+        <div className="rail-indicator-track" aria-hidden="true"><motion.span className="rail-active-indicator" style={{ y: position, scaleX, scaleY, opacity: index < 0 ? 0 : 1 }}/></div>
+        {link('/', 'Главная', 'home', true)}
+        {link('/search', 'Поиск', 'search')}
+        {link('/wave', 'Моя волна', 'wave')}
+        {link('/library', 'Библиотека', 'library')}
       </div>
       <button type="button" className="rail-gear no-drag" aria-label="Настройки" title="Настройки" onClick={() => openSettings()}>
-        <ISliders size={21} />
+        <NavigationSettingsIcon/>
       </button>
     </nav>
   );

@@ -212,7 +212,7 @@ export function SearchOverlay() {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="sov" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+        <motion.div className="sov" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, pointerEvents: 'none' }} transition={{ duration: 0.2 }} onMouseDown={(e) => e.target === e.currentTarget && close()}>
           <div className="sov-col">
             <motion.label layoutId="search-pill" className="sov-input" transition={{ type: 'spring', stiffness: 420, damping: 38 }}>
               <ISearch size={19} />

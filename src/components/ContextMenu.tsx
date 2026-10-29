@@ -12,11 +12,19 @@ function MenuList({ items, x, y, onDone, depth = 0 }: { items: MenuItem[]; x: nu
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
+    // The opening scale animation must not shrink the measured menu size.
+    const r = { width: el.offsetWidth, height: el.offsetHeight };
+    const style = getComputedStyle(document.documentElement);
+    const inset = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
+    const leftEdge = Math.max(8, inset('--safe-left'));
+    const rightEdge = window.innerWidth - Math.max(8, inset('--safe-right'));
+    const viewport = window.visualViewport;
+    const topEdge = (viewport?.offsetTop ?? 0) + Math.max(8, inset('--safe-top'));
+    const bottomEdge = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) - Math.max(16, inset('--safe-bottom'));
     let left = x, top = y;
-    if (left + r.width > window.innerWidth - 8) left = depth ? x - r.width - 250 : window.innerWidth - r.width - 8;
-    if (top + r.height > window.innerHeight - 16) top = Math.max(8, window.innerHeight - r.height - 16);
-    setPos({ left: Math.max(8, left), top });
+    if (left + r.width > rightEdge) left = depth ? x - r.width - 250 : rightEdge - r.width;
+    if (top + r.height > bottomEdge) top = bottomEdge - r.height;
+    setPos({ left: Math.max(leftEdge, left), top: Math.max(topEdge, top) });
   }, [x, y, depth]);
 
   return (
@@ -28,7 +36,7 @@ function MenuList({ items, x, y, onDone, depth = 0 }: { items: MenuItem[]; x: nu
         style={pos}
         initial={{ opacity: 0, scale: 0.97, y: -4 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97 }}
+        exit={{ opacity: 0, scale: 0.97, pointerEvents: 'none' }}
         transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
         onContextMenu={(e) => e.preventDefault()}
       >
@@ -83,11 +91,15 @@ export function ContextMenu() {
     window.addEventListener('keydown', onKey);
     window.addEventListener('blur', close);
     window.addEventListener('resize', close);
+    window.visualViewport?.addEventListener('resize', close);
+    window.visualViewport?.addEventListener('scroll', close, { passive: true });
     return () => {
       window.removeEventListener('mousedown', onDown);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('blur', close);
       window.removeEventListener('resize', close);
+      window.visualViewport?.removeEventListener('resize', close);
+      window.visualViewport?.removeEventListener('scroll', close);
     };
   }, [menu, close]);
   return <AnimatePresence>{menu && <MenuList key={`${menu.x}:${menu.y}`} items={menu.items} x={menu.x} y={menu.y} onDone={close} />}</AnimatePresence>;

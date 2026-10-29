@@ -15,6 +15,7 @@ interface LyricsState {
   trackId: string | null;
   data: Lyrics | null;
   loading: boolean;
+  error: string | null;
   variant: number;
   offset: number;
   prefs: Record<string, Prefs>;
@@ -44,19 +45,20 @@ export const useLyrics = create<LyricsState>((set, get) => {
     trackId: null,
     data: null,
     loading: false,
+    error: null,
     variant: 0,
     offset: 0,
     prefs: {},
     load: (track) => {
-      if (!track) return set({ trackId: null, data: null, loading: false });
+      if (!track) { token++; return set({ trackId: null, data: null, loading: false, error: null }); }
       if (get().trackId === track.id && (get().data || get().loading)) return;
       const t = ++token;
       const pref = get().prefs[track.id];
-      set({ trackId: track.id, data: null, loading: true, variant: pref?.variant ?? 0, offset: pref?.offset ?? 0 });
+      set({ trackId: track.id, data: null, loading: true, error: null, variant: pref?.variant ?? 0, offset: pref?.offset ?? 0 });
       api
         .lyrics(track)
         .then((d) => t === token && set({ data: d }))
-        .catch(() => t === token && set({ data: null }))
+        .catch(() => t === token && set({ data: null, error: 'Проверь подключение и попробуй ещё раз.' }))
         .finally(() => t === token && set({ loading: false }));
     },
     setVariant: (v) => {

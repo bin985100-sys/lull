@@ -20,7 +20,7 @@ export function ConfirmDialog() {
   return (
     <AnimatePresence>
       {c && (
-        <motion.div className="backdrop confirm-bd" style={{ zIndex: 95 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(e) => e.target === e.currentTarget && c.resolve(false)}>
+        <motion.div className="backdrop confirm-bd" style={{ zIndex: 95 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, pointerEvents: 'none' }} onMouseDown={(e) => e.target === e.currentTarget && c.resolve(false)}>
           <motion.div role="alertdialog" aria-modal="true" aria-label={c.title} className="confirm" initial={{ opacity: 0, y: 12, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }} transition={{ type: 'spring', stiffness: 420, damping: 34 }}>
             <b className="confirm-t">{c.title}</b>
             <span className="muted">{c.text}</span>

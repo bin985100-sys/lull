@@ -53,4 +53,42 @@ async function bootApp() {
   setTimeout(() => void initPoToken(), 1500);
 }
 
-void (location.hash.startsWith('#/overlay') ? bootOverlay() : bootApp());
+async function boot() {
+  const { accountsEnabled, cloud, initializeAccount, waitForAccountCallback } = await import('./account/client');
+  const { isMock } = await import('./api');
+  if (isMock || (!cloud && !accountsEnabled)) return bootApp();
+  const { LoginScreen } = await import('./account/LoginScreen');
+  const showLogin = (error = '') => root.render(<LoginScreen key={error} error={error} />);
+  let bootedUser: string | undefined;
+  const authenticated = async (userId: string) => {
+    if (bootedUser === userId) return;
+    if (bootedUser) { location.reload(); return; }
+    bootedUser = userId;
+    const { startSync } = await import('./account/sync');
+    const sync = await startSync(userId);
+    const { setBeforeSignOut } = await import('./account/AccountSection');
+    setBeforeSignOut(sync.flush);
+    await bootApp();
+    void import('./account/youtube').then((m) => m.importYoutube()).catch(() => {});
+  };
+  try {
+    const session = await initializeAccount(showLogin);
+    if (session) await authenticated(session.user.id); else if (accountsEnabled) showLogin(); else await bootApp();
+    cloud?.auth.onAuthStateChange((event, next) => {
+      // Leave the auth callback before requesting other Supabase APIs.
+      if (event === 'SIGNED_IN' && next) setTimeout(() => void (async () => {
+        // The token's provider is recorded after Supabase emits SIGNED_IN.
+        // Wait for that record before importing YouTube, including linking
+        // Google to an already running Discord session with the same user ID.
+        await waitForAccountCallback();
+        if (bootedUser === next.user.id) {
+          const { importYoutube } = await import('./account/youtube');
+          void importYoutube();
+        } else await authenticated(next.user.id);
+      })().catch((e: Error) => showLogin(e.message)), 0);
+      if (event === 'SIGNED_OUT' && bootedUser) location.reload();
+    });
+  } catch (e) { showLogin(e instanceof Error ? e.message : 'Не удалось войти'); }
+}
+
+void (location.hash.startsWith('#/overlay') ? bootOverlay() : boot());

@@ -6,7 +6,7 @@ import { ContextMenu } from './components/ContextMenu';
 import { PlayerBar } from './components/PlayerBar';
 import { InstallSheet } from './web/InstallSheet';
 import { isWebBuild } from './api';
-import { MiniPlayer, MobileHeader, MobileTabBar, useIsMobile } from './components/MobileChrome';
+import { MiniPlayer, MobileHeader, MobileTabBar, useIsMobile, useViewportFit } from './components/MobileChrome';
 import { PlaylistDialog } from './components/PlaylistDialog';
 import { SettingsModal } from './components/SettingsModal';
 import { ISearch } from './components/icons';
@@ -29,8 +29,10 @@ import { useSettings } from './store/settings';
 import { useUi } from './store/ui';
 
 function Ambient() {
+  const covered = useUi((s) => s.nowPlaying);
   const track = usePlayer((s) => s.current());
   const setTint = useUi((s) => s.setTint);
+  const tint = useUi((s) => s.tint);
   const homeCovers = useUi((s) => s.homeCovers);
   const pageArt = useUi((s) => s.pageArt);
   const bg = useSettings((s) => s.background);
@@ -59,15 +61,17 @@ function Ambient() {
     };
   }, [src]);
   useEffect(() => {
-    void coverPalette(pageArt ?? track?.thumb).then((p) => setTint(p[0]));
+    let active = true;
+    void coverPalette(pageArt ?? track?.thumb).then((p) => { if (active) setTint(p[0]); });
+    return () => { active = false; };
   }, [pageArt, track?.thumb, setTint]);
   useEffect(() => {
-    document.documentElement.style.setProperty('--tint', useUi.getState().tint);
-  });
+    document.documentElement.style.setProperty('--tint', tint);
+  }, [tint]);
 
   return (
     <div className="ambient-wrap" aria-hidden="true">
-      <Backdrop src={src} mode={bgMode} palette={palette} animated={animated} />
+      <Backdrop src={src} mode={bgMode} palette={palette} animated={animated} paused={covered} />
       <div className={`ambient-shade ${bgMode === 'gradient' ? '' : 'cover'}`} />
     </div>
   );
@@ -170,6 +174,7 @@ function useHotkeys() {
 }
 
 function Shell() {
+  useViewportFit();
   const location = useLocation();
   const scroller = useRef<HTMLDivElement>(null);
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
@@ -198,7 +203,7 @@ function Shell() {
       {!mobile && <Rail />}
       <div className="main">
         {mobile && location.pathname === '/' && <MobileHeader />}
-        {mobile && (!isRoot || isSearch || location.pathname !== '/') && (
+        {mobile && (!isRoot || isSearch) && (
           <div className="m-top">
             {!isRoot && <BackButton />}
             <div ref={setSlot} style={{ display: 'contents' }} />

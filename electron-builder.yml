@@ -9,6 +9,9 @@ files:
   - dist-electron/**
   - package.json
 asar: true
+protocols:
+  - name: Lull Account
+    schemes: [lull]
 artifactName: Lull-${version}-${os}-${arch}.${ext}
 win:
   icon: build/icon.ico

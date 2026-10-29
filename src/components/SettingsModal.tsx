@@ -13,6 +13,8 @@ import { EQ_FREQS } from '../player/engine';
 import { IClose, ISearch, IChevronLeft } from './icons';
 import { BrandIcon, type Brand } from './BrandIcon';
 import { DiscordSection, YoutubeSection } from './Integrations';
+import { cloud } from '../account/client';
+import { AccountSection } from '../account/AccountSection';
 
 const NAV_BRAND: Record<string, Brand> = { youtube: 'ytmusic', discord: 'discord' };
 
@@ -24,9 +26,11 @@ const ALL_SECTIONS: { title: string; items: [string, string][] }[] = [
   { title: 'Приложение', items: [['relay', 'Сервер Lull'], ['storage', 'Хранилище и кеш'], ['about', 'О приложении']] }
 ];
 // В веб-версии и на телефоне нет глобальных клавиш, оверлея, Discord и входа в YouTube
-const SECTIONS = isDesktop ? ALL_SECTIONS : ALL_SECTIONS.map((g) => ({ ...g, items: g.items.filter(([id]) => !DESKTOP_ONLY.has(id)) })).filter((g) => g.items.length);
+const SECTIONS = ALL_SECTIONS.map((g) => ({ ...g, items: g.items.filter(([id]) => (isDesktop || !DESKTOP_ONLY.has(id)) && (!cloud || id !== 'youtube')) })).filter((g) => g.items.length);
+if (cloud) SECTIONS.unshift({ title: 'Аккаунт', items: [['account', 'Аккаунт Lull']] });
 
 const TITLES: Record<string, [string, string]> = {
+  account: ['Аккаунт Lull', 'Библиотека и синхронизация между устройствами.'],
   play: ['Воспроизведение', 'Очередь, переходы между треками и вывод звука.'],
   sound: ['Звук и эквалайзер', 'Эквалайзер на 10 полос и выравнивание громкости.'],
   keys: ['Горячие клавиши', 'Глобальные сочетания работают везде, остальные — когда окно приложения активно. Нажми на сочетание, чтобы его изменить.'],
@@ -394,7 +398,7 @@ export function SettingsModal() {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+        <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, pointerEvents: 'none' }} transition={{ duration: 0.2 }} onMouseDown={(e) => e.target === e.currentTarget && close()}>
           <motion.div role="dialog" aria-modal="true" aria-labelledby="set-title" className={`dialog ${mobile ? (mBody ? 'm-set body' : 'm-set nav') : ''}`} initial={{ opacity: 0, y: 16, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.985 }} transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}>
             <aside className="set-nav">
               {mobile && (
@@ -432,7 +436,8 @@ export function SettingsModal() {
                 {section === 'keys' && <KeysSection />}
                 {section === 'look' && <LookSection />}
                 {section === 'discord' && <DiscordSection />}
-                {section === 'youtube' && <YoutubeSection />}
+                {section === 'youtube' && !cloud && <YoutubeSection />}
+                {section === 'account' && cloud && <AccountSection />}
                 {section === 'overlay' && <OverlaySection />}
                 {section === 'relay' && <RelaySection />}
                 {section === 'storage' && <StorageSection />}

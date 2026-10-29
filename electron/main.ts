@@ -1,6 +1,5 @@
-import { localFileFor } from './downloads';
 import { healProxy, installRelayCertCheck, relayHealth, xfetch } from './relay';
-import { soundcloudFallback } from './soundcloud';
+import { preparePlayback, playbackMeta } from './playback';
 import { ensureYtDlp } from './ytdlp';
 import { diagnose } from './diagnose';
 import { logDir, startFileLog } from './log';
@@ -11,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { IPC } from '../shared/api';
 import type { SearchFilter, Track } from '../shared/types';
 import { configureDiscord, discordStatus, setDiscordActivity } from './discord';
-import { DISCORD_CLIENT_ID } from '../shared/config';
+import { ACCOUNTS_ENABLED, DISCORD_CLIENT_ID } from '../shared/config';
 import { dirSize, download, downloadsDir, listDownloads, removeDownload } from './downloads';
 import { lyrics } from './lyrics';
 import { accountState, login, logout, restoreAuth, selectChannel } from './auth';
@@ -22,14 +21,17 @@ import type { OverlayOptions, OverlayState } from '../shared/types';
 import { clearImageCache, handleMediaScheme, registerMediaScheme } from './protocol';
 import { flushStore, storeGet, storeSet } from './store';
 import * as ytApi from './yt';
+import { receiveAccountUrl, registerAccountIpc } from './account';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 // Приложение переименовано из Player в Lull — библиотека и настройки остаются в старой папке, если она есть
 {
+  const requestedData = app.commandLine.getSwitchValue('user-data-dir');
   const old = path.join(app.getPath('appData'), 'Player');
   const cur = path.join(app.getPath('appData'), 'Lull');
-  if (fs.existsSync(old) && !fs.existsSync(cur)) app.setPath('userData', old);
+  if (requestedData && path.isAbsolute(requestedData)) app.setPath('userData', requestedData);
+  else if (fs.existsSync(old) && !fs.existsSync(cur)) app.setPath('userData', old);
   else app.setPath('userData', cur);
   app.setName('Lull');
 }
@@ -127,15 +129,10 @@ function registerIpc() {
     if (hint) ytApi.rememberHint(id, hint);
     // Заготовка заранее не удалась — это не ошибка для пользователя, не засоряем журнал
     const s = prefetch
-      ? await ytApi.resolveStream(id, { prefetch }).catch(() => {
-          // Трек недоступен в YouTube — заранее готовим запасной вариант с SoundCloud
-          if (!localFileFor(id)) void soundcloudFallback(id, ytApi.hintFor(id));
-          return null;
-        })
-      : await ytApi.resolveStream(id, { prefetch });
+      ? await preparePlayback(id, true).catch(() => null)
+      : await preparePlayback(id);
     if (!s) return null;
-    const { url: _url, expiresAt: _exp, ...meta } = s;
-    return meta;
+    return playbackMeta(id, s);
   });
   handle(IPC.visitorData, () => ytApi.getVisitorData());
   handle(IPC.setPoToken, (token: string, visitor: string) => ytApi.setPoToken(token, visitor));
@@ -173,11 +170,11 @@ function registerIpc() {
   handle(IPC.diagnose, (t: Track) => diagnose(t));
   handle(IPC.openLogs, () => shell.openPath(logDir()).then(() => undefined));
 
-  handle(IPC.ytLogin, () => login(win ?? undefined));
+  handle(IPC.ytLogin, () => ACCOUNTS_ENABLED ? Promise.reject(new Error('Вход доступен через аккаунт Lull')) : login(win ?? undefined));
   handle(IPC.ytLogout, () => logout());
-  handle(IPC.ytAccount, () => accountState());
-  handle(IPC.ytSelectChannel, (id: string | null) => selectChannel(id));
-  handle(IPC.ytLibrary, () => ytApi.accountLibrary());
+  handle(IPC.ytAccount, () => ACCOUNTS_ENABLED ? { signedIn: false, channels: [] } : accountState());
+  handle(IPC.ytSelectChannel, (id: string | null) => ACCOUNTS_ENABLED ? Promise.reject(new Error('Используется аккаунт Lull')) : selectChannel(id));
+  handle(IPC.ytLibrary, () => ACCOUNTS_ENABLED ? { playlists: [], liked: [] } : ytApi.accountLibrary());
   handle(IPC.discordStatus, () => discordStatus());
   ipcMain.handle(IPC.importPlaylist, (e, url: string) => importPlaylist(url, e.sender));
   handle(IPC.overlayConfigure, (o: OverlayOptions) => configureOverlay(o, path.join(here, 'preload.cjs'), loadApp));
@@ -185,7 +182,10 @@ function registerIpc() {
   handle(IPC.setHotkeys, (m) => setHotkeys(m, () => win));
 }
 
-app.on('second-instance', () => {
+app.on('open-url', (e, url) => { e.preventDefault(); receiveAccountUrl(url, win?.webContents); });
+for (const arg of process.argv) if (arg.startsWith('lull://auth/')) receiveAccountUrl(arg);
+app.on('second-instance', (_event, argv) => {
+  for (const arg of argv) if (arg.startsWith('lull://auth/')) receiveAccountUrl(arg, win?.webContents);
   if (devUrl) {
     console.log('[app] запущена новая копия в режиме разработки — закрываюсь');
     app.exit(0);
@@ -215,12 +215,15 @@ app.whenReady().then(async () => {
   setTimeout(() => void ensureYtDlp(), 4000);
   handleMediaScheme();
   registerIpc();
+  registerAccountIpc(() => win?.webContents);
+  if (app.isPackaged) app.setAsDefaultProtocolClient('lull');
   createWindow();
   const s = storeGet<{ discordRpc?: boolean; discordClientId?: string }>('settings');
   const discordId = s?.discordClientId || DISCORD_CLIENT_ID;
   if (s?.discordRpc && discordId) void configureDiscord(true, discordId);
   // Восстанавливаем вход в YouTube и прогреваем сессию
-  void restoreAuth().finally(() => void ytApi.yt().catch(() => {}));
+  if (ACCOUNTS_ENABLED) void ytApi.yt().catch(() => {});
+  else void restoreAuth().finally(() => void ytApi.yt().catch(() => {}));
   restoreOverlay(path.join(here, 'preload.cjs'), loadApp);
 });
 

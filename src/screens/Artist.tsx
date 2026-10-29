@@ -24,14 +24,14 @@ export function ArtistScreen() {
   const [all, setAll] = useState(false);
   usePageArt(data?.thumb);
   // Популярные треки готовим заранее — чаще всего включают их
-  useEffect(() => (data ? listPrefetch(data.topTracks.map((t) => t.id), 3) : undefined), [data]);
+  useEffect(() => (data ? listPrefetch(data.topTracks, 3) : undefined), [data]);
 
   if (loading && !data)
     return (
       <div className="page">
-        <div style={{ display: 'flex', gap: 30, alignItems: 'center' }}>
-          <span className="skel" style={{ width: 200, height: 200, borderRadius: '50%' }} />
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}><span className="skel" style={{ height: 40, width: 280 }} /><span className="skel" style={{ height: 18, width: 200 }} /></span>
+        <div className="artist-head">
+          <span className="skel artist-ava" style={{ width: 200, height: 200, borderRadius: '50%' }} />
+          <span className="artist-meta"><span className="skel" style={{ height: 40, width: 'min(280px, 100%)' }} /><span className="skel" style={{ height: 18, width: 'min(200px, 100%)' }} /></span>
         </div>
         <RowsSkeleton />
       </div>

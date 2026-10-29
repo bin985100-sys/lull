@@ -5,6 +5,10 @@ import { ytLyrics } from './yt';
 import { matchScore, similar } from './importer';
 
 const cache = new Map<string, Lyrics>();
+const settleWithin = <T>(request: Promise<T>, milliseconds: number, fallback: T): Promise<T> => new Promise((resolve) => {
+  const timer = setTimeout(() => resolve(fallback), milliseconds);
+  request.then(value => { clearTimeout(timer); resolve(value); }, () => { clearTimeout(timer); resolve(fallback); });
+});
 
 export function parseLrc(lrc: string): LyricLine[] {
   const out: LyricLine[] = [];
@@ -61,11 +65,12 @@ async function lrclibCandidates(track: Track): Promise<LrcLibItem[]> {
   if (track.album?.name && !tempo) params.set('album_name', track.album.name);
   if (track.durationSec && !tempo) params.set('duration', String(Math.round(track.durationSec)));
   try {
-    const r = await xfetch(`https://lrclib.net/api/get?${params}`, { headers });
+    const r = await xfetch(`https://lrclib.net/api/get?${params}`, { headers, signal: AbortSignal.timeout(2500) });
     if (r.ok) add((await r.json()) as LrcLibItem);
   } catch {
     /* дальше поиск */
   }
+  if (out.some(item => item.syncedLyrics)) return out;
   // 2. Поиск: по полям и по общей строке
   const queries = [new URLSearchParams({ track_name: title, artist_name: artist }), new URLSearchParams({ q: `${artist} ${title}` })];
   if (title !== track.title) queries.push(new URLSearchParams({ q: `${artist} ${track.title}` }));
@@ -73,7 +78,7 @@ async function lrclibCandidates(track: Track): Promise<LrcLibItem[]> {
   for (const q of queries) {
     if (out.length >= 4) break;
     try {
-      const r = await xfetch(`https://lrclib.net/api/search?${q}`, { headers });
+      const r = await xfetch(`https://lrclib.net/api/search?${q}`, { headers, signal: AbortSignal.timeout(2000) });
       if (!r.ok) continue;
       const list = ((await r.json()) as LrcLibItem[])
         .filter((i) => (i.syncedLyrics || i.plainLyrics) && (tempo || !d || Math.abs(i.duration - d) < 8))
@@ -115,7 +120,7 @@ async function betterLyrics(track: Track): Promise<string | null> {
   if (track.album?.name && !tempo) params.set('al', track.album.name);
   if (track.durationSec && !tempo) params.set('d', String(Math.round(track.durationSec)));
   try {
-    const r = await xfetch(`https://api.betterlyrics.org/getLyrics?${params}`, { headers: { 'User-Agent': `Player/${app.getVersion()} (desktop music player)` } });
+    const r = await xfetch(`https://api.betterlyrics.org/getLyrics?${params}`, { headers: { 'User-Agent': `Player/${app.getVersion()} (desktop music player)` }, signal: AbortSignal.timeout(4000) });
     if (!r.ok) return null;
     const j: any = await r.json();
     const ttml = j?.ttml ?? j?.data?.ttml ?? j?.lyrics?.ttml;
@@ -171,7 +176,11 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).p
 export async function lyrics(track: Track): Promise<Lyrics> {
   const hit = cache.get(track.id);
   if (hit) return hit;
-  const [ttmlRaw, lrcs, ytPlain] = await Promise.all([betterLyrics(track), lrclibCandidates(track), ytLyrics(track.id).catch(() => null)]);
+  const [ttmlRaw, lrcs, ytPlain] = await Promise.all([
+    settleWithin(betterLyrics(track), 4500, null),
+    settleWithin(lrclibCandidates(track), 5000, []),
+    settleWithin(ytLyrics(track.id), 3000, null)
+  ]);
   const tempo = isTempoVersion(track.title);
   const d = track.durationSec ?? 0;
   // Для Speed Up / Slowed: коэффициент — длительность трека к длительности оригинала

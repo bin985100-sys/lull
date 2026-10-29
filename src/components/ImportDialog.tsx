@@ -74,7 +74,7 @@ export function ImportDialog() {
   return (
     <AnimatePresence>
       {initial != null && (
-        <motion.div className="backdrop" style={{ zIndex: 90 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(e) => e.target === e.currentTarget && !busy && close()}>
+        <motion.div className="backdrop" style={{ zIndex: 90 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, pointerEvents: 'none' }} onMouseDown={(e) => e.target === e.currentTarget && !busy && close()}>
           <motion.div role="dialog" aria-modal="true" aria-label="Импорт плейлиста" className="dialog sm" style={{ maxWidth: 620 }} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 className="h2">Импорт плейлиста</h2>

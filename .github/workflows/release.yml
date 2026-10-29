@@ -1,91 +1,200 @@
-# Сборки Lull: Windows (.exe), macOS (.dmg), Android (.apk) и веб-версия.
-# Запуск: вкладка Actions → «Сборки Lull» → Run workflow, или тег v* (тогда ещё и GitHub Release со ссылками).
 name: Сборки Lull
-
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Build all platforms or Android only
+        type: choice
+        options: [all, android, account-fix]
+        default: all
+      publish:
+        description: Publish a release after all checks pass
+        type: boolean
+        default: false
   push:
     tags: ['v*']
-
 permissions:
   contents: write
-
 env:
-  LULL_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '1.0.0' }}
-
+  LULL_VERSION: '1.0.1'
+  LULL_VERSION_CODE: '2'
+  VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+  VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+  VITE_ACCOUNTS_ENABLED: ${{ vars.VITE_ACCOUNTS_ENABLED || 'false' }}
 jobs:
-  windows:
-    runs-on: windows-latest
+  web:
+    if: inputs.platform != 'android'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with: { node-version: 24, cache: npm }
       - run: npm ci
-      - run: npm run dist
+      - run: npm run typecheck
+      - run: node scripts/test-account-storage.mjs
+      - run: node scripts/test-packaged-parser.mjs && node scripts/test-stream-selection.mjs && node scripts/test-playback-startup.mjs
+      - run: node scripts/test-native-media-session.mjs
+      - run: node scripts/test-desktop-broker.mjs
+      - run: node scripts/test-account-library.mjs && node scripts/test-account-sync.mjs && node scripts/test-player-cancellation.mjs
+      - run: node scripts/test-youtube-import.mjs && node scripts/test-oauth-providers.mjs
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install aiohttp
+      - run: python scripts/test-audio-broker.py
+      - run: python scripts/test-direct-downloads.py
+      - run: python scripts/test-image-cors.py
+      - run: npm run build:web && npm run build:api
+      - run: npx playwright install --with-deps chromium webkit
+      - run: node scripts/test-mobile-safe-area.mjs
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-iphone-flows.mjs
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-desktop-navigation.mjs
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-glass-navigation.mjs
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-background-pause.mjs
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-account-entry.mjs
+      - run: node scripts/test-google-connection.mjs
+      - run: node scripts/test-tablet-viewport.mjs
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-background-modes.mjs
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-background-modes.mjs --animated
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-background-modes.mjs --animated --broken-gpu
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-image-cache.mjs
+        if: inputs.platform != 'account-fix'
+      - run: node scripts/test-audio-compatibility.mjs
+      - run: VITE_ACCOUNTS_ENABLED=true npx vite build --mode web --outDir work/account-gate-dist --emptyOutDir && node scripts/test-account-gate.mjs
+      - run: node scripts/smoke-web.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: Web-test-results, path: test-results }
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-Web, path: dist-web, if-no-files-found: error }
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-API, path: dist-server/lull-api.mjs, if-no-files-found: error }
+  windows:
+    if: inputs.platform != 'android'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run dist -- --publish never
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false', LULL_RELAY: '${{ secrets.LULL_RELAY }}' }
       - uses: actions/upload-artifact@v4
         with: { name: Lull-Windows, path: release/*.exe, if-no-files-found: error }
-
+      - run: node scripts/smoke-packaged.mjs release/win-unpacked/Lull.exe
+      - run: node scripts/test-native-signin.mjs release/win-unpacked/Lull.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: Windows-test-results, path: test-results }
   macos:
-    runs-on: macos-14
+    if: inputs.platform != 'android'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, arch: arm64 }
+          - { runner: macos-15-intel, arch: x64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with: { node-version: 24, cache: npm }
       - run: npm ci
-      - run: npm run dist:mac
+      - run: npm run build && npx electron-builder --mac dmg --${{ matrix.arch }} --publish never
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false', LULL_RELAY: '${{ secrets.LULL_RELAY }}' }
       - uses: actions/upload-artifact@v4
-        with: { name: Lull-macOS, path: release/*.dmg, if-no-files-found: error }
-
+        with: { name: 'Lull-macOS-${{ matrix.arch }}', path: release/*.dmg, if-no-files-found: error }
+      - name: Verify DMG and run mounted application
+        run: |
+          hdiutil verify release/Lull-mac-${{ matrix.arch }}.dmg
+          mkdir -p "$RUNNER_TEMP/lull-mount"
+          hdiutil attach release/Lull-mac-${{ matrix.arch }}.dmg -readonly -nobrowse -mountpoint "$RUNNER_TEMP/lull-mount"
+          file "$RUNNER_TEMP/lull-mount/Lull.app/Contents/MacOS/Lull"
+          node scripts/smoke-packaged.mjs "$RUNNER_TEMP/lull-mount/Lull.app/Contents/MacOS/Lull"
+          node scripts/test-native-signin.mjs "$RUNNER_TEMP/lull-mount/Lull.app/Contents/MacOS/Lull"
+          hdiutil detach "$RUNNER_TEMP/lull-mount"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: 'macOS-${{ matrix.arch }}-test-results', path: test-results }
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with: { node-version: 24, cache: npm }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
+      - uses: android-actions/setup-android@v3
+        with: { packages: 'platform-tools', log-accepted-android-sdk-licenses: false }
       - run: npm ci
-      - run: npm run build:web
-      - run: npx cap sync android
-      - name: Ключ подписи
-        env: { KS: '${{ secrets.LULL_KEYSTORE_B64 }}' }
-        run: if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/lull.jks"; echo "LULL_KEYSTORE=$RUNNER_TEMP/lull.jks" >> "$GITHUB_ENV"; fi
-      - name: APK
+      - run: npm run build:web && npx cap sync android
+      - run: node scripts/build-account-storage-probe.mjs
+      - name: Configure release signing
+        env:
+          KS: ${{ secrets.LULL_KEYSTORE_B64 }}
+          PASSWORD: ${{ secrets.LULL_KEYSTORE_PASSWORD }}
+        run: |
+          test -n "$KS" && test -n "$PASSWORD"
+          printf '%s' "$KS" | base64 -d > "$RUNNER_TEMP/lull.jks"
+          echo "LULL_KEYSTORE=$RUNNER_TEMP/lull.jks" >> "$GITHUB_ENV"
+      - name: Build APKs
         working-directory: android
         env:
           LULL_KEYSTORE_PASSWORD: ${{ secrets.LULL_KEYSTORE_PASSWORD }}
           LULL_VERSION_CODE: ${{ github.run_number }}
-        run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon
-      - run: mv android/app/build/outputs/apk/release/*.apk Lull.apk
+        run: chmod +x gradlew && ./gradlew assembleRelease assembleDebug assembleDebugAndroidTest --no-daemon
+      - name: Verify APK signature
+        run: '"$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose --print-certs android/app/build/outputs/apk/release/app-release.apk'
+      - run: cp android/app/build/outputs/apk/release/app-release.apk Lull.apk
       - uses: actions/upload-artifact@v4
-        with: { name: Lull-Android, path: '*.apk', if-no-files-found: error }
-
-  web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run build:web && npm run build:api
+        with: { name: Lull-Android, path: Lull.apk, if-no-files-found: error }
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          script: bash scripts/test-android.sh
       - uses: actions/upload-artifact@v4
-        with: { name: Lull-Web, path: dist-web }
-      - uses: actions/upload-artifact@v4
-        with: { name: Lull-API, path: dist-server/lull-api.mjs }
-
-  # Выпуск на GitHub: ссылки .../releases/latest/download/<файл> на лендинге всегда ведут на свежую сборку
+        if: always()
+        with:
+          name: Android-test-results
+          path: |
+            test-results
+            android/app/build/reports/androidTests
+            android/app/build/outputs/androidTest-results
   release:
-    needs: [windows, macos, android]
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish == true
+    needs: [windows, macos, android, web]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
-        with: { path: out, merge-multiple: true }
+        with: { path: out, merge-multiple: true, pattern: 'Lull-*' }
       - uses: softprops/action-gh-release@v2
         with:
+          target_commitish: ${{ github.sha }}
           tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build-{0}', github.run_number) }}
-          name: Lull ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('· сборка {0}', github.run_number) }}
+          name: Lull · сборка ${{ github.run_number }}
           make_latest: true
           files: |
             out/*.exe

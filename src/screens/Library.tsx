@@ -10,6 +10,7 @@ import { ICheckCircle, IDownload, IGrid, IHeartFill, ILink, IList, IPin, IPlus, 
 import { useUi } from '../store/ui';
 import { relativeDate, tracksWord } from '../lib/format';
 import { useLibrary } from '../store/library';
+import { accountsEnabled } from '../account/client';
 
 type Tab = 'all' | 'playlists' | 'albums' | 'artists' | 'downloads';
 
@@ -71,7 +72,7 @@ export function Library() {
     );
 
   return (
-    <div className="page" style={{ gap: 22 }}>
+    <div className="page library-page" style={{ gap: 22 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <h1 className="h1">Библиотека</h1>
@@ -83,7 +84,7 @@ export function Library() {
             <span className="sr">Поиск по библиотеке</span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по библиотеке" />
           </label>
-          <div role="group" aria-label="Вид" style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'rgba(255,255,255,.07)' }}>
+          <div className="library-view" role="group" aria-label="Вид" style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'rgba(255,255,255,.07)' }}>
             <button type="button" aria-label="Сеткой" aria-pressed={view === 'grid'} className={`ic ${view === 'grid' ? 'on' : ''}`} style={{ width: 38, height: 36, borderRadius: 9 }} onClick={() => setView('grid')}><IGrid size={16} /></button>
             <button type="button" aria-label="Списком" aria-pressed={view === 'list'} className={`ic ${view === 'list' ? 'on' : ''}`} style={{ width: 38, height: 36, borderRadius: 9 }} onClick={() => setView('list')}><IList size={16} /></button>
           </div>
@@ -91,7 +92,7 @@ export function Library() {
           <button type="button" className="btn primary" onClick={() => void create()}><IPlus size={17} strokeWidth={2.4} />Создать плейлист</button>
         </div>
       </div>
-      {tab === 'all' && isDesktop && <YtLibrary />}
+      {tab === 'all' && isDesktop && !accountsEnabled && <YtLibrary />}
       <div className="chips" role="tablist" aria-label="Раздел">
         {([['all', 'Всё'], ['playlists', 'Плейлисты'], ['albums', 'Альбомы'], ['artists', 'Исполнители'], ...(isDesktop ? [['downloads', 'Скачанное']] : [])] as [Tab, string][]).map(([id, l]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className={`chip ${tab === id ? 'on' : ''}`} onClick={() => setTab(id)}>{l}</button>

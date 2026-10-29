@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Живой фон: WebGL-шейдер с четырьмя цветовыми пятнами, которые медленно плывут по
@@ -60,7 +60,8 @@ void main(){
 
   // Мягкий блик сверху и затемнение по краям
   c += 0.05 * uIntensity * smoothstep(0.6, 1.0, uv.y);
-  float vig = smoothstep(1.25, 0.35, length((uv - vec2(0.5, 0.55)) * vec2(1.1, 1.3)));
+  // smoothstep requires ordered edges; reversed edges are driver-dependent.
+  float vig = 1.0 - smoothstep(0.35, 1.25, length((uv - vec2(0.5, 0.55)) * vec2(1.1, 1.3)));
   c *= mix(0.55, 1.0, vig);
 
   // Зерно, чтобы не было полос на градиентах
@@ -88,6 +89,7 @@ interface Props {
 
 export function LiveBackground({ colors, intensity = 0.6, animated = true, energy, scale = 0.5, className }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const [contextRevision, setContextRevision] = useState(0);
   const target = useRef<number[]>([]);
   const props = useRef({ intensity, animated, energy });
   props.current = { intensity, animated, energy };
@@ -99,11 +101,35 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
 
   useEffect(() => {
     const el = canvas.current!;
+    const lost = (event: Event) => {
+      event.preventDefault();
+      el.dataset.fallback = '1';
+      el.width = el.height = 0;
+    };
+    const restored = () => setContextRevision(revision => revision + 1);
+    el.addEventListener('webglcontextlost', lost);
+    el.addEventListener('webglcontextrestored', restored);
+    return () => {
+      el.removeEventListener('webglcontextlost', lost);
+      el.removeEventListener('webglcontextrestored', restored);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = canvas.current!;
+    // A stationary gradient can be drawn in CSS, including on mobile drivers
+    // that throttle WebGL frames. Colour changes still follow the cover.
+    if (!animated) {
+      el.dataset.fallback = '1';
+      el.width = el.height = 0;
+      return;
+    }
     const gl = el.getContext('webgl', { antialias: false, alpha: false, premultipliedAlpha: false, powerPreference: 'low-power' });
     if (!gl) {
       el.dataset.fallback = '1';
       return;
     }
+    delete el.dataset.fallback;
     const compile = (type: number, src: string) => {
       const s = gl.createShader(type)!;
       gl.shaderSource(s, src);
@@ -112,14 +138,19 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
       return s;
     };
     const prog = gl.createProgram()!;
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+    const vertex = compile(gl.VERTEX_SHADER, VERT);
+    const fragment = compile(gl.FRAGMENT_SHADER, FRAG);
+    gl.attachShader(prog, vertex);
+    gl.attachShader(prog, fragment);
     gl.linkProgram(prog);
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
     // Слабая видеокарта/телефон: шейдер не собрался — показываем CSS-градиент вместо белого холста
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS) || gl.isContextLost()) {
       el.dataset.fallback = '1';
       el.width = 0;
       el.height = 0;
+      gl.deleteProgram(prog);
       return;
     }
     gl.useProgram(prog);
@@ -156,18 +187,51 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
     ro.observe(el);
     resize();
 
+    // Probe the actual fragment shader with a known warm palette. A context
+    // can exist even when a mobile driver produces an unusable dark frame.
+    gl.getError();
+    gl.uniform2f(uRes, el.width, el.height);
+    gl.uniform1f(uTime, 0);
+    gl.uniform3fv(uC, new Float32Array([0.9, 0.12, 0.05, 0.9, 0.12, 0.05, 0.9, 0.12, 0.05, 0.9, 0.12, 0.05]));
+    gl.uniform1f(uEnergy, 0);
+    gl.uniform1f(uIntensity, 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const pixel = new Uint8Array(4);
+    gl.readPixels(Math.floor(el.width / 2), Math.floor(el.height / 2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    if (gl.getError() !== gl.NO_ERROR || pixel[0] < 20 || pixel[0] < pixel[2] + 10) {
+      el.dataset.fallback = '1';
+      el.dataset.fallbackReason = 'shader-probe';
+      el.width = el.height = 0;
+      ro.disconnect();
+      gl.deleteBuffer(buf);
+      gl.deleteProgram(prog);
+      return;
+    }
+    delete el.dataset.fallbackReason;
+
     const frame = (now: number) => {
+      if (gl.isContextLost()) return;
       raf = requestAnimationFrame(frame);
-      const dt = Math.min(0.1, (now - last) / 1000);
+      const elapsed = Math.max(0, (now - last) / 1000);
+      if (!document.hidden && elapsed > 0.5) {
+        el.dataset.fallback = '1';
+        el.dataset.fallbackReason = 'slow-frames';
+        el.width = el.height = 0;
+        ro.disconnect();
+        cancelAnimationFrame(raf);
+        return;
+      }
+      const dt = Math.min(0.1, elapsed);
+      const blend = 1 - Math.exp(-elapsed * 2.2);
       last = now;
       const { animated, energy, intensity } = props.current;
       // Плавный переход цветов к новой палитре (~1.5 с)
       const tgt = target.current;
       for (let i = 0; i < 12; i++) {
         const d = (tgt[i] ?? 0) - (current[i] ?? 0);
-        current[i] = (current[i] ?? 0) + d * Math.min(1, dt * 2.2);
+        current[i] = (current[i] ?? 0) + d * blend;
       }
-      curIntensity += (intensity - curIntensity) * Math.min(1, dt * 3);
+      curIntensity += (intensity - curIntensity) * (1 - Math.exp(-elapsed * 3));
       const en = energy ? energy() : 0;
       e += (en - e) * Math.min(1, dt * 8);
       // Движение равномерное и независимое от музыки
@@ -180,14 +244,15 @@ export function LiveBackground({ colors, intensity = 0.6, animated = true, energ
       gl.uniform1f(uIntensity, curIntensity);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
-    raf = requestAnimationFrame(frame);
+    frame(performance.now());
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
+      gl.deleteBuffer(buf);
+      gl.deleteProgram(prog);
     };
-  }, [scale]);
+  }, [scale, contextRevision, animated]);
 
   const fallback = `radial-gradient(60% 70% at 20% 10%, ${colors[0]}99, transparent 70%), radial-gradient(60% 70% at 85% 30%, ${colors[1] ?? colors[0]}88, transparent 70%), radial-gradient(70% 70% at 50% 100%, ${colors[2] ?? colors[0]}66, transparent 70%), #0B0B0E`;
-  return <canvas ref={canvas} className={`livebg ${className ?? ''}`} aria-hidden="true" style={{ background: fallback }} />;
+  return <div className="livebg-shell" data-animated={animated ? '1' : undefined} aria-hidden="true" style={{ background: fallback }}><canvas ref={canvas} className={`livebg ${className ?? ''}`} /></div>;
 }

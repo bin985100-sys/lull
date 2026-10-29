@@ -21,17 +21,20 @@ import { VolumeControl, useScrub } from './PlayerBar';
 import { MorphPlayIcon } from './PlayerFx';
 import { SyncedLyrics } from './SyncedLyrics';
 import { Artists, EqBars } from './Tracks';
+import { useIsMobile } from './MobileChrome';
 
 // ---------------------------------------------------------------- текст песни
 
 export function LyricsView({ lyr, loading, offset }: { lyr: Lyrics | null; loading: boolean; offset: number }) {
   const seek = usePlayer((s) => s.seek);
+  const error = useLyrics((s) => s.error);
   if (loading) return <div className="np-empty">Ищем текст…</div>;
+  if (error && !lyr) return <div className="np-empty"><b>Не удалось загрузить текст</b><span>{error}</span><button type="button" className="btn" onClick={() => useLyrics.getState().load(usePlayer.getState().current())}>Повторить</button></div>;
   if (lyr && (lyr.ttml || lyr.lrc || lyr.synced?.length)) return <SyncedLyrics lyrics={lyr} offset={offset} className="np-blyrics" onSeek={seek} />;
   if (lyr?.plain)
     return (
       <div className="np-lyrics">
-        <div className="lyrics-note">Синхронного текста для этого трека не нашлось — показываю обычный, без подсветки строк</div>
+        <div className="lyrics-note">Текст без синхронизации</div>
         <div className="lyrics-plain">{lyr.plain}</div>
       </div>
     );
@@ -146,7 +149,7 @@ function SwipeCover({ track, onOpen }: { track: Track; onOpen: () => void }) {
     <div className="np-cover-wrap">
       <AnimatePresence mode="popLayout" initial={false} custom={swipe.dir}>
         <motion.button
-          key={track.id}
+          key="artwork"
           type="button"
           className="np-cover2"
           aria-label={track.album ? `Открыть альбом «${track.album.name}»` : 'Открыть исполнителя'}
@@ -156,7 +159,7 @@ function SwipeCover({ track, onOpen }: { track: Track; onOpen: () => void }) {
             center: { x: 0, opacity: 1, scale: 1, rotate: 0 },
             exit: (d: number) => ({ x: -d * 160, opacity: 0, scale: 0.92, rotate: -d * 4 })
           }}
-          initial="enter"
+          initial={false}
           animate="center"
           exit="exit"
           transition={{ type: 'spring', stiffness: 260, damping: 30 }}
@@ -174,7 +177,7 @@ function SwipeCover({ track, onOpen }: { track: Track; onOpen: () => void }) {
           }}
           whileTap={{ scale: 0.985 }}
         >
-          <Cover src={track.thumb} radius={20} eager glow />
+          <Cover src={track.thumb} radius={20} eager />
         </motion.button>
       </AnimatePresence>
     </div>
@@ -184,6 +187,8 @@ function SwipeCover({ track, onOpen }: { track: Track; onOpen: () => void }) {
 export function SeekBar() {
   const position = usePlayer((s) => s.position);
   const duration = usePlayer((s) => s.duration);
+  const trackDuration = usePlayer((s) => s.current()?.durationSec ?? 0);
+  const knownDuration = duration || trackDuration;
   const seek = usePlayer((s) => s.seek);
   const { ref, drag, handlers } = useScrub((r) => seek(r * duration));
   const ratio = drag ?? (duration ? position / duration : 0);
@@ -196,7 +201,7 @@ export function SeekBar() {
       </div>
       <div className="np-times">
         <span>{formatTime(drag != null ? drag * duration : position)}</span>
-        <span>{formatTime(duration)}</span>
+        <span>{knownDuration ? formatTime(knownDuration) : '—:—'}</span>
       </div>
     </div>
   );
@@ -205,12 +210,16 @@ export function SeekBar() {
 // ---------------------------------------------------------------- экран
 
 export function NowPlaying() {
+  const mobile = useIsMobile();
+  const gridRef = useRef<HTMLElement>(null);
   const open = useUi((s) => s.nowPlaying);
+  const panelRequested = useUi((s) => s.nowPlayingPanelRequested);
   const tab = useUi((s) => s.nowPlayingTab);
   const setNowPlaying = useUi((s) => s.setNowPlaying);
   const navigate = useNavigate();
   const track = usePlayer((s) => s.current());
   const playing = usePlayer((s) => s.playing);
+  const loading = usePlayer((s) => s.loading);
   const shuffle = usePlayer((s) => s.shuffle);
   const repeat = usePlayer((s) => s.repeat);
   const sleep = usePlayer((s) => s.sleep);
@@ -227,6 +236,9 @@ export function NowPlaying() {
   const offset = lyrState.offset;
   const lyrLoading = lyrState.loading;
   const lyr = lyrState.data;
+  useEffect(() => {
+    if (open && mobile && gridRef.current) gridRef.current.scrollTop = 0;
+  }, [open, mobile, panelRequested, tab]);
   const setVariant = (f: (v: number) => number) => lyrState.setVariant(f(variant));
   const setOffset = (f: number | ((o: number) => number)) => lyrState.setOffset(typeof f === 'function' ? f(offset) : f);
 
@@ -270,13 +282,13 @@ export function NowPlaying() {
           <div className="np-shade" aria-hidden="true" />
 
           <header className="np-head drag">
-            <button type="button" className="np-icon no-drag" aria-label="Свернуть плеер" onClick={close}><IChevronDown size={20} /></button>
+            <button type="button" className="np-icon no-drag" aria-label={mobile && panelRequested ? 'Вернуться к плееру' : 'Свернуть плеер'} onClick={() => mobile && panelRequested ? setNowPlaying(true) : close()}>{mobile && panelRequested ? <IChevronLeft size={20} /> : <IChevronDown size={20} />}</button>
             <div className="np-toolbar no-drag">
               <div className="np-seg" role="tablist" aria-label="Панель">
                 {([['lyrics', 'Текст', <ILyrics size={16} key="l" />], ['queue', 'Очередь', <IQueue size={16} key="q" />], ['related', 'Похожие', <IWave size={16} key="r" />]] as const).map(([t, l, icon]) => (
-                  <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => { setNowPlaying(true, t); if (window.matchMedia('(max-width: 760px)').matches) requestAnimationFrame(() => { const g = document.querySelector<HTMLElement>('.np-grid'); const side = document.querySelector<HTMLElement>('.np-side'); if (g && side) g.scrollTo({ top: side.offsetTop - g.offsetTop, behavior: 'smooth' }); }); }}>
+                  <button key={t} type="button" role="tab" aria-selected={tab === t && (!mobile || panelRequested)} className={tab === t && (!mobile || panelRequested) ? 'on' : ''} onClick={() => setNowPlaying(true, t)}>
                     {icon}{l}
-                    {tab === t && <motion.span layoutId="np-seg" className="np-seg-bg" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
+                    {tab === t && (!mobile || panelRequested) && <motion.span layoutId="np-seg" className="np-seg-bg" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
                   </button>
                 ))}
               </div>
@@ -306,7 +318,7 @@ export function NowPlaying() {
           </header>
 
           {track ? (
-            <main className="np-grid">
+            <main ref={gridRef} className={`np-grid${panelRequested ? ' np-panel-open' : ''}`}>
               <section className="np-player">
                 <SwipeCover track={track} onOpen={openAlbum} />
                 <div className="np-meta">
@@ -336,8 +348,8 @@ export function NowPlaying() {
                 <div className="np-ctrls">
                   <button type="button" className={`np-ctl ${shuffle ? 'on' : ''}`} aria-label="Перемешать" aria-pressed={shuffle} onClick={() => p.toggleShuffle()}><IShuffle size={22} /></button>
                   <button type="button" className="np-ctl" aria-label="Предыдущий" onClick={() => ((swipe.dir = -1), p.prev())}><IPrev size={28} /></button>
-                  <motion.button type="button" className="np-ctl np-play" aria-label={playing ? 'Пауза' : 'Играть'} onClick={() => p.toggle()} whileTap={{ scale: 0.88 }} transition={{ type: 'spring', stiffness: 500, damping: 22 }}>
-                    <MorphPlayIcon playing={playing} size={42} />
+                  <motion.button type="button" className="np-ctl np-play" aria-label={loading ? 'Приостановить загрузку' : playing ? 'Пауза' : 'Играть'} aria-busy={loading} onClick={() => p.toggle()} whileTap={{ scale: 0.88 }} transition={{ type: 'spring', stiffness: 500, damping: 22 }}>
+                    {loading ? <span className="playback-spinner" aria-hidden="true" /> : <MorphPlayIcon playing={playing} size={42} />}
                   </motion.button>
                   <button type="button" className="np-ctl" aria-label="Следующий" onClick={() => ((swipe.dir = 1), void p.next())}><INext size={28} /></button>
                   <button type="button" className={`np-ctl ${repeat !== 'off' ? 'on' : ''}`} aria-label={repeat === 'one' ? 'Повтор трека' : repeat === 'all' ? 'Повтор очереди' : 'Повтор выключен'} onClick={() => p.cycleRepeat()}>
