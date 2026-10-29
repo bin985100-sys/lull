@@ -50,6 +50,8 @@ jobs:
         if: inputs.platform != 'account-fix'
       - run: node scripts/test-iphone-flows.mjs
         if: inputs.platform != 'account-fix'
+      - run: node scripts/test-desktop-navigation.mjs
+        if: inputs.platform != 'account-fix'
       - run: node scripts/test-glass-navigation.mjs
         if: inputs.platform != 'account-fix'
       - run: node scripts/test-background-pause.mjs

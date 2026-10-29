@@ -19,7 +19,7 @@
   --ok: #7ee2a8;
   --tint: #5b3fd1;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --rail: 84px;
+  --rail: 114px;
   color-scheme: dark;
 }
 
@@ -72,13 +72,15 @@ img { display: block; }
 .drag { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
 
-.rail { position: relative; z-index: 3; grid-row: 1 / span 2; padding: 14px 0 12px 12px; display: flex; flex-direction: column; gap: 12px; }
-.rail-logo { width: 60px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
-.rail-logo img { max-width: 44px; max-height: 36px; }
-.rail-panel { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; border-radius: 20px; background: rgba(255, 255, 255, 0.035); border: 1px solid rgba(255, 255, 255, 0.06); }
-.rail-btn { width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: rgba(245, 245, 247, 0.55); transition: background 0.2s, color 0.2s; }
-.rail-btn:hover { background: var(--surface-2); color: #fff; }
-.rail-btn.active { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.app > .rail { position: relative; z-index: 3; grid-row: 1 / span 2; padding: 32px 19px 16px; display: flex; flex-direction: column; align-items: center; gap: 0; background: #000; }
+.rail-logo { width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; flex: none; }
+.rail-logo img { width: 46px; height: 46px; }
+.rail-panel { position: relative; isolation: isolate; width: 76px; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0; margin-top: 40px; background: none; border: 0; }
+.rail-indicator-track { position: absolute; inset: 0; border-radius: 16px; overflow: hidden; pointer-events: none; }
+.rail-active-indicator { position: absolute; top: 0; left: 0; width: 76px; height: 70px; background: #2c2f34; border-radius: 16px; transform-origin: center; will-change: transform; }
+.rail-btn { position: relative; z-index: 1; width: 76px; height: 70px; flex: none; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #fff; }
+.rail-btn > svg { width: 38px; height: 38px; }
+.rail-btn:hover, .rail-btn.active { color: #fff; }
 
 .main { position: relative; z-index: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .topbar { height: 66px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 24px 0 20px; }
@@ -386,8 +388,8 @@ input[type='range'].slider:hover::-webkit-slider-thumb { transform: scale(1.15);
 .ctl-group .ic-40 { width: 38px; height: 38px; border-radius: 10px; }
 .pbar-in { padding: 8px 12px 10px 10px; }
 
-.rail-gear { width: 46px; height: 46px; margin-left: 7px; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: rgba(245, 245, 247, 0.7); transition: background 0.2s, color 0.2s; }
-.rail-gear:hover { background: var(--surface-2); color: #fff; }
+.rail-gear { width: 76px; height: 70px; flex: none; margin: 0; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #fff; }
+.rail-gear > svg { width: 30px; height: 30px; }
 
 /* ===== Живой фон ===== */
 .ambient-wrap { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
