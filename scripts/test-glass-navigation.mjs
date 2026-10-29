@@ -15,7 +15,11 @@ try{
       for(const width of [320,393,430]){
         if(process.env.LULL_NAV_WIDTH&&width!==Number(process.env.LULL_NAV_WIDTH))continue;
         const page=await browser.newPage({viewport:{width,height:852},isMobile:true,hasTouch:true});
+        page.setDefaultTimeout(15000);page.setDefaultNavigationTimeout(30000);
         const errors=[];page.on('pageerror',e=>errors.push(e.message));
+        page.on('crash',()=>errors.push('Browser renderer crashed'));
+        console.log(`START ${engine.name()} ${width}`);
+        try {
         await page.goto(base);await page.waitForFunction(()=>!!window.__stores);
         await page.evaluate(()=>window.__stores.useSettings.setState({waveIntro:false,waveIntroSeen:true,waveStarted:true,background:'black',animatedBg:false}));
         await page.locator('.reference-nav-indicator').waitFor();
@@ -42,6 +46,7 @@ try{
           });
           await page.getByRole('link',{name:label,exact:true}).tap();
           await page.waitForFunction(()=>window.__navDone);
+          console.log(`ANIMATED ${engine.name()} ${width} ${label}`);
           const frames=await page.evaluate(()=>window.__navFrames);
           fs.writeFileSync(`${root}/${engine.name()}-${width}-${index}-frames.json`,JSON.stringify(frames));
           assert.equal(new Set(frames.map(f=>f.layoutWidth)).size,1,'Animation does not change layout width');
@@ -57,6 +62,7 @@ try{
         await page.getByRole('link',{name:'Поиск',exact:true}).tap();
         await page.getByRole('link',{name:'Главная',exact:true}).tap();
         await page.waitForFunction(()=>{const b=document.querySelector('.reference-nav-indicator').getBoundingClientRect();const n=document.querySelector('.reference-nav').getBoundingClientRect();return Math.abs(b.left-n.left-n.height*.051095)<.5});
+        console.log(`RETARGETED ${engine.name()} ${width}`);
         await page.emulateMedia({reducedMotion:'reduce'});
         await page.getByRole('link',{name:'Библиотека',exact:true}).tap();
         await page.waitForFunction(()=>{const b=document.querySelector('.reference-nav-indicator').getBoundingClientRect();const n=document.querySelector('.reference-nav').getBoundingClientRect();return Math.abs(b.left-n.left-n.width*.75-n.height*.051095)<.5});
@@ -64,6 +70,13 @@ try{
         await page.screenshot({path:`${root}/${engine.name()}-${width}.png`});
         await page.locator('.reference-nav').screenshot({path:`${root}/${engine.name()}-${width}-bar.png`});
         assert.deepEqual(errors,[]);results.push({engine:engine.name(),width,passed:true,animated:true,referenceInset:true});
+        } catch(error) {
+          const diagnostics={engine:engine.name(),width,message:String(error),errors,url:page.url()};
+          try { diagnostics.state=await page.evaluate(()=>({frames:window.__navFrames?.length,done:window.__navDone,stores:!!window.__stores,links:[...document.querySelectorAll('.m-tab')].map(n=>({label:n.getAttribute('aria-label'),current:n.getAttribute('aria-current')})),nav:document.querySelector('.reference-nav')?.getBoundingClientRect().toJSON(),indicator:document.querySelector('.reference-nav-indicator')?.getBoundingClientRect().toJSON()})); }catch(e){diagnostics.browserReadError=String(e);}
+          fs.writeFileSync(`${root}/${engine.name()}-${width}-failure.json`,JSON.stringify(diagnostics,null,2));
+          await page.screenshot({path:`${root}/${engine.name()}-${width}-failure.png`,timeout:10000}).catch(()=>{});
+          throw error;
+        }
         await page.close();console.log(`PASS ${engine.name()} ${width}: four SVGs, geometry, spring travel, deformation, reference inset`);
       }
     }finally{await browser.close();}

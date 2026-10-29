@@ -39,7 +39,8 @@ public class LaunchTest {
         return String.valueOf(new JSONTokener(value.get()).nextValue());
     }
 
-    private void verifyStorage() throws Exception {
+    private boolean verifyStorage() throws Exception {
+        int activity=activityIdentity();
         try (InputStream input=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("account-storage-probe.js")) {
             ByteArrayOutputStream output=new ByteArrayOutputStream();byte[] bytes=new byte[8192];int count;
             while((count=input.read(bytes))!=-1) output.write(bytes,0,count);
@@ -48,11 +49,14 @@ public class LaunchTest {
         evaluate("window.__storageCheck='pending'; (async()=>{try{const p=window.Capacitor.Plugins.AccountStorage;const r=await LullAccountStorageProbe.runAccountStorageProbe({getItem:async key=>(await p.get({key})).value,setItem:(key,value)=>p.set({key,value}),removeItem:key=>p.set({key,value:null})});window.__storageCheck=r.pkceSlots===2?'pass':'fail';console.log('LULL_ANDROID_ACCOUNT_STORAGE='+JSON.stringify(r))}catch(e){window.__storageCheck=String(e)}})();'started'");
         String storage="pending";
         for(int i=0;i<40;i++) {
+            if(activityIdentity()!=activity) return false;
             storage=evaluate("window.__storageCheck");
+            if(activityIdentity()!=activity) return false;
             if(!storage.equals("pending")) break;
             SystemClock.sleep(250);
         }
         assertEquals("Encrypted Android session storage", "pass", storage);
+        return true;
     }
 
     private boolean attemptPlayback(Instrumentation instrumentation) throws Exception {
@@ -129,7 +133,14 @@ public class LaunchTest {
                 SystemClock.sleep(500);
             }
             assertTrue("Mobile catalogue loads",ready);
-            verifyStorage();
+            boolean storageVerified=false;
+            for(int attempt=0;attempt<2;attempt++) {
+                if(verifyStorage()) {storageVerified=true;break;}
+                System.out.println("LULL_ANDROID_ACTIVITY_RECREATED: restarting storage probe after confirmed recreation");
+                long storageDeadline=SystemClock.uptimeMillis()+15000;
+                while(SystemClock.uptimeMillis()<storageDeadline&&!evaluate("!!window.Capacitor?.isNativePlatform?.() && document.querySelectorAll('.m-tab').length===4").equals("true")) SystemClock.sleep(250);
+            }
+            assertTrue("Storage verification must finish without repeated Activity recreation",storageVerified);
             // Retry only a confirmed system Activity recreation, never a
             // decoder/network assertion. Keep this event visible in reports.
             for(int attempt=0;attempt<2;attempt++) {
