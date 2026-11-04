@@ -1,0 +1,56 @@
+# Lull Mobile (Expo): Android APK и веб-версия. iOS добавим, когда будет аккаунт Apple Developer.
+name: Lull Mobile
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [mobile, main]
+    paths: ['mobile/**', '.github/workflows/mobile.yml']
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: mobile/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx expo export -p web
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-Mobile-Web, path: mobile/dist, if-no-files-found: error }
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: mobile/package-lock.json }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: npm ci
+      - run: npx expo prebuild -p android --no-install
+      - name: APK
+        working-directory: mobile/android
+        run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+      # Подпись тем же ключом, что у прежнего Android-приложения: тогда новая версия встанет поверх старой.
+      - name: Подпись
+        env:
+          KS: ${{ secrets.LULL_KEYSTORE_B64 }}
+          PW: ${{ secrets.LULL_KEYSTORE_PASSWORD }}
+        run: |
+          APK=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
+          mkdir -p out
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/lull.jks"
+            BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+            "$BT/apksigner" sign --ks "$RUNNER_TEMP/lull.jks" --ks-pass env:PW --ks-key-alias lull --out out/Lull-Mobile.apk "$APK"
+          else
+            cp "$APK" out/Lull-Mobile.apk
+          fi
+      - uses: actions/upload-artifact@v4
+        with: { name: Lull-Mobile-Android, path: mobile/out/Lull-Mobile.apk, if-no-files-found: error }
