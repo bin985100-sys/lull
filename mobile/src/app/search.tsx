@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { audius } from '@/api/audius';
@@ -13,6 +13,9 @@ import { Btn, Cover, Empty, IconBtn, ListSkeleton, Offline, Press, s, Screen, Se
 type Filter = 'all' | 'tracks' | 'playlists' | 'artists';
 
 export default function Search() {
+  /* фокус после анимации входа экрана, иначе браузер его теряет */
+  const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 340); return () => clearTimeout(t); }, []);
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [f, setF] = useState<Filter>('all');
@@ -32,7 +35,7 @@ export default function Search() {
         <IconBtn name="back" label="Назад" onPress={() => router.back()} />
         <View style={[s.field, { flex: 1 }]}>
           <Icon name="search" size={22} color={C.tx2} />
-          <TextInput value={q} onChangeText={setQ} autoFocus placeholder="Что послушать?" placeholderTextColor={C.tx3} style={s.input} returnKeyType="search"
+          <TextInput value={q} onChangeText={setQ} ref={inputRef} placeholder="Что послушать?" placeholderTextColor={C.tx3} style={s.input} returnKeyType="search"
             onSubmitEditing={() => q.trim() && useLibrary.getState().pushSearch(q.trim())} accessibilityLabel="Поиск" autoCorrect={false} />
           {q ? <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityLabel="Очистить запрос" style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={20} /></Pressable> : null}
         </View>
@@ -84,7 +87,7 @@ export default function Search() {
                 {f === 'all' ? <SectionHead title="Плейлисты" /> : null}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, rowGap: 18 }}>
                   {d.playlists.slice(0, f === 'all' ? 4 : 12).map((p) => (
-                    <Press key={p.id} onPress={() => router.push({ pathname: '/playlist/[id]', params: { id: p.id } })} accessibilityRole="button" accessibilityLabel={p.title} style={{ flexBasis: '47%', flexGrow: 1, gap: 10 }}>
+                    <Press key={p.id} onPress={() => router.push({ pathname: '/playlist/[id]', params: { id: p.id } })} accessibilityRole="button" accessibilityLabel={p.title} outer={{ flexBasis: '47%', flexGrow: 1, maxWidth: '50%' }} style={{ gap: 10 }}>
                       <Cover uri={p.artwork} size="100%" radius={24} />
                       <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 16 }}>{p.title}</T>
                     </Press>

@@ -33,7 +33,7 @@ export default function Collection() {
   const grid = (items: { key: string; title: string; cover: any; onPress: () => void; round?: boolean }[]) => (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, rowGap: 18 }}>
       {items.map((it) => (
-        <Press key={it.key} onPress={it.onPress} accessibilityRole="button" accessibilityLabel={it.title} style={{ flexBasis: '47%', flexGrow: 0, width: '47%', gap: 10, alignItems: it.round ? 'center' : 'stretch' }}>
+        <Press key={it.key} onPress={it.onPress} accessibilityRole="button" accessibilityLabel={it.title} outer={{ width: '47%', flexGrow: 1, maxWidth: '50%' }} style={{ gap: 10, alignItems: it.round ? 'center' : 'stretch' }}>
           {it.round ? <Cover uri={it.cover} size="100%" radius={999} /> : it.cover}
           <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 16 }}>{it.title}</T>
         </Press>
@@ -61,7 +61,7 @@ export default function Collection() {
           <SectionHead title="Мои плейлисты" />
           {lib.playlists.length ? grid(lib.playlists.filter((p) => m(p.name)).map((p) => ({
             key: p.id, title: p.name, onPress: () => router.push({ pathname: '/my/[id]', params: { id: p.id } }),
-            cover: <View style={{ aspectRatio: 1, width: '100%' }}><CoverArt cover={{ collage: p.tracks.map((t) => t.artwork) }} size={999} /></View>,
+            cover: <CoverArt cover={{ collage: p.tracks.map((t) => t.artwork) }} size="100%" radius={24} />,
           }))) : <Btn label="Создать плейлист" icon="plus" kind="dark" onPress={() => router.push('/new-playlist')} />}
         </View>
       ) : tab === 'saved' ? (

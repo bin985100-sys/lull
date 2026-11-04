@@ -33,8 +33,8 @@ export default function Onboarding() {
           {(data || []).map((a) => <ArtistPick key={a.id} a={a} size={size} on={picked.some((x) => x.id === a.id)} onPress={() => toggle(a)} />)}
         </View>
       </Screen>
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 36, paddingBottom: 24, gap: 10 }}>
-        <LinearGradient colors={['rgba(0,0,0,0)', '#000', '#000']} locations={[0, 0.35, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 56, paddingBottom: 24, gap: 10 }}>
+        <LinearGradient colors={['rgba(0,0,0,0)', '#000', '#000']} locations={[0, 0.3, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <T v="sub" style={{ textAlign: 'center' }} accessibilityLiveRegion="polite">{picked.length} из 5</T>
         <Btn label="Дальше" icon="arrow" disabled={picked.length !== 5} onPress={() => {
           useLibrary.getState().setFavArtists(picked);

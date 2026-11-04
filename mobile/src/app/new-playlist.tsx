@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, TextInput, View } from 'react-native';
 
 import type { Track } from '@/api/audius';
@@ -12,6 +12,9 @@ import { toast } from '@/ui/overlay';
 export default function NewPlaylist() {
   const { add } = useLocalSearchParams<{ add?: string }>();
   const pending: Track | undefined = add ? JSON.parse(add) : undefined;
+  /* фокус после анимации входа экрана, иначе браузер его теряет */
+  const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 340); return () => clearTimeout(t); }, []);
   const [name, setName] = useState('');
   const busy = useRef(false);
   const create = () => {
@@ -30,7 +33,7 @@ export default function NewPlaylist() {
         <T v="sub">Обложка соберётся из треков</T>
       </View>
       <T style={{ fontFamily: F.bold, marginTop: 26, marginBottom: 10 }}>Название</T>
-      <TextInput value={name} onChangeText={setName} autoFocus maxLength={40} placeholder="Например, «Вечер»" placeholderTextColor={C.tx3} onSubmitEditing={create} returnKeyType="done"
+      <TextInput value={name} onChangeText={setName} ref={inputRef} maxLength={40} placeholder="Например, «Вечер»" placeholderTextColor={C.tx3} onSubmitEditing={create} returnKeyType="done"
         accessibilityLabel="Название плейлиста" style={{ height: 56, borderRadius: 20, backgroundColor: C.s2, paddingHorizontal: 20, color: C.tx, fontFamily: F.semi, fontSize: 17, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null) }} />
       <Btn label="Создать" icon="arrow" disabled={!name.trim()} onPress={create} style={{ marginTop: 28 }} />
     </Screen>

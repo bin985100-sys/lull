@@ -45,3 +45,4 @@ example
 # CNG
 /android
 /ios
+/node_modules

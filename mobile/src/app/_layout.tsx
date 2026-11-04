@@ -1,10 +1,10 @@
 import { Montserrat_500Medium, Montserrat_600SemiBold, Montserrat_700Bold, Montserrat_800ExtraBold, useFonts } from '@expo-google-fonts/montserrat';
-import { DarkTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, router, ThemeProvider } from 'expo-router';
 import { Stack } from 'expo-router/stack';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { PanResponder, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Dock } from '@/components/Dock';
@@ -13,6 +13,16 @@ import { C } from '@/theme/tokens';
 import { Overlays } from '@/ui/overlay';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/* Жест «назад» от левого края, как в iOS: у веб-приложения на экране «Домой» его нет */
+const edge = PanResponder.create({
+  onStartShouldSetPanResponder: () => router.canGoBack(),
+  onMoveShouldSetPanResponder: (_, g) => g.dx > 8 && Math.abs(g.dy) < 30,
+  onPanResponderRelease: (_, g) => { if (g.dx > 70 && router.canGoBack()) router.back(); },
+});
+function EdgeBack() {
+  return <View {...edge.panHandlers} style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 16, zIndex: 5 }} />;
+}
 
 const theme = { ...DarkTheme, colors: { ...DarkTheme.colors, background: C.bg, card: C.bg, text: C.tx, border: 'transparent', primary: C.tx } };
 
@@ -35,6 +45,7 @@ export default function Root() {
             <Stack.Screen name="collection" options={{ animation: 'fade' }} />
             <Stack.Screen name="new-playlist" options={{ animation: 'slide_from_bottom' }} />
           </Stack>
+          {Platform.OS === 'web' ? <EdgeBack /> : null}
           <Dock />
           <Overlays />
         </View>

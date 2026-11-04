@@ -37,20 +37,8 @@ jobs:
       - name: APK
         working-directory: mobile/android
         run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
-      # Подпись тем же ключом, что у прежнего Android-приложения: тогда новая версия встанет поверх старой.
-      - name: Подпись
-        env:
-          KS: ${{ secrets.LULL_KEYSTORE_B64 }}
-          PW: ${{ secrets.LULL_KEYSTORE_PASSWORD }}
-        run: |
-          APK=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
-          mkdir -p out
-          if [ -n "$KS" ]; then
-            echo "$KS" | base64 -d > "$RUNNER_TEMP/lull.jks"
-            BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-            "$BT/apksigner" sign --ks "$RUNNER_TEMP/lull.jks" --ks-pass env:PW --ks-key-alias lull --out out/Lull-Mobile.apk "$APK"
-          else
-            cp "$APK" out/Lull-Mobile.apk
-          fi
+      # Тестовая сборка подписана отладочным ключом Expo. Старое Android-приложение перед установкой нужно удалить.
+      - name: Файл
+        run: mkdir -p out && cp "$(ls android/app/build/outputs/apk/release/*.apk | head -1)" out/Lull-Mobile.apk
       - uses: actions/upload-artifact@v4
         with: { name: Lull-Mobile-Android, path: mobile/out/Lull-Mobile.apk, if-no-files-found: error }

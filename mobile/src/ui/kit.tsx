@@ -1,14 +1,15 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { type ReactNode, useEffect } from 'react';
-import { ActivityIndicator, Platform, Pressable, type PressableProps, ScrollView, type ScrollViewProps, StyleSheet, Text, type TextProps, View, type ViewStyle } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { type ReactNode, useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, type PressableProps, ScrollView, type ScrollViewProps, StyleSheet, Text, type TextProps, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import Animated, { cubicBezier, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, DOCK, EASE, F, R } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
 import { PlayPause } from './PlayPause';
+import { slideIn } from './anim';
 import { usePlayer } from '@/player/player';
 
 export const haptic = () => { if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {}); };
@@ -30,18 +31,19 @@ export function T({ v = 'title', style, ...p }: TextProps & { v?: V }) {
   return <Text {...p} style={[{ color: C.tx }, TV[v], style]} />;
 }
 
-/* ---------- нажатие с пружинкой ---------- */
-export function Press({ style, children, scaleTo = 0.96, onPress, ...p }: PressableProps & { style?: any; scaleTo?: number; children?: ReactNode }) {
-  const s = useSharedValue(1);
-  const a = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+/* ---------- нажатие: лёгкое сжатие через CSS-переход, без работы JS на каждом кадре ---------- */
+const PRESS_EASE = cubicBezier(EASE[0], EASE[1], EASE[2], EASE[3]);
+export function Press({ style, outer, children, scaleTo = 0.96, onPress, ...p }: PressableProps & { style?: any; outer?: any; scaleTo?: number; children?: ReactNode }) {
+  const [down, setDown] = useState(false);
   return (
     <Pressable
       {...p}
+      style={outer}
       onPress={onPress}
-      onPressIn={(e) => { s.value = withTiming(scaleTo, { duration: 90 }); p.onPressIn?.(e); }}
-      onPressOut={(e) => { s.value = withTiming(1, { duration: 220, easing: Easing.bezier(...EASE) }); p.onPressOut?.(e); }}
+      onPressIn={(e) => { setDown(true); p.onPressIn?.(e); }}
+      onPressOut={(e) => { setDown(false); p.onPressOut?.(e); }}
     >
-      <Animated.View style={[style, a]}>{children}</Animated.View>
+      <Animated.View style={[style, { transform: [{ scale: down ? scaleTo : 1 }], transitionProperty: 'transform', transitionDuration: down ? 90 : 260, transitionTimingFunction: PRESS_EASE }]}>{children}</Animated.View>
     </Pressable>
   );
 }
@@ -77,16 +79,23 @@ export function Cover({ uri, size, radius = R.cover, style, source }: { uri?: st
 }
 
 /* ---------- экран со скроллом: отступ под капсулу ---------- */
+/* В браузере стек экранов без анимации переходов — добавляем свою: экран мягко въезжает */
+const WEB_ENTER = Platform.OS === 'web' ? slideIn(22, 1, 320) : undefined;
 export function Screen({ children, dock = true, scroll = true, style, ...p }: ScrollViewProps & { dock?: boolean; scroll?: boolean; children?: ReactNode }) {
   const ins = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  /* на планшете колонка контента не шире 720, в горизонтали учитываем вырез сбоку */
+  const side = Math.max(20, (width - 720) / 2, ins.left + 12, ins.right + 12);
   const hasTrack = usePlayer((x) => x.index >= 0);
   const pb = dock ? (hasTrack ? DOCK.mini : DOCK.compact) + Math.max(ins.bottom, 14) + 30 : Math.max(ins.bottom, 14) + 24;
-  const pad = { paddingTop: Math.max(ins.top, 18) + 14, paddingBottom: pb, paddingHorizontal: 20 };
-  if (!scroll) return <View style={[{ flex: 1, backgroundColor: C.bg }, pad, style as any]}>{children}</View>;
+  const pad = { paddingTop: Math.max(ins.top, 18) + 14, paddingBottom: pb, paddingHorizontal: side };
+  if (!scroll) return <Animated.View entering={WEB_ENTER} style={[{ flex: 1, backgroundColor: C.bg }, pad, style as any]}>{children}</Animated.View>;
   return (
-    <ScrollView {...p} style={{ flex: 1, backgroundColor: C.bg }} contentContainerStyle={[pad, style as any]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-      {children}
-    </ScrollView>
+    <Animated.View entering={WEB_ENTER} style={{ flex: 1, backgroundColor: C.bg }}>
+      <ScrollView {...p} style={{ flex: 1 }} contentContainerStyle={[pad, style as any]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {children}
+      </ScrollView>
+    </Animated.View>
   );
 }
 
@@ -158,7 +167,7 @@ export function Segmented<K extends string>({ items, value, onChange, label }: {
         const on = k === value;
         return (
           <Pressable key={k} onPress={() => { haptic(); onChange(k); }} accessibilityRole="tab" accessibilityState={{ selected: on }} style={[s.segBtn, on && { backgroundColor: C.s4 }]}>
-            <T v="small" style={{ color: on ? C.tx : C.tx3, fontFamily: F.bold, fontSize: items.length > 3 ? 13 : 14 }} numberOfLines={1} adjustsFontSizeToFit>{l}</T>
+            <T v="small" style={{ color: on ? C.tx : C.tx3, fontFamily: F.bold, fontSize: items.length > 3 ? 12.5 : 14 }} numberOfLines={1}>{l}</T>
           </Pressable>
         );
       })}
@@ -171,7 +180,7 @@ export const s = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
   sec: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   seg: { flexDirection: 'row', height: 50, padding: 4, borderRadius: R.pill, backgroundColor: C.s1 },
-  segBtn: { flex: 1, borderRadius: R.pill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  segBtn: { flex: 1, borderRadius: R.pill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
   field: { height: 54, borderRadius: R.pill, backgroundColor: C.s2, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 20, paddingRight: 8 },
   input: { flex: 1, minWidth: 0, height: '100%', color: C.tx, fontFamily: F.semi, fontSize: 16, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null) },
 });

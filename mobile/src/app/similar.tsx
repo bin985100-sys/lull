@@ -40,8 +40,8 @@ export default function Similar() {
           {(data || []).map((a) => <ArtistPick key={a.id} a={a} size={size} on={picked.includes(a.id)} onPress={() => setPicked((p) => (p.includes(a.id) ? p.filter((x) => x !== a.id) : [...p, a.id]))} />)}
         </View>
       </Screen>
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 36, paddingBottom: 18, gap: 6 }}>
-        <LinearGradient colors={['rgba(0,0,0,0)', '#000', '#000']} locations={[0, 0.35, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 56, paddingBottom: 18, gap: 6 }}>
+        <LinearGradient colors={['rgba(0,0,0,0)', '#000', '#000']} locations={[0, 0.3, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Btn label="Начать слушать" icon="play" onPress={() => finish()} />
         <Pressable onPress={() => finish(true)} style={{ alignSelf: 'center', padding: 12 }} accessibilityRole="button"><T v="sub">Пропустить</T></Pressable>
       </View>

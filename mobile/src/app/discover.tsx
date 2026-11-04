@@ -27,10 +27,10 @@ export default function Discover() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
             {MOODS.map((m) => (
               <Press key={m.id} scaleTo={0.97} onPress={() => router.push({ pathname: '/mix/[id]', params: { id: m.id } })} accessibilityRole="button" accessibilityLabel={m.title}
-                style={{ width: '100%', flexBasis: '47%', flexGrow: 1, aspectRatio: 1.2, borderRadius: 24, overflow: 'hidden', backgroundColor: C.s2 }}>
+                outer={{ flexBasis: '47%', flexGrow: 1 }} style={{ width: '100%', aspectRatio: 1.2, borderRadius: 24, overflow: 'hidden', backgroundColor: C.s2 }}>
                 <Image source={m.image} style={StyleSheet.absoluteFill} contentFit="cover" />
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.18)' }]} />
-                <T style={{ position: 'absolute', left: 16, right: 12, bottom: 14, fontFamily: F.bold, fontSize: 16.5 }}>{m.title}</T>
+                <T numberOfLines={1} style={{ position: 'absolute', left: 14, right: 10, bottom: 14, fontFamily: F.bold, fontSize: 14.5 }}>{m.title}</T>
               </Press>
             ))}
           </View>

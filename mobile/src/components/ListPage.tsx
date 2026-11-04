@@ -7,6 +7,7 @@ import { currentTrack, player, usePlayer } from '@/player/player';
 import { C } from '@/theme/tokens';
 import { Btn, IconBtn, ListSkeleton, Offline, Screen, Skeleton, T, TopBar } from '@/ui/kit';
 import { TrackRow } from './TrackRow';
+import { Icon } from '@/ui/Icon';
 
 type Props = {
   title: string;
@@ -25,10 +26,10 @@ type Props = {
   playlistId?: string;
 };
 
-export function CoverArt({ cover, size }: { cover?: Props['cover']; size: number }) {
+export function CoverArt({ cover, size, radius = 34 }: { cover?: Props['cover']; size: number | '100%'; radius?: number }) {
   const col = (cover?.collage || []).filter(Boolean).slice(0, 3) as string[];
   return (
-    <View style={{ width: size, height: size, borderRadius: 34, overflow: 'hidden', backgroundColor: C.s2, alignSelf: 'center' }}>
+    <View style={{ width: size, aspectRatio: 1, borderRadius: radius, overflow: 'hidden', backgroundColor: C.s2, alignSelf: 'center' }}>
       {cover?.uri || cover?.source ? <Image source={cover.source ?? { uri: cover.uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={250} />
         : col.length ? (
           <View style={{ flex: 1, flexDirection: 'row', gap: 2 }}>
@@ -40,7 +41,7 @@ export function CoverArt({ cover, size }: { cover?: Props['cover']; size: number
               </View>
             ) : null}
           </View>
-        ) : null}
+        ) : <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Icon name="note" size={typeof size === 'number' ? size * 0.36 : 56} /></View>}
     </View>
   );
 }

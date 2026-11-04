@@ -3,9 +3,9 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { PanResponder, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { PanResponder, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
-  Easing, FadeIn, FadeOut, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
+  cubicBezier, Easing, FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
@@ -17,6 +17,7 @@ import { Icon, type IconName } from '@/ui/Icon';
 import { haptic, T } from '@/ui/kit';
 import { PlayPause } from '@/ui/PlayPause';
 import { slideIn } from '@/ui/anim';
+import { TintLayer } from './TintLayer';
 import { likeWithUndo, openSelectPlaylist } from './TrackRow';
 
 const ease = Easing.bezier(...EASE);
@@ -39,7 +40,7 @@ function Tint({ uri, strong }: { uri?: string; strong: boolean }) {
     <View style={[StyleSheet.absoluteFill, { opacity: strong ? 1 : 0.85 }]} pointerEvents="none">
       {layers.map((l) => (
         <Animated.View key={l.k} entering={FadeIn.duration(900).easing(ease)} exiting={FadeOut.duration(900)} style={StyleSheet.absoluteFill}>
-          <Image source={{ uri: l.uri }} style={[StyleSheet.absoluteFill, { transform: [{ scale: 1.3 }] }]} blurRadius={60} contentFit="cover" />
+          <TintLayer uri={l.uri} />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
         </Animated.View>
       ))}
@@ -93,8 +94,10 @@ function MiniProgress() {
     </View>
   );
 }
-function Seek() {
-  const { time, duration } = useProgress();
+function Seek({ active }: { active: boolean }) {
+  /* скрытый плеер не перерисовывается от прогресса */
+  const time = useProgress((x) => (active ? x.time : 0));
+  const duration = useProgress((x) => x.duration);
   const [w, setW] = useState(1);
   const [drag, setDrag] = useState<number | null>(null);
   const val = drag ?? time;
@@ -129,12 +132,13 @@ function Seek() {
 }
 
 /* ---------- раскрытый плеер ---------- */
-function Full({ h }: { h: number }) {
+function Full({ h, active }: { h: number; active: boolean }) {
   const s = usePlayer();
   const t = currentTrack(s)!;
   const liked = useLibrary((x) => x.liked.some((y) => y.id === t.id));
   const reduced = useReducedMotion();
-  const coverSize = Math.max(150, Math.min(360, h - 78 - 450));
+  const { width: ww } = useWindowDimensions();
+  const coverSize = Math.max(150, Math.min(ww > 700 ? 480 : 360, h - 78 - 450));
   const enter = reduced ? undefined : slideIn(s.lastDir === 'next' ? 60 : -60, 0.9, 500);
   const close = () => player.expand(false);
   const swipe = useRef(PanResponder.create({
@@ -161,7 +165,7 @@ function Full({ h }: { h: number }) {
           <Icon name={liked ? 'heartF' : 'heart'} size={28} />
         </Pressable>
       </Animated.View>
-      <Seek />
+      <Seek active={active} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
         <Pressable onPress={() => { haptic(); player.toggleShuffle(); }} accessibilityRole="button" accessibilityLabel="Перемешивать" accessibilityState={{ selected: s.shuffle }} style={st.ctl}><Icon name="shuffle" size={28} color={s.shuffle ? C.tx : C.tx3} /></Pressable>
         <SkipBtn dir="prev" size={32} box={56} />
@@ -219,10 +223,14 @@ function Nav({ active }: { active: Tab | null }) {
   );
 }
 
+/* Плавность через CSS-переходы Reanimated 4: на iPhone в браузере их считает сам браузер,
+   на Android/iOS — UI-поток. JS не трогает каждый кадр, поэтому раскрытие не тормозит. */
+const TR = { transitionDuration: 560, transitionTimingFunction: cubicBezier(EASE[0], EASE[1], EASE[2], EASE[3]) } as const;
+
 export function Dock() {
   const path = usePathname();
   const ins = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const has = usePlayer((s) => s.index >= 0);
   const expanded = usePlayer((s) => s.expanded);
   const cover = usePlayer((s) => currentTrack(s)?.artwork);
@@ -231,36 +239,53 @@ export function Dock() {
   useEffect(() => { const t = ROOT[path]; if (t && t !== useTab.getState().tab) useTab.setState({ tab: t }); }, [path]);
   const hidden = HIDDEN.includes(path);
 
+  /* полный плеер монтируется при раскрытии и уходит после анимации сворачивания */
+  const [fullMounted, setFullMounted] = useState(false);
+  const [fullOn, setFullOn] = useState(false);
+  /* монтируем заранее, в простое после старта трека, чтобы раскрытие не ждало отрисовки */
+  useEffect(() => {
+    if (!has) { setFullMounted(false); return; }
+    const t = setTimeout(() => setFullMounted(true), 400);
+    return () => clearTimeout(t);
+  }, [has]);
+  useEffect(() => {
+    if (expanded) {
+      setFullMounted(true);
+      const r = requestAnimationFrame(() => requestAnimationFrame(() => setFullOn(true)));
+      return () => cancelAnimationFrame(r);
+    }
+    setFullOn(false);
+  }, [expanded]);
+
+  /* на планшете и в горизонтали капсула не растягивается во всю ширину */
+  const maxW = 560;
+  const side = width > maxW + 2 * DOCK.side ? (width - maxW) / 2 : DOCK.side;
+  const fullSide = width > 760 ? (width - 680) / 2 : 8;
   const bottomGap = Math.max(ins.bottom, 14) - 2;
   const fullH = height - Math.max(ins.top, 18) - 2 - 8;
-  const target = !has ? DOCK.compact : expanded ? fullH : DOCK.mini;
-  const hv = useSharedValue(target), fv = useSharedValue(expanded ? 1 : 0), hide = useSharedValue(hidden ? 1 : 0);
-  useEffect(() => {
-    const cfg = { duration: reduced ? 1 : 560, easing: ease };
-    hv.value = withTiming(target, cfg); fv.value = withTiming(expanded ? 1 : 0, cfg);
-  }, [target, expanded, reduced, hv, fv]);
-  useEffect(() => { hide.value = withTiming(hidden ? 1 : 0, { duration: reduced ? 1 : 380, easing: ease }); }, [hidden, reduced, hide]);
-
-  const box = useAnimatedStyle(() => ({
-    height: hv.value,
-    left: interpolate(fv.value, [0, 1], [DOCK.side, 8]),
-    right: interpolate(fv.value, [0, 1], [DOCK.side, 8]),
-    bottom: interpolate(fv.value, [0, 1], [bottomGap, 8]),
-    borderRadius: interpolate(fv.value, [0, 1], [34, 44]),
-    opacity: 1 - hide.value,
-    transform: [{ translateY: hide.value * 160 }],
-  }));
-  const miniA = useAnimatedStyle(() => ({ opacity: has ? 1 - fv.value : 0, transform: [{ translateY: has ? fv.value * -20 : 16 }] }));
-  const fullA = useAnimatedStyle(() => ({ opacity: interpolate(fv.value, [0.35, 1], [0, 1], 'clamp'), transform: [{ translateY: (1 - fv.value) * 24 }] }));
+  const h = !has ? DOCK.compact : expanded ? fullH : DOCK.mini;
+  const dur = reduced ? 0 : TR.transitionDuration;
 
   return (
-    <Animated.View style={[st.dock, box]} pointerEvents={hidden ? 'none' : 'box-none'} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}>
-      <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+    <Animated.View
+      style={[st.dock, {
+        height: h, left: expanded ? fullSide : side, right: expanded ? fullSide : side, bottom: expanded ? 8 : bottomGap, borderRadius: expanded ? 44 : 34,
+        opacity: hidden ? 0 : 1, transform: [{ translateY: hidden ? 160 : 0 }],
+        transitionProperty: ['height', 'left', 'right', 'bottom', 'borderRadius', 'opacity', 'transform'], transitionDuration: dur, transitionTimingFunction: TR.transitionTimingFunction,
+      }]}
+      pointerEvents={hidden ? 'none' : 'box-none'} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}>
+      <BlurView intensity={Platform.OS === "web" ? 35 : 60} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: C.glass }]} />
       {has ? <Tint uri={cover} strong={expanded} /> : null}
-      {has && expanded ? <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 78 }, fullA]}><Full h={fullH} /></Animated.View> : null}
+      {has && fullMounted ? (
+        <Animated.View pointerEvents={fullOn ? 'auto' : 'none'} accessibilityElementsHidden={!fullOn} importantForAccessibility={fullOn ? 'auto' : 'no-hide-descendants'} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 78, opacity: fullOn ? 1 : 0, transform: [{ translateY: fullOn ? 0 : 24 }],
+          transitionProperty: ['opacity', 'transform'], transitionDuration: reduced ? 0 : fullOn ? 420 : 240, transitionDelay: fullOn && !reduced ? 120 : 0, transitionTimingFunction: TR.transitionTimingFunction }}>
+          <Full h={fullH} active={fullOn} />
+        </Animated.View>
+      ) : null}
       {has ? (
-        <Animated.View style={[{ position: 'absolute', left: 0, right: 0, bottom: 0, height: DOCK.mini }, miniA]} pointerEvents={expanded ? 'none' : 'box-none'}>
+        <Animated.View pointerEvents={expanded ? 'none' : 'box-none'} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: DOCK.mini, opacity: expanded ? 0 : 1, transform: [{ translateY: expanded ? -20 : 0 }],
+          transitionProperty: ['opacity', 'transform'], transitionDuration: reduced ? 0 : 300, transitionDelay: !expanded && !reduced ? 160 : 0, transitionTimingFunction: TR.transitionTimingFunction }}>
           <Mini /><MiniProgress />
         </Animated.View>
       ) : null}
