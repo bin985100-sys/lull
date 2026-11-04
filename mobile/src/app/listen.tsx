@@ -22,7 +22,7 @@ export default function Listen() {
   const cur = usePlayer((s) => currentTrack(s));
   const playing = usePlayer((s) => s.playing);
   const last = cur ?? history[0]?.track;
-  const trend = useData('mix:trending', MIXES.trending.load);
+  const trend = useData('mix:recommended', MIXES.recommended.load);
   const mix = useData('mix:foryou', MIXES.foryou.load);
 
   return (
@@ -66,7 +66,7 @@ export default function Listen() {
           <Pressable onPress={() => router.push('/settings')} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }}>
             <T v="h2">Настроить подборку</T><Icon name="sliders" size={30} />
           </Pressable>
-          <SectionHead title="Дальше по звучанию" more="Все" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'trending' } })} />
+          <SectionHead title="Дальше по звучанию" more="Все" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'recommended' } })} />
           {trend.error && !trend.data ? <Offline onRetry={trend.reload} /> : null}
           {trend.loading && !trend.data ? <ListSkeleton n={3} /> : null}
           {(trend.data || []).slice(0, 4).map((t) => <TrackRow key={t.id} track={t} list={trend.data!} sub right="plus" />)}

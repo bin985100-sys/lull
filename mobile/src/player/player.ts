@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 import { streamUrl, type Track } from '@/api/audius';
+import { lull, streamUrlYt } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 
 export type Repeat = 'off' | 'all' | 'one';
@@ -58,11 +59,25 @@ async function init() {
   await ready;
 }
 
-const source = (t: Track) => ({ uri: streamUrl(t.id), name: t.title });
+const source = (t: Track) => ({ uri: t.source === 'yt' ? streamUrlYt(t.id) : streamUrl(t.id), name: t.title });
+
+/* Радио: когда очередь подходит к концу, дозаполняем похожими треками, как в YouTube Music */
+let radioFor = '';
+async function extendRadio() {
+  const s = usePlayer.getState();
+  const t = currentTrack(s);
+  if (!t || t.source !== 'yt' || s.repeat !== 'off' || s.index < s.queue.length - 2 || radioFor === t.id) return;
+  radioFor = t.id;
+  try {
+    const more = (await lull.upNext(t.id)).filter((x) => !usePlayer.getState().queue.some((q) => q.id === x.id)).slice(0, 20);
+    more.forEach((x) => player.addToQueue(x));
+  } catch {}
+}
 
 function onTrackStart() {
   const t = currentTrack();
   if (!t || !pl) return;
+  extendRadio();
   useLibrary.getState().pushHistory(t);
   useProgress.setState({ time: 0, duration: t.duration });
   const meta = { title: t.title, artist: t.artist, artworkUrl: t.artworkLarge || t.artwork };

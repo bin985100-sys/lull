@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
+import { openArtist, openPlaylist } from '@/components/Cards';
 import { CoverArt } from '@/components/ListPage';
 import { useLibrary } from '@/store/library';
 import { C, F } from '@/theme/tokens';
@@ -66,10 +67,10 @@ export default function Collection() {
         </View>
       ) : tab === 'saved' ? (
         lib.savedPlaylists.length ? grid(lib.savedPlaylists.filter((p) => m(p.title)).map((p) => ({
-          key: p.id, title: p.title, onPress: () => router.push({ pathname: '/playlist/[id]', params: { id: p.id } }), cover: <Cover uri={p.artwork} size="100%" radius={24} />,
+          key: p.id, title: p.title, onPress: () => openPlaylist(p), cover: <Cover uri={p.artwork} size="100%" radius={24} />,
         }))) : <Empty icon="disc" title="Нет сохранённых плейлистов" text="Сохраняй плейлисты сердцем на их странице." />
       ) : lib.favArtists.length ? grid(lib.favArtists.filter((a) => m(a.name)).map((a) => ({
-        key: a.id, title: a.name, round: true, cover: a.avatar, onPress: () => router.push({ pathname: '/artist/[id]', params: { id: a.id } }),
+        key: a.id, title: a.name, round: true, cover: a.avatar, onPress: () => openArtist(a),
       }))) : <Empty icon="user" title="Нет исполнителей" text="Добавляй исполнителей в коллекцию на их странице." />}
     </Screen>
   );

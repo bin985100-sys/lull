@@ -157,7 +157,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
       <Animated.View key={'m' + t.id} entering={enter} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <T v="h1" numberOfLines={1} style={{ fontSize: 28, lineHeight: 34 }}>{t.title}</T>
-          <Pressable onPress={() => { close(); router.push({ pathname: '/artist/[id]', params: { id: t.artistId } }); }} accessibilityRole="link">
+          <Pressable disabled={!t.artistId} onPress={() => { close(); router.push({ pathname: '/artist/[id]', params: { id: t.artistId, s: t.source === 'yt' ? 'yt' : 'audius' } }); }} accessibilityRole="link">
             <T v="sub" numberOfLines={1} style={{ fontSize: 16, marginTop: 2 }}>{t.artist}</T>
           </Pressable>
         </View>

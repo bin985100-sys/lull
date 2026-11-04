@@ -37,7 +37,7 @@ export default function Settings() {
         <Row icon="logout" label="Выйти" onPress={() => confirm({ icon: 'logout', title: 'Выйти из аккаунта?', text: 'Пока профиль хранится на этом устройстве: любимое и плейлисты останутся здесь.', safe: 'Остаться', danger: 'Выйти', onDanger: () => { player.stop(); lib.setAccount({ provider: null }); router.replace('/welcome'); } })} />
       </Group>
       <Group title="О приложении">
-        <Row icon="info" label="Музыка — каталог Audius" />
+        <Row icon="info" label="Музыка — каталог Lull и Audius" />
         <Row icon="doc" label="Версия 0.1 · ранняя сборка" />
       </Group>
     </Screen>

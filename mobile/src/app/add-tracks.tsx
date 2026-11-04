@@ -3,7 +3,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { audius, type Track } from '@/api/audius';
+import type { Track } from '@/api/audius';
+import { lull } from '@/api/lull';
 import { useData } from '@/api/useData';
 import { useLibrary } from '@/store/library';
 import { C } from '@/theme/tokens';
@@ -23,7 +24,7 @@ export default function AddTracks() {
   const [sel, setSel] = useState<Track[]>([]);
   const busy = useRef(false);
   useEffect(() => { const t = setTimeout(() => setDq(q.trim()), 350); return () => clearTimeout(t); }, [q]);
-  const res = useData(dq ? 'search:t:' + dq.toLowerCase() : null, (sig) => audius.searchTracks(dq, sig));
+  const res = useData(dq ? 'lsearch:t:' + dq.toLowerCase() : null, (sig) => lull.search(dq, sig).then((r) => r.tracks));
   const base = useMemo(() => {
     const seen = new Set<string>(); const out: Track[] = [];
     for (const t of [...liked, ...hist.map((h) => h.track)]) if (!seen.has(t.id)) { seen.add(t.id); out.push(t); }

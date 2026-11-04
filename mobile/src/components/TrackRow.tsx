@@ -93,7 +93,8 @@ function TrackActions({ t, playlistId }: { t: Track; playlistId?: string }) {
           toast('Убрано из плейлиста', 'minus', { label: 'Вернуть', fn: () => useLibrary.getState().setPlaylistTracks(playlistId, before) });
         }} />
       ) : null}
-      <Item icon="user" label="Перейти к исполнителю" onPress={() => go({ pathname: '/artist/[id]', params: { id: t.artistId } })} />
+      {t.artistId ? <Item icon="user" label="Перейти к исполнителю" onPress={() => go({ pathname: '/artist/[id]', params: { id: t.artistId, s: t.source === 'yt' ? 'yt' : 'audius' } })} /> : null}
+      {t.albumId ? <Item icon="disc" label="Перейти к альбому" onPress={() => go({ pathname: '/playlist/[id]', params: { id: t.albumId, s: 'yt', k: 'album' } })} /> : null}
     </View>
   );
 }

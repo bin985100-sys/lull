@@ -3,7 +3,8 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { audius, type Artist } from '@/api/audius';
+import { type Artist } from '@/api/audius';
+import { lull } from '@/api/lull';
 import { useData } from '@/api/useData';
 import { ArtistPick } from '@/components/ArtistPick';
 import { useLibrary } from '@/store/library';
@@ -12,7 +13,7 @@ import { Btn, Offline, Screen, Skeleton, T, TopBar } from '@/ui/kit';
 import { toast } from '@/ui/overlay';
 
 export default function Onboarding() {
-  const { data, loading, error, reload } = useData('topArtists', (s) => audius.topArtists(s));
+  const { data, loading, error, reload } = useData('popularArtists', (s) => lull.popularArtists(s));
   const [picked, setPicked] = useState<Artist[]>([]);
   const { width } = useWindowDimensions();
   const size = Math.min(130, (Math.min(width, 560) - 40 - 24) / 3);

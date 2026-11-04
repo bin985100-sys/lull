@@ -1,24 +1,31 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { audius, MOODS } from '@/api/audius';
+import { MOODS } from '@/api/audius';
+import { lull } from '@/api/lull';
 import { MIXES } from '@/api/mixes';
 import { useData } from '@/api/useData';
+import { CardRail } from '@/components/Cards';
 import { TrackRow } from '@/components/TrackRow';
 import { C, F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
-import { Cover, ListSkeleton, Offline, Press, Screen, SectionHead, T } from '@/ui/kit';
+import { ListSkeleton, Offline, Press, Screen, SectionHead, Skeleton, T } from '@/ui/kit';
 
 export default function Discover() {
-  const fresh = useData('mix:underground', MIXES.underground.load);
-  const pls = useData('trendingPlaylists', (s) => audius.trendingPlaylists(s));
+  const charts = useData('charts', (s) => lull.charts(s));
+  const home = useData('home', (s) => lull.home(undefined, s));
+  const indie = useData('mix:underground', MIXES.underground.load);
+  const trending = charts.data?.find((x) => x.layout === 'tracks');
+  const releases = charts.data?.find((x) => x.layout === 'cards' && x.items[0]?.kind === 'album');
+  const pls = home.data?.filter((x) => x.layout === 'cards' && x.items[0]?.kind === 'playlist') ?? [];
+  const trTracks = trending?.items.filter((c) => c.track).map((c) => c.track!) ?? [];
   return (
     <Screen>
       <T v="h1" style={{ marginTop: 10, marginBottom: 18 }} accessibilityRole="header">Открывать</T>
-      <Pressable onPress={() => router.push('/search')} accessibilityRole="search" accessibilityLabel="Поиск: треки, плейлисты, исполнители"
+      <Pressable onPress={() => router.push('/search')} accessibilityRole="search" accessibilityLabel="Поиск: треки, альбомы, исполнители"
         style={{ height: 54, borderRadius: 999, backgroundColor: C.s2, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 }}>
-        <Icon name="search" size={22} color={C.tx2} /><T style={{ color: C.tx3, fontSize: 16 }}>Треки, плейлисты, исполнители</T>
+        <Icon name="search" size={22} color={C.tx2} /><T style={{ color: C.tx3, fontSize: 16 }}>Треки, альбомы, исполнители</T>
       </Pressable>
 
       <View style={{ gap: 28, marginTop: 26 }}>
@@ -26,7 +33,7 @@ export default function Discover() {
           <SectionHead title="Под настроение" />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
             {MOODS.map((m) => (
-              <Press key={m.id} scaleTo={0.97} onPress={() => router.push({ pathname: '/mix/[id]', params: { id: m.id } })} accessibilityRole="button" accessibilityLabel={m.title}
+              <Press key={m.id} scaleTo={0.97} onPress={() => router.push({ pathname: '/mood/[id]', params: { id: m.id } })} accessibilityRole="button" accessibilityLabel={m.title}
                 outer={{ flexBasis: '47%', flexGrow: 1 }} style={{ width: '100%', aspectRatio: 1.2, borderRadius: 24, overflow: 'hidden', backgroundColor: C.s2 }}>
                 <Image source={m.image} style={StyleSheet.absoluteFill} contentFit="cover" />
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.18)' }]} />
@@ -37,25 +44,17 @@ export default function Discover() {
         </View>
 
         <View>
-          <SectionHead title="Новые находки" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'underground' } })} />
-          {fresh.error && !fresh.data ? <Offline onRetry={fresh.reload} /> : null}
-          {fresh.loading && !fresh.data ? <ListSkeleton n={4} /> : null}
-          {(fresh.data || []).slice(0, 4).map((t) => <TrackRow key={t.id} track={t} list={fresh.data!} sub />)}
+          <SectionHead title="В тренде" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'trending' } })} />
+          {charts.error && !charts.data ? <Offline onRetry={charts.reload} /> : charts.loading && !charts.data ? <ListSkeleton n={4} /> : trTracks.slice(0, 5).map((t) => <TrackRow key={t.id} track={t} list={trTracks} sub />)}
         </View>
 
-        {pls.data?.length ? (
-          <View>
-            <SectionHead title="Плейлисты недели" />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}>
-              {pls.data.slice(0, 12).map((p) => (
-                <Press key={p.id} onPress={() => router.push({ pathname: '/playlist/[id]', params: { id: p.id } })} accessibilityRole="button" accessibilityLabel={p.title} style={{ width: 150, gap: 10 }}>
-                  <Cover uri={p.artwork} size={150} radius={24} />
-                  <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 16 }}>{p.title}</T>
-                </Press>
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
+        {releases ? <View><SectionHead title="Новые альбомы и синглы" /><CardRail items={releases.items} /></View> : charts.loading ? <Skeleton h={190} /> : null}
+        {pls.slice(0, 2).map((s) => <View key={s.title}><SectionHead title={s.title} /><CardRail items={s.items} /></View>)}
+
+        <View>
+          <SectionHead title="Независимые артисты" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'underground' } })} />
+          {indie.loading && !indie.data ? <ListSkeleton n={3} /> : (indie.data || []).slice(0, 4).map((t) => <TrackRow key={t.id} track={t} list={indie.data!} sub />)}
+        </View>
       </View>
     </Screen>
   );

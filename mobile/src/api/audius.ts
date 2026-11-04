@@ -15,9 +15,13 @@ export type Track = {
   duration: number;
   genre?: string;
   streamable: boolean;
+  /** откуда звук: каталог Lull (YouTube Music через сервер Lull) или Audius; старые записи без поля — Audius */
+  source?: Source;
+  albumId?: string;
 };
-export type Artist = { id: string; name: string; handle: string; avatar?: string; cover?: string; followers: number };
-export type Playlist = { id: string; title: string; artist: string; artistId: string; artwork?: string; trackCount: number };
+export type Source = 'yt' | 'audius';
+export type Artist = { id: string; name: string; handle: string; avatar?: string; cover?: string; followers: number; source?: Source };
+export type Playlist = { id: string; title: string; artist: string; artistId: string; artwork?: string; trackCount: number; source?: Source; kind?: 'album' | 'playlist' };
 
 type Raw = Record<string, any>;
 
@@ -59,6 +63,7 @@ export const mapTrack = (t: Raw): Track => ({
   duration: Number(t.duration) || 0,
   genre: t.genre,
   streamable: t.is_streamable !== false && !t.is_delete && !t.stream_conditions,
+  source: 'audius',
 });
 export const mapArtist = (u: Raw): Artist => ({
   id: String(u.id),
@@ -67,6 +72,7 @@ export const mapArtist = (u: Raw): Artist => ({
   avatar: art(u.profile_picture, '480x480'),
   cover: u.cover_photo?.['2000x'] || u.cover_photo?.['640x'],
   followers: u.follower_count ?? 0,
+  source: 'audius',
 });
 export const mapPlaylist = (p: Raw): Playlist => ({
   id: String(p.id),
@@ -75,6 +81,8 @@ export const mapPlaylist = (p: Raw): Playlist => ({
   artistId: String(p.user?.id ?? ''),
   artwork: art(p.artwork, '480x480'),
   trackCount: p.track_count ?? 0,
+  source: 'audius',
+  kind: 'playlist',
 });
 const tracks = (l: Raw[] | undefined) => (l || []).map(mapTrack).filter((t) => t.streamable);
 
@@ -99,10 +107,11 @@ export const audius = {
 };
 
 /* Подборки «Под настроение» = жанровые чарты Audius. Картинки — свои. */
+/* Подборки «Под настроение»: настроения каталога Lull (chip) и запасной жанр Audius. Картинки — свои. */
 export const MOODS = [
-  { id: 'exhale', title: 'Выдохнуть', genre: 'Ambient', image: require('../../assets/moods/m_exhale.webp') },
-  { id: 'motion', title: 'В движении', genre: 'Electronic', image: require('../../assets/moods/m_motion.webp') },
-  { id: 'focus', title: 'Сосредоточиться', genre: 'Lo-Fi', image: require('../../assets/moods/m_focus.webp') },
-  { id: 'night', title: 'Ночной город', genre: 'Hip-Hop/Rap', image: require('../../assets/moods/m_night.webp') },
+  { id: 'exhale', title: 'Выдохнуть', chip: 'Релакс', genre: 'Ambient', image: require('../../assets/moods/m_exhale.webp') },
+  { id: 'motion', title: 'В движении', chip: 'В дороге', genre: 'Electronic', image: require('../../assets/moods/m_motion.webp') },
+  { id: 'focus', title: 'Сосредоточиться', chip: 'Концентрация', genre: 'Lo-Fi', image: require('../../assets/moods/m_focus.webp') },
+  { id: 'night', title: 'Ночной город', chip: 'Вечеринка', genre: 'Hip-Hop/Rap', image: require('../../assets/moods/m_night.webp') },
 ] as const;
 export const FOCUS_IMAGE = require('../../assets/moods/focus_route.webp');

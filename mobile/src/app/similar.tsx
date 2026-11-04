@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { audius, type Artist } from '@/api/audius';
+import { lull } from '@/api/lull';
 import { useData } from '@/api/useData';
 import { ArtistPick } from '@/components/ArtistPick';
 import { useLibrary } from '@/store/library';
@@ -14,7 +15,7 @@ export default function Similar() {
   const favs = useLibrary((s) => s.favArtists);
   const key = 'related:' + favs.map((a) => a.id).join(',');
   const { data, loading } = useData(key, async (s) => {
-    const lists = await Promise.all(favs.slice(0, 5).map((a) => audius.related(a.id, s).catch(() => [] as Artist[])));
+    const lists = await Promise.all(favs.slice(0, 5).map((a) => (a.source === 'audius' ? audius.related(a.id, s) : lull.artist(a.id, s).then((p) => p.similar)).catch(() => [] as Artist[])));
     const seen = new Set(favs.map((a) => a.id));
     const out: Artist[] = [];
     for (let i = 0; out.length < 6 && i < 10; i++) for (const l of lists) { const a = l[i]; if (a && !seen.has(a.id)) { seen.add(a.id); out.push(a); } }
