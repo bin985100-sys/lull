@@ -91,7 +91,8 @@ export const audius = {
   artist: (id: string, s?: AbortSignal) => get<Raw>(`/users/${id}`, {}, s).then(mapArtist),
   artistTracks: (id: string, s?: AbortSignal) => get<Raw[]>(`/users/${id}/tracks`, { limit: 30, sort: 'plays' }, s).then(tracks),
   related: (id: string, s?: AbortSignal) => get<Raw[]>(`/users/${id}/related`, { limit: 10 }, s).then((l) => l.map(mapArtist)),
-  topArtists: (s?: AbortSignal) => get<Raw[]>('/users/top', { limit: 30 }, s).then((l) => l.map(mapArtist)),
+  /* без служебного аккаунта самой платформы */
+  topArtists: (s?: AbortSignal) => get<Raw[]>('/users/top', { limit: 31 }, s).then((l) => l.map(mapArtist).filter((a) => a.handle.toLowerCase() !== 'audius')),
   trendingPlaylists: (s?: AbortSignal) => get<Raw[]>('/playlists/trending', { time: 'week', limit: 20 }, s).then((l) => l.map(mapPlaylist)),
   playlist: (id: string, s?: AbortSignal) => get<Raw[]>(`/playlists/${id}`, {}, s).then((l) => mapPlaylist(l[0])),
   playlistTracks: (id: string, s?: AbortSignal) => get<Raw[]>(`/playlists/${id}/tracks`, {}, s).then(tracks),
