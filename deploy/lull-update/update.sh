@@ -76,8 +76,8 @@ echo "== 4. Лендинг lull.website"
 if [ -f "$HERE/landing.tgz" ]; then
   SITE=/var/www/lull-site
   mkdir -p "$SITE"
-  # старое убираем, папку downloads (APK и прочие файлы) оставляем
-  find "$SITE" -mindepth 1 -maxdepth 1 ! -name downloads -exec rm -rf {} +
+  # старое убираем; папку downloads (APK) и файлы подтверждения Google (google*.html) оставляем
+  find "$SITE" -mindepth 1 -maxdepth 1 ! -name downloads ! -name 'google*.html' -exec rm -rf {} +
   tar xzf "$HERE/landing.tgz" -C "$SITE"
   chmod -R a+rX "$SITE"
   if grep -q "^lull.website" /etc/caddy/Caddyfile; then systemctl reload caddy; echo "  лендинг обновлён: https://lull.website"; else echo "  !! lull.website не настроен в Caddy на этом сервере — файлы лежат в $SITE"; fi
