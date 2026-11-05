@@ -3,14 +3,20 @@
  * Тот же код, что и в десктопном приложении (electron/yt.ts, lyrics.ts), без Electron.
  * Слушает 127.0.0.1:8787; наружу его отдаёт Python-часть Lull Relay по /api/*.
  */
+import dns from 'node:dns';
 import http from 'node:http';
-import { album, artist, charts, home, homeChips, playlist, search, suggest, suggestRich, upNext } from '../electron/yt';
+import { album, artist, charts, home, homeChips, playlist, search, suggest, suggestRich, upNext, viaInnertube } from '../electron/yt';
+import { storeGet, storeSet } from '../electron/store';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
 import { importStatus, startImport } from './importer';
 import { authEnabled, deleteAccount, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink, syncGet, syncPut } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
+/* Ссылка на звук YouTube привязана к адресу, с которого её получили; звук сервер качает по IPv4 — значит и просим по IPv4 */
+dns.setDefaultResultOrder('ipv4first');
+/* Телефонам нужен AAC (m4a) — он играет везде и начинается быстрее */
+storeSet('settings', { ...(storeGet<Record<string, unknown>>('settings') ?? {}), quality: 'aac' });
 const cache = new Map<string, { t: number; body: string }>();
 const TTL: Record<string, number> = { home: 10, chips: 60, charts: 30, search: 10, suggest: 30, 'suggest-rich': 30, album: 60, playlist: 15, artist: 30, upnext: 30, lyrics: 24 * 60 };
 
@@ -80,6 +86,17 @@ http
   .createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
     const [, api, name, ...rest] = url.pathname.split('/');
+    /* Внутреннее: ссылка на звук тем же способом, что в десктопе (клиент YouTube для VR/TV, ~1 с вместо 6–12 у yt-dlp).
+       Снаружи недоступно: Python-часть отдаёт наружу только /api/*. */
+    if (api === 'internal' && name === 'stream') {
+      const t0 = Date.now();
+      try {
+        const s = await viaInnertube(String(rest[0] || '').slice(0, 20));
+        return json(res, { url: s.url, mime: s.mime, size: s.contentLength, duration: s.durationSec, bitrate: s.bitrate, ms: Date.now() - t0 });
+      } catch (e) {
+        return json(res, { error: (e as Error).message, ms: Date.now() - t0 }, 502);
+      }
+    }
     if (api !== 'api') return void res.writeHead(404).end();
     try {
       if (name === 'img') return void (await image(url.searchParams.get('u') ?? '', res));

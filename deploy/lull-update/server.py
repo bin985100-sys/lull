@@ -240,9 +240,24 @@ def resolve_sync(vid: str, fmt: str, client: str = "") -> dict:
 
 # Клиенты-приложения (VR-шлем, телевизор) отдают ссылку без разгадки JS-защиты плеера — это главная экономия.
 FAST_CLIENTS = ("android_vr", "tv")
-# Наперегонки: быстрые и обычный стартуют сразу, остальные подключаются, если все трое задумались
-FALLBACK_CLIENTS = ("android_vr", "tv", "", "web_safari", "mweb", "web_embedded")
-RACE_DELAY = {"android_vr": 0.0, "tv": 0.0, "": 0.0, "web_safari": 2.5, "mweb": 4.0, "web_embedded": 5.5}
+# Наперегонки. Первым — «innertube»: каталог Lull (Node, youtubei.js) получает ссылку одним запросом к API YouTube
+# от имени клиента для VR/TV, как десктопная версия (~1 с). yt-dlp подключается, только если тот задумался.
+FALLBACK_CLIENTS = ("innertube", "android_vr", "tv", "", "web_safari", "mweb", "web_embedded")
+RACE_DELAY = {"innertube": 0.0, "android_vr": 0.6, "tv": 0.6, "": 1.2, "web_safari": 3.0, "mweb": 4.5, "web_embedded": 6.0}
+API_LOCAL = os.environ.get("LULL_API_LOCAL", "http://127.0.0.1:8787")
+
+
+async def resolve_innertube(vid: str) -> dict:
+    """Ссылка от каталога Lull (youtubei.js). Он сам проверяет начало и середину файла, поэтому повторно не проверяем."""
+    assert session is not None
+    async with session.get(f"{API_LOCAL}/internal/stream/{vid}", timeout=ClientTimeout(total=15)) as r:
+        j = await r.json(content_type=None)
+    if r.status != 200 or j.get("error") or not j.get("url"):
+        raise RuntimeError(j.get("error") or f"innertube {r.status}")
+    mime = (j.get("mime") or "audio/mp4").split(";")[0]
+    log.info("resolve %s innertube %.1fs", vid, (j.get("ms") or 0) / 1000)
+    return {"url": j["url"], "headers": {}, "mime": mime, "bitrate": j.get("bitrate") or 128000,
+            "contentLength": j.get("size") or 0, "durationSec": j.get("duration") or 0, "formatId": "", "checked": True}
 
 
 async def verify(s: dict) -> bool:
@@ -278,7 +293,12 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
         if done.is_set():
             return
         try:
-            s = await loop.run_in_executor(pool, resolve_sync, vid, fmt, client)
+            if client == "innertube":
+                if fmt != "aac":
+                    return
+                s = await resolve_innertube(vid)
+            else:
+                s = await loop.run_in_executor(pool, resolve_sync, vid, fmt, client)
         except Exception as e:
             msg = str(e).replace("ERROR: ", "")
             # «недоступно» запасной клиент (tv и др.) пишет и про нормальные видео — решает только итог по всем
@@ -289,7 +309,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             return
         if done.is_set():
             return
-        if await verify(s):
+        if s.get("checked") or await verify(s):
             s["client"] = client
             result.setdefault("ok", s)
             done.set()
@@ -335,7 +355,7 @@ async def api_diag(request: web.Request) -> web.Response:
     for c in FALLBACK_CLIENTS:
         t0 = time.monotonic()
         try:
-            s = await loop.run_in_executor(pool, resolve_sync, vid, "aac", c)
+            s = await resolve_innertube(vid) if c == "innertube" else await loop.run_in_executor(pool, resolve_sync, vid, "aac", c)
             t1 = time.monotonic()
             ok = await verify(s)
             out[c or "default"] = {"resolve": round(t1 - t0, 2), "verify": round(time.monotonic() - t1, 2), "ok": ok, "mime": s.get("mime")}
