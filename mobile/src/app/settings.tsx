@@ -3,6 +3,7 @@ import { resetTo } from '@/nav';
 import { Pressable, Switch, View } from 'react-native';
 
 import { logoutServer } from '@/api/auth';
+import { signOutSync } from '@/api/sync';
 import { linkYouTube } from '@/api/youtube';
 import { player } from '@/player/player';
 import { lastError, useCrash } from '@/ui/Crash';
@@ -49,7 +50,7 @@ export default function Settings() {
       </Group>
       <Group title="Данные">
         <Row icon="eraser" label="Очистить историю" onPress={() => confirm({ icon: 'eraser', title: 'Очистить историю?', text: 'Любимые треки и плейлисты останутся.', safe: 'Отмена', danger: 'Очистить историю', onDanger: () => { lib.clearHistory(); toast('История очищена', 'check'); } })} />
-        <Row icon="logout" label="Выйти" onPress={() => confirm({ icon: 'logout', title: 'Выйти из аккаунта?', text: 'Любимое, плейлисты и статистика останутся на этом устройстве.', safe: 'Остаться', danger: 'Выйти', onDanger: () => { player.stop(); logoutServer(); lib.setAccount({ provider: null, token: undefined, userId: undefined }); resetTo('/welcome'); } })} />
+        <Row icon="logout" label="Выйти" onPress={() => confirm({ icon: 'logout', title: 'Выйти из аккаунта?', text: 'Любимое, плейлисты и статистика сохранены в аккаунте и вернутся, когда войдёшь снова.', safe: 'Остаться', danger: 'Выйти', onDanger: async () => { player.stop(); await signOutSync(); logoutServer(); lib.setAccount({ provider: null, token: undefined, userId: undefined, youtube: null }); resetTo('/welcome'); } })} />
       </Group>
       <Group title="О приложении">
         <Row icon="info" label="Музыка — каталог Lull и Audius" />

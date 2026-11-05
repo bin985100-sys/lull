@@ -300,3 +300,24 @@ export async function ytPlaylist(token: string, id: string) {
   const vs = await videos(u, items.map((x) => x.contentDetails?.videoId).filter(Boolean));
   return vs.map(toTrack);
 }
+
+/* ---------- синхронизация библиотеки: любимое, плейлисты, исполнители, статистика, настройки ---------- */
+const SYNC_DIR = path.join(DATA, 'sync');
+const syncFile = (id: string) => path.join(SYNC_DIR, `${id.replace(/[^\w-]/g, '')}.json`);
+
+export function syncGet(token: string) {
+  const u = userOf(token);
+  try { return JSON.parse(fs.readFileSync(syncFile(u.id), 'utf8')) as { at: number; data: unknown }; } catch { return { at: 0, data: null }; }
+}
+/* сохраняем, только если снимок новее того, что уже лежит: так старое устройство не затрёт свежие данные */
+export function syncPut(token: string, at: number, data: unknown) {
+  const u = userOf(token);
+  const cur = syncGet(token);
+  if (!at || at < cur.at) return { ok: false, at: cur.at };
+  const raw = JSON.stringify({ at, data });
+  if (raw.length > 6 * 1024 * 1024) throw Object.assign(new Error('Библиотека слишком большая для синхронизации'), { status: 413 });
+  fs.mkdirSync(SYNC_DIR, { recursive: true });
+  fs.writeFileSync(syncFile(u.id) + '.tmp', raw);
+  fs.renameSync(syncFile(u.id) + '.tmp', syncFile(u.id));
+  return { ok: true, at };
+}

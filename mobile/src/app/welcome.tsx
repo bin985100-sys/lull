@@ -1,3 +1,4 @@
+import { pull } from '@/api/sync';
 import { resetTo } from '@/nav';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
@@ -25,7 +26,11 @@ function Mark() {
   );
 }
 
-export const afterLogin = () => resetTo(useLibrary.getState().onboarded ? '/listen' : '/onboarding');
+/* после входа сначала забираем библиотеку с сервера: на новом телефоне сразу вернутся любимые и настройки */
+export const afterLogin = async () => {
+  try { await Promise.race([pull(), new Promise((r) => setTimeout(r, 6000))]); } catch {}
+  resetTo(useLibrary.getState().onboarded ? '/listen' : '/onboarding');
+};
 
 export default function Welcome() {
   const { wait, error } = useAuthWait();

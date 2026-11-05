@@ -8,7 +8,7 @@ import { album, artist, charts, home, homeChips, playlist, search, suggest, sugg
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
 import { importStatus, startImport } from './importer';
-import { authEnabled, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink } from './auth';
+import { authEnabled, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink, syncGet, syncPut } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
 const cache = new Map<string, { t: number; body: string }>();
@@ -45,7 +45,7 @@ const json = (res: http.ServerResponse, v: unknown, status = 200) => res.writeHe
 const html = (res: http.ServerResponse, v: string) => res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }).end(v);
 
 async function auth(rest: string[], q: URLSearchParams, body: string, res: http.ServerResponse) {
-  const b = body ? (JSON.parse(body) as Record<string, string>) : {};
+  const b = body ? (JSON.parse(body) as Record<string, any>) : {};
   switch (rest[0]) {
     case 'config': return json(res, authEnabled());
     case 'start': return json(res, await start(b.provider ?? q.get('provider') ?? ''));
@@ -53,6 +53,7 @@ async function auth(rest: string[], q: URLSearchParams, body: string, res: http.
     case 'me': return json(res, me(b.token ?? ''));
     case 'logout': return json(res, logout(b.token ?? ''));
     case 'back': return html(res, page('Готово', 'Ты вошёл в Lull. Возвращаемся в приложение…', q.get('nonce') ?? undefined));
+    case 'sync': return json(res, b.op === 'put' ? syncPut(b.token ?? '', Number(b.at) || 0, b.data) : syncGet(b.token ?? ''));
     case 'yt': {
       const tok = b.token ?? '';
       if (rest[1] === 'start') return json(res, ytLinkStart(tok));

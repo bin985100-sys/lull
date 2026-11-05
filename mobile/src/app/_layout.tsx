@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { PanResponder, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { startSync } from '@/api/sync';
 import { Dock } from '@/components/Dock';
 import { useLibrary } from '@/store/library';
 import { C } from '@/theme/tokens';
@@ -31,6 +32,7 @@ export default function Root() {
   const [fonts] = useFonts({ Montserrat_500Medium, Montserrat_600SemiBold, Montserrat_700Bold, Montserrat_800ExtraBold });
   const [hydrated, setHydrated] = useState(useLibrary.persist.hasHydrated());
   useEffect(() => useLibrary.persist.onFinishHydration(() => setHydrated(true)), []);
+  useEffect(() => { startSync(); }, []);
   const ready = fonts && hydrated;
   useEffect(() => { if (ready) SplashScreen.hideAsync().catch(() => {}); }, [ready]);
   if (!ready) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
