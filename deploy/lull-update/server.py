@@ -181,9 +181,10 @@ cache: "OrderedDict[str, tuple[float, dict]]" = OrderedDict()
 inflight: dict[str, asyncio.Future] = {}
 
 FORMATS = {
-    "low": "wa[protocol=https]/wa",
-    "aac": "ba[protocol=https][ext=m4a]/ba[protocol=https]/ba",
-    "auto": "ba[protocol=https][ext=webm]/ba[protocol=https]/ba",
+    # 18 — mp4 со звуком, YouTube отдаёт его почти всегда, даже когда отдельных аудиодорожек клиенту не дали
+    "low": "wa[protocol=https]/wa/18/b",
+    "aac": "ba[protocol=https][ext=m4a]/ba[protocol=https]/ba/18/b",
+    "auto": "ba[protocol=https][ext=webm]/ba[protocol=https]/ba/18/b",
 }
 _local = threading.local()
 
@@ -270,7 +271,8 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
         except Exception as e:
             msg = str(e).replace("ERROR: ", "")
             # «недоступно» запасной клиент (tv и др.) пишет и про нормальные видео — решает только итог по всем
-            if "unavailable" in msg.lower() or "not available" in msg.lower():
+            low = msg.lower()
+            if ("unavailable" in low or "not available" in low) and "format" not in low:
                 result.setdefault("fatal", e)
             errors.append(f"{client or 'default'}: {msg}")
             return
@@ -289,7 +291,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
     done.set()
     if "ok" in result:
         return result["ok"]
-    if "fatal" in result and all(("unavailable" in x.lower() or "not available" in x.lower()) for x in errors):
+    if "fatal" in result and all((("unavailable" in x.lower() or "not available" in x.lower()) and "format" not in x.lower()) for x in errors):
         raise result["fatal"]
     raise RuntimeError("; ".join(errors) or "no stream")
 
@@ -343,7 +345,8 @@ async def get_stream(vid: str, fmt: str, fresh: bool = False) -> dict:
 
 def stream_error(e: Exception) -> web.Response:
     msg = str(e).replace("ERROR: ", "")
-    return web.json_response({"error": msg}, status=404 if "unavailable" in msg.lower() or "not available" in msg.lower() else 502)
+    low = msg.lower()
+    return web.json_response({"error": msg}, status=404 if ("unavailable" in low or "not available" in low) and "format" not in low else 502)
 
 
 async def resolve(request: web.Request) -> web.Response:
