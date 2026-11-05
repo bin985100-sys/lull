@@ -50,7 +50,7 @@ echo "  замер способов получить звук (до минуты
 curl -s -m 90 "http://127.0.0.1:8480/api/diag?vid=RgKAFK5djSk" | python3 -c 'import sys,json
 try:
   d=json.load(sys.stdin)
-  for c,v in d["clients"].items(): print("   %-12s %s" % (c, ("%.1f с + проверка %.1f с %s" % (v["resolve"], v["verify"], "ok" if v["ok"] else "403")) if "resolve" in v else "ошибка: "+v["error"][:70]))
+  for c,v in d["clients"].items(): print("   %-12s %s" % (c, ("%.1f с + проверка %.1f с %s" % (v["resolve"], v["verify"], "ok" if v["ok"] else "403")) if "resolve" in v else "ошибка: "+v["error"][:400]))
 except Exception as e: print("   замер не получился:", e)' || true
 echo "  проверка звука (до 30 с):"
 for id in kJQP7kiw5Fk JGwWNGJdvx8; do
