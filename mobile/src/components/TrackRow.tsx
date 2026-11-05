@@ -22,7 +22,8 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
   const playing = usePlayer((s) => s.playing && currentTrack(s)?.id === track.id);
   const lit = useSharedValue(0);
   useEffect(() => { if (isCur) lit.value = withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 800 })); }, [isCur, lit]);
-  const bg = useAnimatedStyle(() => ({ backgroundColor: `rgba(255,255,255,${lit.value * 0.1})` }));
+  /* прозрачность пишем обычным числом: «6e-8» из конца анимации ронял приложение на новых Android */
+  const bg = useAnimatedStyle(() => ({ backgroundColor: `rgba(255,255,255,${(Math.max(0, lit.value) * 0.1).toFixed(3)})` }));
   const play = () => { haptic(); player.play(list, track.id); };
   const more = () => { haptic(); openTrackActions(track, playlistId); };
 
