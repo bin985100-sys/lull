@@ -68,11 +68,17 @@ function engine() {
   });
   pl.addListener('trackChanged', ({ currentIndex }) => {
     log(`trackChanged: ${currentIndex} (base ${base})`);
-    if (Date.now() - mountedAt < 1500 && currentIndex !== 0) return;
+    /* Верим только настоящему переходу на соседний трек (сам доиграл, кнопки на экране блокировки/в наушниках).
+       Отголоски от clear()/skipTo() приходят с опозданием и раньше откатывали экран на прошлый трек,
+       пока играл уже другой — отсюда «играет 505, а на экране Sparks». */
+    if (loading || !nativeLen || Date.now() - mountedAt < 1500) return;
     const s = usePlayer.getState();
+    const cur = s.index - base;
+    if (currentIndex === cur) return;
+    if (Math.abs(currentIndex - cur) !== 1) { log(`пропускаю странный trackChanged: ${currentIndex}, жду ${cur}±1`); return; }
     const idx = base + currentIndex;
-    if (idx === s.index || idx >= s.queue.length) return;
-    usePlayer.setState({ index: idx, lastDir: currentIndex < 1 ? 'prev' : 'next' });
+    if (idx < 0 || idx >= s.queue.length) return;
+    usePlayer.setState({ index: idx, lastDir: currentIndex < cur ? 'prev' : 'next' });
     try { ensureNext(); onTrackStart(); } catch (e) { report(e, 'trackChanged'); }
   });
   return pl;
@@ -253,10 +259,9 @@ async function jumpInner(i: number, dir: 'next' | 'prev') {
   const k = i - base;
   if (pl && !loading && k > 0 && k < nativeLen && isPrimed(t)) {
     log(`быстрый переход: ${k} «${t.title}»`);
+    /* прошлые треки из плеера не удаляем: удаление во время перехода опустошало плеер и трек замирал */
     pl.skipTo(k); pl.play();
     mountedAt = Date.now();
-    for (let j = 0; j < k; j++) { pl.remove(0); nativeLen--; }
-    base = i;
     ensureNext(); watchdog(); onTrackStart();
     return;
   }
