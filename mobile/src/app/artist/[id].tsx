@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
@@ -36,8 +37,8 @@ export default function ArtistScreen() {
     <Screen style={{ paddingTop: 0 }}>
       <View style={{ height: 400, marginHorizontal: -20, backgroundColor: C.s1 }}>
         {art?.cover || art?.avatar ? <Image source={{ uri: art.cover || art.avatar }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" transition={300} /> : null}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.2)' }]} />
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 170, backgroundColor: 'rgba(0,0,0,0.5)' }} />
+        {/* плавное затемнение к низу, чтобы имя читалось, а обложка не резалась полосой */}
+        <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.55)', '#000']} locations={[0, 0.22, 0.5, 0.8, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={{ position: 'absolute', top: Math.max(ins.top, 18) + 14, left: 20 }}>
           <IconBtn name="back" label="Назад" onPress={() => router.back()} style={{ backgroundColor: 'rgba(20,21,23,0.6)' }} />
         </View>

@@ -35,6 +35,10 @@ export const currentTrack = (s: PlayerState = usePlayer.getState()) => (s.index 
 
 let pl: AudioPlaylist | null = null;
 let ready: Promise<void> | null = null;
+/* В плеере телефона лежат только текущий и следующий треки; base — номер первого из них в очереди приложения.
+   Так очередь приложения и плеера не расходятся: раньше после волны и пропусков мог играть не тот трек. */
+let base = 0;
+let nativeLen = 0;
 
 function engine() {
   if (pl) return pl;
@@ -46,13 +50,19 @@ function engine() {
     try { meter(st.playing, st.currentTime || 0); } catch (e) { report(e, 'meter'); }
     const s = usePlayer.getState();
     if (s.playing !== st.playing || s.buffering !== st.isBuffering) usePlayer.setState({ playing: st.playing, buffering: st.isBuffering });
-    if (st.didJustFinish && st.currentIndex >= st.trackCount - 1 && s.repeat === 'off') usePlayer.setState({ playing: false });
+    if (st.didJustFinish && st.currentIndex >= st.trackCount - 1) {
+      /* дошли до конца окна: дальше по очереди или по кругу */
+      if (s.index < s.queue.length - 1) jump(s.index + 1, 'next');
+      else if (s.repeat === 'all' && s.queue.length) jump(0, 'next');
+      else usePlayer.setState({ playing: false });
+    }
   });
-  pl.addListener('trackChanged', ({ currentIndex, previousIndex }) => {
+  pl.addListener('trackChanged', ({ currentIndex }) => {
     const s = usePlayer.getState();
-    if (currentIndex === s.index) return;
-    usePlayer.setState({ index: currentIndex, lastDir: currentIndex < previousIndex ? 'prev' : 'next' });
-    try { onTrackStart(); } catch (e) { report(e, 'trackChanged'); }
+    const idx = base + currentIndex;
+    if (idx === s.index || idx >= s.queue.length) return;
+    usePlayer.setState({ index: idx, lastDir: currentIndex < 1 ? 'prev' : 'next' });
+    try { ensureNext(); onTrackStart(); } catch (e) { report(e, 'trackChanged'); }
   });
   return pl;
 }
@@ -142,18 +152,43 @@ let loadSeq = 0;
 async function jump(i: number, dir: 'next' | 'prev') {
   try { await jumpInner(i, dir); } catch (e) { report(e, 'player.jump'); }
 }
+/* Поставить в плеер трек i очереди и следующий за ним, и сразу играть */
+function mount(i: number) {
+  const q = usePlayer.getState().queue;
+  const p = engine();
+  p.pause();
+  p.clear();
+  base = i;
+  p.add(source(q[i]));
+  nativeLen = 1;
+  if (q[i + 1]) { p.add(source(q[i + 1])); nativeLen = 2; }
+  p.skipTo(0);
+  p.play();
+  usePlayer.setState({ playing: true });
+}
+/* Следующий трек очереди должен лежать в плеере сразу за текущим (после добавлений, волны, перемешивания) */
+function ensureNext() {
+  if (!pl) return;
+  const s = usePlayer.getState();
+  const cur = s.index - base;
+  const want = s.queue[s.index + 1];
+  for (let k = nativeLen - 1; k > cur; k--) pl.remove(k);
+  nativeLen = cur + 1;
+  if (want) { pl.add(source(want)); nativeLen++; }
+}
+
 async function jumpInner(i: number, dir: 'next' | 'prev') {
   const seq = ++loadSeq;
   const t = usePlayer.getState().queue[i];
-  usePlayer.setState({ index: i, lastDir: dir });
-  useProgress.setState({ time: 0, duration: t?.duration || 0 });
-  if (t && t.source === 'yt' && Date.now() - (primed.get(t.id) || 0) > 20 * 60e3) {
+  if (!t) return;
+  usePlayer.setState({ index: i, lastDir: dir, playing: true });
+  useProgress.setState({ time: 0, duration: t.duration || 0 });
+  if (t.source === 'yt' && Date.now() - (primed.get(t.id) || 0) > 20 * 60e3) {
     engine().pause(); usePlayer.setState({ buffering: true });
     await prime(t);
     if (seq !== loadSeq) return;
   }
-  engine().skipTo(i);
-  engine().play();
+  mount(i);
   onTrackStart();
 }
 async function load(queue: Track[], index: number) {
@@ -166,10 +201,7 @@ async function load(queue: Track[], index: number) {
   await prime(queue[index]);
   console.log(`[lull] prime ${queue[index]?.id} ${Date.now() - t0}ms`);
   if (seq !== loadSeq) return; // пока ждали, выбрали другой трек
-  p.clear();
-  queue.forEach((t) => p.add(source(t)));
-  p.skipTo(index);
-  p.play();
+  mount(index);
   onTrackStart();
 }
 
@@ -224,38 +256,37 @@ export const player = {
     const s = usePlayer.getState();
     if (!currentTrack(s)) return player.play([t], t.id);
     const q = s.queue.slice(); q.splice(s.index + 1, 0, t);
-    engine().insert(source(t), s.index + 1);
     usePlayer.setState({ queue: q });
+    ensureNext();
   },
   addToQueue(t: Track) {
     const s = usePlayer.getState();
     if (!currentTrack(s)) return player.play([t], t.id);
-    engine().add(source(t));
     usePlayer.setState({ queue: [...s.queue, t] });
+    if (s.index === s.queue.length - 1) ensureNext();
   },
   removeAt(i: number) {
     const s = usePlayer.getState();
     if (i === s.index) return;
     const q = s.queue.slice(); q.splice(i, 1);
-    engine().remove(i);
+    if (i < s.index) base--;
     usePlayer.setState({ queue: q, index: i < s.index ? s.index - 1 : s.index });
+    if (i === s.index + 1) ensureNext();
   },
   move(from: number, to: number) {
     const s = usePlayer.getState();
     if (from === s.index || to <= s.index || from === to) return;
     const q = s.queue.slice(); const [t] = q.splice(from, 1); q.splice(to, 0, t);
-    const p = engine(); p.remove(from); p.insert(source(t), to);
     usePlayer.setState({ queue: q });
+    ensureNext();
   },
   /* Волна: если исходный трек уже играет, не перезапускаем его, а меняем всё, что дальше */
   startWave(list: Track[]) {
     const s = usePlayer.getState();
     const cur = currentTrack(s);
     if (cur && list[0]?.id === cur.id) {
-      const p = engine();
-      for (let i = s.queue.length - 1; i > s.index; i--) p.remove(i);
-      list.slice(1).forEach((t) => p.add(source(t)));
       usePlayer.setState({ queue: [...s.queue.slice(0, s.index + 1), ...list.slice(1)], shuffle: false });
+      ensureNext();
       if (!s.playing) player.toggle();
       return;
     }
@@ -263,29 +294,26 @@ export const player = {
   },
   clearUpcoming() {
     const s = usePlayer.getState();
-    const p = engine();
-    for (let i = s.queue.length - 1; i > s.index; i--) p.remove(i);
     usePlayer.setState({ queue: s.queue.slice(0, s.index + 1) });
+    ensureNext();
   },
   toggleShuffle() {
     const s = usePlayer.getState();
     const on = !s.shuffle;
     if (on && currentTrack(s)) {
       const head = s.queue.slice(0, s.index + 1), rest = shuffled(s.queue.slice(s.index + 1));
-      const p = engine();
-      for (let i = s.queue.length - 1; i > s.index; i--) p.remove(i);
-      rest.forEach((t) => p.add(source(t)));
       usePlayer.setState({ shuffle: on, queue: [...head, ...rest] });
+      ensureNext();
     } else usePlayer.setState({ shuffle: on });
   },
   cycleRepeat() {
     const r: Repeat = ({ off: 'all', all: 'one', one: 'off' } as const)[usePlayer.getState().repeat];
-    engine().loop = r === 'off' ? 'none' : r === 'one' ? 'single' : 'all';
+    engine().loop = r === 'one' ? 'single' : 'none'; // «по кругу» для всей очереди делаем сами в конце окна
     usePlayer.setState({ repeat: r });
   },
   expand(v: boolean) { usePlayer.setState({ expanded: v && !!currentTrack() }); },
   stop() {
-    if (pl) { pl.pause(); pl.clear(); try { pl.clearLockScreenControls(); } catch {} }
+    if (pl) { pl.pause(); pl.clear(); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }
     usePlayer.setState({ queue: [], index: -1, playing: false, expanded: false });
   },
 };
