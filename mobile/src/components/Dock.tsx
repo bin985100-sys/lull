@@ -145,10 +145,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
   const coverSize = Math.max(150, Math.min(ww > 700 ? 480 : 360, h - 78 - 450));
   const enter = reduced ? undefined : slideIn(s.lastDir === 'next' ? 60 : -60, 0.9, 500);
   const close = () => player.expand(false);
-  const swipe = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => g.dy > 12 && Math.abs(g.dy) > Math.abs(g.dx),
-    onPanResponderRelease: (_, g) => { if (g.dy > 90) close(); },
-  })).current;
+  const swipe = useTrackSwipe(close);
   const [boxH, setBoxH] = useState(0);
   const sv = useRef<ScrollViewInstance>(null);
   const lyricsOpen = useLyricsUi((x) => x.open);
@@ -156,13 +153,15 @@ function Full({ h, active }: { h: number; active: boolean }) {
     <View style={{ flex: 1 }} onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}>
     <ScrollView ref={sv} showsVerticalScrollIndicator={false} scrollEnabled={!lyricsOpen} contentContainerStyle={{ paddingBottom: 24 }}>
     <View style={{ height: boxH || undefined, paddingHorizontal: 22, paddingTop: 18 }}>
-      <View {...swipe.panHandlers}>
+      <View {...swipe.handlers}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Pressable onPress={close} hitSlop={10} accessibilityRole="button" accessibilityLabel="Свернуть плеер" style={{ width: 48, height: 48, justifyContent: 'center' }}><Icon name="down" size={28} /></Pressable>
         <Pressable onPress={() => openSelectPlaylist(t)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Добавить в плейлист" style={{ width: 48, height: 48, alignItems: 'flex-end', justifyContent: 'center' }}><Icon name="plus" size={28} /></Pressable>
       </View>
+      <Animated.View style={swipe.style}>
       <Animated.View key={'c' + t.id} entering={enter} style={{ alignSelf: 'center', marginTop: 12, width: coverSize, aspectRatio: 1, borderRadius: 30, overflow: 'hidden', backgroundColor: C.s2 }}>
         <Image source={{ uri: t.artworkLarge || t.artwork }} placeholder={{ uri: t.artwork }} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} />
+      </Animated.View>
       </Animated.View>
       </View>
       <Animated.View key={'m' + t.id} entering={enter} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24 }}>
@@ -205,6 +204,39 @@ function Full({ h, active }: { h: number; active: boolean }) {
   );
 }
 
+
+/* ---------- свайп по треку: влево — следующий, вправо — предыдущий (как в Spotify и Apple Music) ---------- */
+function swipePrev() {
+  const s = usePlayer.getState();
+  if (s.index > 0) player.skipTo(s.index - 1);
+  else player.seek(0);
+}
+function useTrackSwipe(onDown?: () => void) {
+  const tx = useSharedValue(0);
+  const mode = useRef<'h' | 'v' | null>(null);
+  const pan = useRef(PanResponder.create({
+    /* забираем жест у кнопок, только когда палец явно повёл в сторону (или вниз — свернуть плеер) */
+    onMoveShouldSetPanResponderCapture: (_, g) => {
+      if (Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.3) { mode.current = 'h'; return true; }
+      if (onDown && g.dy > 14 && g.dy > Math.abs(g.dx) * 1.3) { mode.current = 'v'; return true; }
+      return false;
+    },
+    onPanResponderMove: (_, g) => { if (mode.current === 'h') tx.value = g.dx * 0.75; },
+    onPanResponderRelease: (_, g) => {
+      if (mode.current === 'h') {
+        const go = g.dx < -70 || g.vx < -0.7 ? 'next' : g.dx > 70 || g.vx > 0.7 ? 'prev' : null;
+        if (go) { haptic(); tx.value = 0; if (go === 'next') player.next(); else swipePrev(); }
+        else tx.value = withSpring(0, { damping: 18, stiffness: 220 });
+      } else if (mode.current === 'v' && g.dy > 90) onDown?.();
+      mode.current = null;
+    },
+    onPanResponderTerminate: () => { tx.value = withSpring(0); mode.current = null; },
+    onPanResponderTerminationRequest: () => mode.current !== 'h',
+  })).current;
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }], opacity: 1 - Math.min(0.5, Math.abs(tx.value) / 400) }));
+  return { handlers: pan.panHandlers, style };
+}
+
 /* ---------- мини-строка ---------- */
 function Mini() {
   const s = usePlayer();
@@ -212,14 +244,17 @@ function Mini() {
   const t = currentTrack(s)!;
   const reduced = useReducedMotion();
   const enter = reduced ? undefined : slideIn(s.lastDir === 'next' ? 28 : -28, 1, 420);
+  const swipe = useTrackSwipe();
   return (
     <View style={st.miniRow}>
-      <Pressable onPress={() => { haptic(); player.expand(true); }} accessibilityRole="button" accessibilityLabel={`Открыть плеер: ${t.title}`} style={{ flex: 1, minWidth: 0, height: 60 }}>
+      <Animated.View {...swipe.handlers} style={[{ flex: 1, minWidth: 0 }, swipe.style]}>
+      <Pressable onPress={() => { haptic(); player.expand(true); }} accessibilityRole="button" accessibilityLabel={`Открыть плеер: ${t.title}. Свайп влево — следующий трек, вправо — предыдущий`} style={{ flex: 1, minWidth: 0, height: 60 }}>
         <Animated.View key={t.id} entering={enter} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
           <View style={{ width: 50, height: 50, borderRadius: 12, overflow: 'hidden', backgroundColor: C.s2 }}><Image source={{ uri: t.artwork }} style={StyleSheet.absoluteFill} /></View>
           <T numberOfLines={1} style={{ flex: 1, fontFamily: F.bold, fontSize: 16.5 }}>{t.title}</T>
         </Animated.View>
       </Pressable>
+      </Animated.View>
       <Pressable onPress={() => { haptic(); player.toggle(); }} hitSlop={6} accessibilityRole="button" accessibilityLabel={s.playing ? 'Пауза' : 'Слушать'} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
         {loading ? <ActivityIndicator color={C.tx} /> : <PlayPause playing={s.playing} size={28} />}
       </Pressable>
