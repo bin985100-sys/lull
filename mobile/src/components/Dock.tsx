@@ -3,7 +3,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, PanResponder, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import Animated, {
   cubicBezier, Easing, FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -18,6 +18,7 @@ import { haptic, T } from '@/ui/kit';
 import { PlayPause } from '@/ui/PlayPause';
 import { slideIn } from '@/ui/anim';
 import { resetTo } from '@/nav';
+import { closeLyrics, LyricsCard, LyricsFull, useLyricsUi } from './Lyrics';
 import { TintLayer } from './TintLayer';
 import { likeWithUndo, openSelectPlaylist } from './TrackRow';
 import { openWave } from './Wave';
@@ -148,8 +149,14 @@ function Full({ h, active }: { h: number; active: boolean }) {
     onMoveShouldSetPanResponder: (_, g) => g.dy > 12 && Math.abs(g.dy) > Math.abs(g.dx),
     onPanResponderRelease: (_, g) => { if (g.dy > 90) close(); },
   })).current;
+  const [boxH, setBoxH] = useState(0);
+  const sv = useRef<ScrollViewInstance>(null);
+  const lyricsOpen = useLyricsUi((x) => x.open);
   return (
-    <View style={{ flex: 1, paddingHorizontal: 22, paddingTop: 18 }} {...swipe.panHandlers}>
+    <View style={{ flex: 1 }} onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}>
+    <ScrollView ref={sv} showsVerticalScrollIndicator={false} scrollEnabled={!lyricsOpen} contentContainerStyle={{ paddingBottom: 24 }}>
+    <View style={{ height: boxH || undefined, paddingHorizontal: 22, paddingTop: 18 }}>
+      <View {...swipe.panHandlers}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Pressable onPress={close} hitSlop={10} accessibilityRole="button" accessibilityLabel="Свернуть плеер" style={{ width: 48, height: 48, justifyContent: 'center' }}><Icon name="down" size={28} /></Pressable>
         <Pressable onPress={() => openSelectPlaylist(t)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Добавить в плейлист" style={{ width: 48, height: 48, alignItems: 'flex-end', justifyContent: 'center' }}><Icon name="plus" size={28} /></Pressable>
@@ -157,6 +164,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
       <Animated.View key={'c' + t.id} entering={enter} style={{ alignSelf: 'center', marginTop: 12, width: coverSize, aspectRatio: 1, borderRadius: 30, overflow: 'hidden', backgroundColor: C.s2 }}>
         <Image source={{ uri: t.artworkLarge || t.artwork }} placeholder={{ uri: t.artwork }} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} />
       </Animated.View>
+      </View>
       <Animated.View key={'m' + t.id} entering={enter} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <T v="h1" numberOfLines={1} style={{ fontSize: 28, lineHeight: 34 }}>{t.title}</T>
@@ -182,6 +190,17 @@ function Full({ h, active }: { h: number; active: boolean }) {
         <Pressable onPress={() => openWave(t)} accessibilityRole="button" style={st.extra}><Icon name="waves" size={28} /><T style={{ fontSize: 16 }}>Волна</T></Pressable>
         <Pressable onPress={() => { close(); router.push('/queue'); }} accessibilityRole="button" style={st.extra}><Icon name="queue" size={28} /><T style={{ fontSize: 16 }}>Очередь</T></Pressable>
       </View>
+      {/* подсказка: ниже — текст песни */}
+      <Pressable onPress={() => sv.current?.scrollTo({ y: Math.max(0, boxH - 120), animated: true })} accessibilityRole="button" accessibilityLabel="Показать текст песни"
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 6, alignItems: 'center', paddingVertical: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, opacity: 0.6 }}><T style={{ fontSize: 13, fontFamily: F.semi }}>Текст</T><Icon name="down" size={18} /></View>
+      </Pressable>
+    </View>
+    <View style={{ paddingHorizontal: 16 }}>
+      <LyricsCard track={t} />
+    </View>
+    </ScrollView>
+    {lyricsOpen ? <LyricsFull track={t} /> : null}
     </View>
   );
 }
@@ -254,6 +273,7 @@ export function Dock() {
     return () => clearTimeout(t);
   }, [has]);
   useEffect(() => {
+    if (!expanded) closeLyrics();
     if (expanded) {
       setFullMounted(true);
       const r = requestAnimationFrame(() => requestAnimationFrame(() => setFullOn(true)));

@@ -28,6 +28,8 @@ jobs:
         run: node scripts/sync.test.mjs
       - name: Тесты плеера
         run: node scripts/player.test.mjs
+      - name: Тесты текста песен
+        run: node scripts/lyrics.test.mjs
       - run: npx expo export -p web
       - uses: actions/upload-artifact@v4
         with: { name: Lull-Mobile-Web, path: mobile/dist, if-no-files-found: error }
