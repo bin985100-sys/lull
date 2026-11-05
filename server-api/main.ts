@@ -5,7 +5,8 @@
  */
 import dns from 'node:dns';
 import http from 'node:http';
-import { album, artist, charts, home, homeChips, playlist, search, suggest, suggestRich, upNext, viaInnertube } from '../electron/yt';
+import fs from 'node:fs';
+import { album, artist, charts, home, homeChips, playlist, search, setAuth, suggest, suggestRich, upNext, viaInnertube } from '../electron/yt';
 import { storeGet, storeSet } from '../electron/store';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
@@ -15,6 +16,26 @@ import { authEnabled, deleteAccount, googleCallback, googleGo, logout, me, page,
 const PORT = Number(process.env.LULL_API_PORT || 8787);
 /* Ссылка на звук YouTube привязана к адресу, с которого её получили; звук сервер качает по IPv4 — значит и просим по IPv4 */
 dns.setDefaultResultOrder('ipv4first');
+/* Аккаунт YouTube сервера (файл cookies, тот же, что у звуковой части): с ним YouTube не спрашивает «вы бот»
+   и быстрый способ получения звука снова работает. Файл кладёт владелец сервера, в репозитории его нет. */
+const COOKIES = process.env.LULL_YT_COOKIES || '/var/lib/lull-relay/yt-cookies.txt';
+export function cookieHeader(netscape: string): string {
+  const out = new Map<string, string>();
+  for (const line of netscape.split(/\r?\n/)) {
+    const raw = line.startsWith('#HttpOnly_') ? line.slice(10) : line;
+    if (!raw || raw.startsWith('#')) continue;
+    const f = raw.split('\t');
+    if (f.length < 7 || !/(^|\.)youtube\.com$/.test(f[0])) continue;
+    out.set(f[5], f[6].trim());
+  }
+  return [...out].map(([k, v]) => `${k}=${v}`).join('; ');
+}
+try {
+  if (fs.existsSync(COOKIES)) {
+    const c = cookieHeader(fs.readFileSync(COOKIES, 'utf8'));
+    if (c) { await setAuth(c); console.log(`[api] аккаунт YouTube подключён (${c.split('; ').length} cookies)`); }
+  }
+} catch (e) { console.warn(`[api] cookies YouTube не подключились: ${(e as Error).message}`); }
 /* Телефонам нужен AAC (m4a) — он играет везде и начинается быстрее */
 storeSet('settings', { ...(storeGet<Record<string, unknown>>('settings') ?? {}), quality: 'aac' });
 const cache = new Map<string, { t: number; body: string }>();
