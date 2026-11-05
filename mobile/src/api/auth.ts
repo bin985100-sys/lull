@@ -4,9 +4,9 @@ import * as WebBrowser from 'expo-web-browser';
 import { AppState, Linking, Platform } from 'react-native';
 import { create } from 'zustand';
 
-import { resetTo } from '@/nav';
 import { useLibrary } from '@/store/library';
 import { LULL_API } from './lull';
+import { finishLogin } from './session';
 
 export type Provider = 'telegram' | 'google';
 type Wait = { provider: Provider; nonce: string; url: string } | null;
@@ -56,7 +56,7 @@ async function doCheck(nonceArg?: string, providerArg?: Provider) {
       useLibrary.getState().setAccount({ provider: prov, name: r.user.name, avatar: r.user.avatar, token: r.token, userId: r.user.id, youtube: r.user.youtube?.name ?? null });
       const f = onDone; onDone = null;
       /* приложение перезапускалось и экран входа уже не ждёт — переходим сами */
-      if (f) f(); else resetTo(useLibrary.getState().onboarded ? '/listen' : '/onboarding');
+      if (f) f(); else finishLogin();
     } else if (r.status === 'expired' && !useLibrary.getState().account.token && w?.nonce === nonce) {
       stop();
       useAuthWait.setState({ error: 'Время на вход вышло. Попробуй ещё раз.' });

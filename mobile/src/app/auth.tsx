@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { View } from 'react-native';
 
 import { checkNow, useAuthWait } from '@/api/auth';
+import { finishLogin } from '@/api/session';
 import { useLibrary } from '@/store/library';
 import { C } from '@/theme/tokens';
 import { Spinner } from '@/ui/kit';
@@ -16,7 +17,7 @@ export default function AuthReturn() {
     const tick = async () => {
       await checkNow(nonce);
       const acc = useLibrary.getState().account;
-      if (acc.token) { resetTo(useLibrary.getState().onboarded ? '/listen' : '/onboarding'); return true; }
+      if (acc.token) { await finishLogin(); return true; }
       if ((!nonce && !useAuthWait.getState().wait) || ++n > 20) { resetTo('/welcome'); return true; }
       return false;
     };

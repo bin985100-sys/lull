@@ -1,5 +1,4 @@
-import { pull } from '@/api/sync';
-import { resetTo } from '@/nav';
+import { finishLogin, useSession } from '@/api/session';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -27,13 +26,12 @@ function Mark() {
 }
 
 /* после входа сначала забираем библиотеку с сервера: на новом телефоне сразу вернутся любимые и настройки */
-export const afterLogin = async () => {
-  try { await Promise.race([pull(), new Promise((r) => setTimeout(r, 6000))]); } catch {}
-  resetTo(useLibrary.getState().onboarded ? '/listen' : '/onboarding');
-};
+export const afterLogin = () => finishLogin();
 
 export default function Welcome() {
   const { wait, error } = useAuthWait();
+  const session = useSession();
+  const signedIn = useLibrary((s) => !!s.account.token);
   const [busy, setBusy] = useState<Provider | null>(null);
   useEffect(() => { if (error) toast(error, 'info'); }, [error]);
   const go = async (p: Provider) => {
@@ -48,7 +46,18 @@ export default function Welcome() {
       <Mark />
       <T v="xl" accessibilityRole="header">{'Ближе\nк музыке.'}</T>
       <View style={{ flex: 1, minHeight: 28 }} />
-      {wait ? (
+      {signedIn && (session.loading || session.error) ? (
+        <View style={{ gap: 12 }} accessibilityLiveRegion="polite">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: 26, backgroundColor: C.s1 }}>
+            {session.loading ? <ActivityIndicator color={C.tx} /> : null}
+            <View style={{ flex: 1 }}>
+              <T>{session.loading ? 'Загружаем твою библиотеку' : 'Не получилось загрузить библиотеку'}</T>
+              <T v="small" style={{ marginTop: 2 }}>{session.loading ? 'Любимые треки, плейлисты и исполнители' : 'Проверь интернет и попробуй ещё раз'}</T>
+            </View>
+          </View>
+          {session.error ? <Btn label="Повторить" icon="refresh" onPress={() => finishLogin()} /> : null}
+        </View>
+      ) : wait ? (
         <Animated.View entering={FadeIn.duration(250)} style={{ gap: 12 }} accessibilityLiveRegion="polite">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: 26, backgroundColor: C.s1 }}>
             <ActivityIndicator color={C.tx} />
