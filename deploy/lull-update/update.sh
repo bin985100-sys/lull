@@ -72,5 +72,17 @@ BLOCK
 else
   echo "  !! app.lull.website не указывает на этот сервер ($MYIP). Добавь A-запись app → $MYIP и запусти скрипт снова."
 fi
+echo "== 4. Лендинг lull.website"
+if [ -f "$HERE/landing.tgz" ]; then
+  SITE=/var/www/lull-site
+  mkdir -p "$SITE"
+  # старое убираем, папку downloads (APK и прочие файлы) оставляем
+  find "$SITE" -mindepth 1 -maxdepth 1 ! -name downloads -exec rm -rf {} +
+  tar xzf "$HERE/landing.tgz" -C "$SITE"
+  chmod -R a+rX "$SITE"
+  if grep -q "^lull.website" /etc/caddy/Caddyfile; then systemctl reload caddy; echo "  лендинг обновлён: https://lull.website"; else echo "  !! lull.website не настроен в Caddy на этом сервере — файлы лежат в $SITE"; fi
+  [ -f "$SITE/downloads/Lull.apk" ] && echo "  APK: $(du -h "$SITE/downloads/Lull.apk" | cut -f1), от $(date -r "$SITE/downloads/Lull.apk" '+%d.%m %H:%M')" || echo "  !! нет $SITE/downloads/Lull.apk — положи туда APK"
+fi
+
 echo
 echo "Готово. Секреты входа: nano $ENVF  →  systemctl restart lull-api"

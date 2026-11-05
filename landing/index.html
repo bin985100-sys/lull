@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lull — музыка в телефоне</title>
+<meta name="description" content="Lull для Android и iPhone: волна по любому треку, итоги месяца, рекомендации с настройками и экран в цвет обложки. Бесплатно.">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Lull — музыка в телефоне">
+<meta property="og:description" content="Волна по любому треку, итоги месяца и экран в цвет обложки. Android и iPhone.">
+<meta property="og:image" content="https://lull.website/assets/night.webp">
+<link rel="icon" type="image/png" href="/assets/icon-64.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="preload" href="/assets/Montserrat_800ExtraBold.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:M;src:url(/assets/Montserrat_500Medium.woff2) format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:M;src:url(/assets/Montserrat_600SemiBold.woff2) format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:M;src:url(/assets/Montserrat_800ExtraBold.woff2) format('woff2');font-weight:800;font-display:swap}
+
+:root{
+  --black:#000;
+  --paper:#f5f5f4;
+  --ash:#9ba0a7;
+  --smoke:#6f747b;
+  --panel:#121315;
+  --panel2:#1a1c1f;
+  --line:rgba(255,255,255,.08);
+  /* оттенки обложек — ими окрашивается экран, как в приложении */
+  --t-night:#3b2f6b; --t-foryou:#7a4a1c; --t-focus:#36503f; --t-exhale:#334654; --t-motion:#6b3d27;
+  --ease:cubic-bezier(.22,.8,.2,1);
+  --gut:clamp(16px,5vw,64px);
+}
+*{box-sizing:border-box}
+html{background:var(--black);color:var(--paper);-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--black);font:500 17px/1.55 M,system-ui,sans-serif;overflow-x:hidden}
+img{display:block;max-width:100%}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--paper);outline-offset:3px;border-radius:6px}
+.ico{display:inline-flex;width:1em;height:1em}
+.ico svg{width:100%;height:100%}
+
+/* ---------- шапка ---------- */
+.top{position:absolute;inset:0 0 auto;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:22px var(--gut)}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:800;font-size:21px;letter-spacing:-.02em}
+.brand svg{width:30px;height:30px}
+.top nav{display:flex;gap:6px}
+.top nav a{text-decoration:none;font-weight:600;font-size:15px;padding:10px 16px;border-radius:999px;color:var(--ash)}
+.top nav a:hover{color:var(--paper);background:rgba(255,255,255,.06)}
+.top nav a.get{color:#000;background:var(--paper)}
+
+/* ---------- первый экран ---------- */
+.hero{position:relative;min-height:100svh;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);align-items:center;gap:24px;padding:110px var(--gut) 70px;isolation:isolate;overflow:hidden}
+.tints{position:absolute;inset:0;z-index:-1;pointer-events:none}
+.tints i{position:absolute;inset:-20%;opacity:0;transition:opacity 1.6s var(--ease);
+  background:radial-gradient(60% 55% at 72% 48%,var(--c) 0%,transparent 70%),radial-gradient(40% 40% at 10% 100%,color-mix(in srgb,var(--c) 45%,transparent) 0%,transparent 70%)}
+.tints i.on{opacity:1}
+.hero::after{content:"";position:absolute;inset:auto 0 0;height:180px;background:linear-gradient(transparent,#000);z-index:-1}
+
+.poster{font-weight:800;text-transform:uppercase;letter-spacing:-.045em;line-height:.84;margin:0;font-size:clamp(60px,12.2vw,196px)}
+.poster span{display:block}
+.poster span:nth-child(2){padding-left:.42em}
+.lede{max-width:30ch;margin:34px 0 0;font-size:clamp(18px,1.6vw,21px);color:#d6d7d8;line-height:1.5}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.btn{display:inline-flex;align-items:center;gap:12px;height:58px;padding:0 26px;border-radius:999px;text-decoration:none;font-weight:800;font-size:16.5px;letter-spacing:-.01em;transition:transform .25s var(--ease),background .25s}
+.btn:active{transform:scale(.97)}
+.btn.white{background:var(--paper);color:#000}
+.btn.glass{background:rgba(255,255,255,.1);color:var(--paper);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.btn.glass:hover{background:rgba(255,255,255,.16)}
+.btn .ico{font-size:22px}
+.fine{margin-top:16px;font-size:14px;color:var(--ash)}
+
+/* ---------- телефон ---------- */
+.phone{--w:320px;position:relative;width:var(--w);aspect-ratio:9/19.5;border-radius:calc(var(--w)*.16);background:#000;padding:calc(var(--w)*.032);
+  box-shadow:0 0 0 1.5px #2b2e33,0 0 0 calc(var(--w)*.012) #0d0e10,0 40px 90px -20px rgba(0,0,0,.9);flex:none}
+.screen{position:relative;height:100%;border-radius:calc(var(--w)*.13);overflow:hidden;background:#000;font-size:calc(var(--w)*.043)}
+.island{position:absolute;top:calc(var(--w)*.03);left:50%;translate:-50% 0;width:31%;height:calc(var(--w)*.085);background:#000;border-radius:99px;z-index:3}
+.hero .phone{justify-self:center;--w:min(340px,72vw)}
+
+/* экран плеера */
+.player{position:absolute;inset:0;display:flex;flex-direction:column;padding:16% 7.5% 8%}
+.player .wash{position:absolute;inset:0;z-index:0}
+.player .wash i{position:absolute;inset:0;opacity:0;transition:opacity 1.6s var(--ease);background:linear-gradient(180deg,color-mix(in srgb,var(--c) 85%,#000) 0%,color-mix(in srgb,var(--c) 30%,#000) 55%,#000 100%)}
+.player .wash i.on{opacity:1}
+.player>*:not(.wash){position:relative;z-index:1}
+.p-top{display:flex;justify-content:space-between;align-items:center;color:var(--paper);font-weight:600;font-size:.8em}
+.p-top .ico{font-size:1.5em}
+.p-cover{position:relative;margin-top:9%;aspect-ratio:1;border-radius:7%;overflow:hidden;background:#111;box-shadow:0 18px 40px -12px rgba(0,0,0,.7)}
+.p-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.06);transition:opacity 1s var(--ease),transform 1.4s var(--ease)}
+.p-cover img.on{opacity:1;transform:none}
+.p-meta{margin-top:8%;display:flex;align-items:center;gap:8px}
+.p-meta div{flex:1;min-width:0}
+.p-title{font-weight:800;font-size:1.32em;letter-spacing:-.02em;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-artist{color:rgba(245,245,244,.66);font-weight:600;font-size:.95em;margin-top:2px}
+.p-meta .ico{font-size:1.55em}
+.p-bar{margin-top:7%;height:4px;border-radius:9px;background:rgba(255,255,255,.18);overflow:hidden}
+.p-bar b{display:block;height:100%;width:0;background:var(--paper);border-radius:9px}
+.p-time{display:flex;justify-content:space-between;font-size:.66em;color:rgba(245,245,244,.6);margin-top:6px;font-weight:600}
+.p-next{margin-top:9%;display:flex;flex-direction:column;gap:.55em}
+.p-next small{color:rgba(245,245,244,.55);font-weight:700;font-size:.66em}
+.p-next div{display:flex;align-items:center;gap:.7em}
+.p-next img{width:2.2em;height:2.2em;border-radius:.4em;object-fit:cover;object-position:left}
+.p-next p{margin:0;font-weight:700;font-size:.78em;line-height:1.2}
+.p-next p span{display:block;color:rgba(245,245,244,.55);font-weight:600;font-size:.9em}
+.p-ctl{margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding:0 4%}
+.p-ctl .ico{font-size:1.45em;color:rgba(245,245,244,.8)}
+.p-ctl .big{display:grid;place-items:center;width:4.3em;height:4.3em;border-radius:50%;background:var(--paper);color:#000}
+.p-ctl .big .ico{font-size:1.7em;color:#000}
+.p-ctl .sk .ico{font-size:2em;color:var(--paper)}
+
+/* ---------- разделы ---------- */
+section{padding:clamp(80px,11vw,150px) var(--gut)}
+.h2{font-weight:800;text-transform:uppercase;letter-spacing:-.04em;line-height:.9;font-size:clamp(44px,7.4vw,112px);margin:0}
+.intro{max-width:46ch;color:#c9cbcd;font-size:clamp(17px,1.4vw,19.5px);margin:22px 0 0}
+
+/* экраны приложения */
+.shots{display:flex;justify-content:safe center;gap:clamp(18px,3vw,40px);margin-top:clamp(40px,6vw,72px);overflow-x:auto;scroll-snap-type:x mandatory;padding:10px var(--gut) 30px;margin-left:calc(var(--gut)*-1);margin-right:calc(var(--gut)*-1);scrollbar-width:none}
+.shots::-webkit-scrollbar{display:none}
+.shot{scroll-snap-align:center;flex:none;display:flex;flex-direction:column;gap:22px;width:min(320px,74vw)}
+.shot .phone{--w:min(320px,74vw)}
+.shot h3{margin:0;font-weight:800;font-size:22px;letter-spacing:-.02em}
+.shot p{margin:6px 0 0;color:var(--ash);font-size:15.5px;line-height:1.5}
+
+/* главная в телефоне */
+.home{position:absolute;inset:0;padding:15% 6% 0;background:radial-gradient(90% 40% at 50% 0%,color-mix(in srgb,var(--t-foryou) 55%,#000),#000 75%)}
+.home .hd{display:flex;justify-content:space-between;align-items:center}
+.home .hd b{font-weight:800;font-size:1.65em;letter-spacing:-.03em}
+.av{width:1.9em;height:1.9em;border-radius:50%;background:linear-gradient(135deg,#8a6a4a,#3a2a1a)}
+.ins{margin-top:7%;border-radius:1.2em;padding:6% 6% 7%;background:rgba(255,255,255,.07);border:1px solid var(--line)}
+.ins small{display:block;color:var(--ash);font-weight:600;font-size:.72em}
+.ins strong{display:block;font-weight:800;font-size:2em;letter-spacing:-.04em;line-height:1.05;margin-top:4%}
+.ins .bars{display:flex;align-items:flex-end;gap:4%;height:2.6em;margin-top:6%}
+.ins .bars i{flex:1;border-radius:3px;background:rgba(245,245,244,.85)}
+.ins .bars i:nth-child(odd){background:rgba(245,245,244,.38)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:4%;margin-top:4%}
+.pair div{border-radius:1em;padding:7%;background:rgba(255,255,255,.07);border:1px solid var(--line);font-size:.78em;line-height:1.3}
+.pair b{display:block;font-weight:800;font-size:1.25em;letter-spacing:-.02em;margin-bottom:6%}
+.pair span{color:var(--ash);font-weight:600}
+.rail-t{margin:8% 0 4%;font-weight:800;font-size:1.05em}
+.rail{display:flex;gap:4%}
+.rail img{width:46%;flex:none;aspect-ratio:3/2;object-fit:cover;border-radius:.8em}
+.tabbar{position:absolute;left:5%;right:5%;bottom:3.5%;height:13%;border-radius:99px;background:rgba(34,36,40,.82);border:1px solid var(--line);display:flex;justify-content:space-around;align-items:center}
+.tabbar .ico{font-size:1.5em;color:var(--smoke)}
+.tabbar .ico.on{color:var(--paper)}
+
+/* волна в телефоне */
+.wave{position:absolute;inset:0;background:#000}
+.wave>img{position:absolute;inset:0 0 auto;height:42%;width:100%;object-fit:cover;opacity:.55;filter:blur(2px)}
+.sheet{position:absolute;inset:auto 0 0;height:78%;border-radius:1.6em 1.6em 0 0;background:#121315;border-top:1px solid var(--line);padding:4% 6% 0}
+.grab{width:14%;height:4px;border-radius:9px;background:#30343a;margin:0 auto 6%}
+.sheet h4{margin:0;font-weight:800;font-size:1.35em;letter-spacing:-.02em}
+.sheet .from{color:var(--ash);font-weight:600;font-size:.75em;margin-top:1%}
+.modes{margin-top:5%;display:flex;flex-direction:column;gap:2.4%}
+.modes div{display:flex;align-items:center;justify-content:space-between;padding:3.4% 4.5%;border-radius:.9em;background:#1a1c1f;font-weight:700;font-size:.8em}
+.modes div.on{background:var(--paper);color:#000}
+.modes .ico{font-size:1.2em}
+.len{display:flex;gap:3%;margin-top:5%}
+.len span{flex:1;text-align:center;padding:2.6% 0;border-radius:99px;background:#1a1c1f;font-weight:700;font-size:.75em}
+.len span.on{background:#30343a}
+.go{margin-top:5%;height:2.9em;border-radius:99px;background:var(--paper);color:#000;display:flex;align-items:center;justify-content:center;gap:.4em;font-weight:800;font-size:.85em}
+
+/* итоги месяца в телефоне */
+.month{position:absolute;inset:0;padding:15% 6% 0;background:radial-gradient(100% 50% at 50% 0%,color-mix(in srgb,var(--t-night) 70%,#000),#000 80%)}
+.month .big{font-weight:800;text-transform:uppercase;letter-spacing:-.05em;line-height:.86;font-size:3.1em;margin:4% 0 0}
+.month .sum{color:#d6d7d8;font-weight:600;font-size:.8em;margin-top:5%}
+.top3{margin-top:7%;display:flex;flex-direction:column;gap:3.2%}
+.top3 div{display:flex;align-items:center;gap:4%}
+.top3 em{font-style:normal;font-weight:800;font-size:1.3em;width:1.2em;color:var(--ash)}
+.top3 img{width:2.6em;height:2.6em;border-radius:50%;object-fit:cover;object-position:left}
+.top3 p{margin:0;flex:1;font-weight:700;font-size:.85em;line-height:1.25}
+.top3 p span{display:block;color:var(--ash);font-weight:600;font-size:.88em}
+.days{margin-top:8%;display:grid;grid-template-columns:repeat(15,1fr);gap:1.4%}
+.days i{aspect-ratio:1;border-radius:3px;background:rgba(245,245,244,.12)}
+.days i.a{background:rgba(245,245,244,.45)}.days i.b{background:rgba(245,245,244,.9)}
+
+/* возможности: список, не карточки */
+.feats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(32px,6vw,96px);margin-top:clamp(40px,6vw,72px);border-top:1px solid var(--line)}
+.feat{padding:30px 0 34px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:52px 1fr;gap:4px 18px}
+.feat .ico{font-size:30px;margin-top:3px}
+.feat h3{margin:0;font-weight:800;font-size:clamp(22px,2vw,27px);letter-spacing:-.025em;line-height:1.15}
+.feat p{grid-column:2;margin:6px 0 0;color:var(--ash);max-width:42ch}
+
+/* лента обложек */
+.covers{display:flex;gap:14px;padding:0 var(--gut);overflow:hidden}
+.covers img{width:clamp(220px,30vw,420px);aspect-ratio:3/2;object-fit:cover;border-radius:22px;flex:none}
+
+/* установка */
+.install{display:grid;align-items:stretch;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(16px,2.4vw,28px);margin-top:clamp(40px,6vw,64px)}
+.plat{border-radius:36px;padding:clamp(26px,3.4vw,44px);background:var(--panel);display:flex;flex-direction:column}
+.plat h3{margin:0;font-weight:800;font-size:clamp(30px,3.4vw,46px);letter-spacing:-.035em;line-height:1}
+.plat .sub{color:var(--ash);margin:10px 0 0;font-size:15.5px}
+.plat ol{list-style:none;margin:26px 0 30px;padding:0;counter-reset:s;display:flex;flex-direction:column;gap:16px}
+.plat li{counter-increment:s;display:grid;grid-template-columns:38px 1fr;gap:14px;align-items:start}
+.plat li::before{content:counter(s);display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--panel2);font-weight:800;font-size:16px}
+.plat li b{font-weight:700}
+.plat .btn{margin-top:auto;align-self:flex-start}
+.qr{display:flex;align-items:center;gap:22px;margin-top:28px;padding:18px;border-radius:24px;background:var(--panel);max-width:520px}
+.qr div:first-child{width:96px;height:96px;padding:8px;border-radius:14px;background:var(--paper);flex:none}
+.qr p{margin:0;color:#c9cbcd;font-size:15.5px}
+.qr b{color:var(--paper)}
+
+/* вопросы */
+.faq{margin-top:clamp(36px,5vw,56px);max-width:860px;border-top:1px solid var(--line)}
+details{border-bottom:1px solid var(--line)}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:20px;padding:26px 0;font-weight:800;font-size:clamp(19px,1.8vw,23px);letter-spacing:-.02em}
+summary::-webkit-details-marker{display:none}
+summary .ico{font-size:24px;color:var(--ash);transition:transform .35s var(--ease);flex:none}
+details[open] summary .ico{transform:rotate(180deg)}
+details p{margin:0 0 26px;color:var(--ash);max-width:60ch}
+
+/* подвал */
+.foot{padding:70px var(--gut) 50px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:24px;border-top:1px solid var(--line)}
+.foot .poster{font-size:clamp(70px,16vw,240px);color:#17181a;line-height:.8}
+.foot small{color:var(--smoke);font-size:14px}
+
+@media (max-width:900px){
+  .top nav a:not(.get){display:none}
+  .hero{grid-template-columns:1fr;padding-top:96px;gap:56px}
+  .hero .phone{--w:min(300px,78vw)}
+  .feats,.install{grid-template-columns:1fr}
+  .qr{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:0s!important;animation:none!important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="Lull — на главную"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="121 217 1040 857"><path fill="currentColor" d="M605.9 1052.5C648.5 1047.8 703.9 1030.1 716.5 1017.2C729.3 1004.3 724.7 985.5 707.3 979.0C700.0 976.3 697.5 976.6 678.3 983.1C555.4 1024.4 416.0 992.8 313.0 900.4C239.0 834.0 201.9 749.8 204.3 653.7C208.3 491.4 325.1 355.0 502.4 305.6L511.2 303.2L496.8 317.8C441.9 373.7 407.7 434.1 390.5 505.5C387.4 518.3 386.2 525.0 383.0 545.5C371.5 620.6 389.6 705.9 430.9 771.3C498.1 877.8 610.3 924.5 693.3 880.7C722.6 865.2 741.9 842.5 769.3 791.4C785.2 761.8 787.9 757.4 795.3 749.4C809.1 734.5 824.9 733.6 838.0 747.0C849.1 758.4 854.9 773.8 863.5 814.5C868.9 839.9 870.3 845.9 873.7 856.5C891.2 911.1 930.3 938.2 973.0 925.4C1000.9 917.0 1019.6 895.9 1040.0 849.5C1056.9 811.2 1064.9 801.0 1078.0 801.0C1084.1 801.0 1090.0 803.9 1096.3 809.9C1109.5 822.4 1127.1 822.0 1136.7 809.2C1145.6 797.4 1143.5 786.1 1129.7 771.4C1107.2 747.6 1075.3 741.3 1047.1 755.1C1028.1 764.5 1012.2 784.7 995.5 821.0C975.8 863.9 967.0 875.0 952.2 875.0C935.4 875.0 925.5 856.0 914.6 802.3C905.9 759.8 897.7 737.7 883.6 718.6C859.3 685.8 818.3 675.3 783.2 692.9C762.7 703.2 744.4 723.7 727.2 755.5C694.4 816.1 682.5 830.1 655.3 839.9C607.0 857.5 538.0 825.6 492.9 765.0C437.0 689.9 422.3 585.0 453.6 485.3C480.4 400.0 551.6 317.1 625.3 285.4C643.9 277.5 648.3 272.6 648.4 259.9C648.4 249.2 642.5 241.4 631.6 238.0C625.8 236.1 582.2 237.3 559.5 239.9C463.8 251.0 375.5 288.1 302.5 348.0C213.2 421.3 158.1 515.9 143.7 620.5C139.4 652.2 140.8 698.6 147.1 732.0C162.5 812.8 208.8 888.2 281.7 951.1C354.8 1014.3 427.0 1045.2 521.0 1053.5C541.0 1055.3 586.1 1054.8 605.9 1052.5Z"/></svg>Lull</a>
+  <nav aria-label="Разделы">
+    <a href="#inside">Экраны</a>
+    <a href="#features">Возможности</a>
+    <a href="#faq">Вопросы</a>
+    <a class="get" href="#install">Установить</a>
+  </nav>
+</header>
+
+<main>
+<section class="hero" aria-labelledby="h1">
+  <div class="tints" aria-hidden="true">
+    <i class="on" style="--c:var(--t-night)"></i><i style="--c:var(--t-foryou)"></i><i style="--c:var(--t-focus)"></i><i style="--c:var(--t-exhale)"></i><i style="--c:var(--t-motion)"></i>
+  </div>
+  <div>
+    <h1 class="poster" id="h1"><span>Музыка</span><span>ближе</span></h1>
+    <p class="lede">Lull — плеер для телефона. Включи любой трек, и он соберёт волну похожей музыки, а экран окрасится в цвет обложки.</p>
+    <div class="cta">
+      <a class="btn white" href="/downloads/Lull.apk" download>Скачать для Android <span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></svg></span></a>
+      <a class="btn glass" href="#install">Установить на iPhone</a>
+    </div>
+    <p class="fine">Бесплатно, без подписки и рекламы.</p>
+  </div>
+
+  <div class="phone" aria-label="Экран плеера Lull" role="img">
+    <div class="screen">
+      <div class="island"></div>
+      <div class="player">
+        <div class="wash"><i class="on" style="--c:var(--t-night)"></i><i style="--c:var(--t-foryou)"></i><i style="--c:var(--t-focus)"></i><i style="--c:var(--t-exhale)"></i><i style="--c:var(--t-motion)"></i></div>
+        <div class="p-top"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></svg></span><span>Волна по треку</span><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18.5" cy="12" r="2"/></svg></span></div>
+        <div class="p-cover">
+          <img class="on" src="/assets/night-sq.webp" alt=""><img src="/assets/foryou-sq.webp" alt="" loading="lazy"><img src="/assets/focus-sq.webp" alt="" loading="lazy"><img src="/assets/exhale-sq.webp" alt="" loading="lazy"><img src="/assets/motion-sq.webp" alt="" loading="lazy">
+        </div>
+        <div class="p-meta"><div><div class="p-title" id="pt">Окна напротив</div><div class="p-artist" id="pa">Полуночники</div></div><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20.9c-.25 0-.5-.07-.72-.2C10.9 20.47 3 15.6 3 9.5a5.2 5.2 0 0 1 9-3.55A5.2 5.2 0 0 1 21 9.5c0 6.1-7.9 10.97-8.28 11.2-.22.13-.47.2-.72.2z"/></svg></span></div>
+        <div class="p-bar"><b id="pb"></b></div>
+        <div class="p-time"><span id="pc">0:00</span><span>3:24</span></div>
+        <div class="p-next" aria-hidden="true"><small>Далее в волне</small>
+          <div><img src="/assets/focus-sq.webp" alt=""><p>Тихий этаж<span>Сад камней</span></p></div>
+          <div><img src="/assets/exhale-sq.webp" alt=""><p>Выдох<span>Северный берег</span></p></div>
+        </div>
+        <div class="p-ctl"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 7h2.6c2 0 3.2 1 4.3 2.7l2.2 3.6c1.1 1.7 2.3 2.7 4.3 2.7H20"/><path d="M4 17h2.6c1.3 0 2.2-.4 3-1.2M20 7h-2.6c-1.3 0-2.2.4-3 1.2"/><path d="m17.5 4.5 2.5 2.5-2.5 2.5M17.5 14.5l2.5 2.5-2.5 2.5"/></svg></span><span class="sk ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M18.4 6c0-1-1.1-1.62-1.95-1.1l-8.4 5.1c-.82.5-.82 1.7 0 2.2l8.4 5.1c.85.52 1.95-.1 1.95-1.1z"/><rect x="4.4" y="4.6" width="3.4" height="14.8" rx="1.7"/></svg></span><span class="big"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><rect x="5.6" y="4.2" width="4.4" height="15.6" rx="2.2"/><rect x="14" y="4.2" width="4.4" height="15.6" rx="2.2"/></svg></span></span><span class="sk ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M5.6 6c0-1 1.1-1.62 1.95-1.1l8.4 5.1c.82.5.82 1.7 0 2.2l-8.4 5.1c-.85.52-1.95-.1-1.95-1.1z"/><rect x="16.2" y="4.6" width="3.4" height="14.8" rx="1.7"/></svg></span><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="M5 11V9.5A3.5 3.5 0 0 1 8.5 6H19"/><path d="m16 3 3 3-3 3"/><path d="M19 13v1.5a3.5 3.5 0 0 1-3.5 3.5H5"/><path d="m8 21-3-3 3-3"/></svg></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="inside" aria-labelledby="h-inside">
+  <h2 class="h2" id="h-inside">Под тебя</h2>
+  <p class="intro">Lull запоминает, кого ты слушаешь, что пропускаешь и что любишь, и с каждым днём подбирает точнее.</p>
+  <div class="shots">
+    <figure class="shot" style="margin:0">
+      <div class="phone"><div class="screen"><div class="island"></div>
+        <div class="home">
+          <div class="hd"><b>Слушать</b><span class="av"></span></div>
+          <div class="ins"><small>Твой ноябрь</small><strong>14 ч 20 мин</strong>
+            <div class="bars" aria-hidden="true"><i style="height:30%"></i><i style="height:55%"></i><i style="height:42%"></i><i style="height:80%"></i><i style="height:62%"></i><i style="height:100%"></i><i style="height:48%"></i></div></div>
+          <div class="pair"><div><b>4 ч 05 мин</b><span>с Полуночниками в этом месяце</span></div><div><b>На повторе</b><span>«Тихий этаж» — 23 раза</span></div></div>
+          <div class="rail-t">Для тебя</div>
+          <div class="rail"><img src="/assets/foryou.webp" alt="" loading="lazy"><img src="/assets/motion.webp" alt="" loading="lazy"></div>
+          <div class="tabbar"><span class="ico on"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.7"><path d="M9.8 3.6c-2.6 2.6-2.6 5.6-.6 8.4 2 2.8 2 5.8-.6 8.4"/><path d="M16.2 3.6c-2.6 2.6-2.6 5.6-.6 8.4 2 2.8 2 5.8-.6 8.4"/></svg></span><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="M10.1 3.9a2.7 2.7 0 0 1 3.8 0l6.2 6.2a2.7 2.7 0 0 1 0 3.8l-6.2 6.2a2.7 2.7 0 0 1-3.8 0l-6.2-6.2a2.7 2.7 0 0 1 0-3.8z"/></svg></span><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><rect x="8" y="8" width="12.5" height="12.5" rx="3.4"/><path d="M15.5 4.6A3.4 3.4 0 0 0 12.6 3H6.9a3.4 3.4 0 0 0-3.4 3.4v5.7c0 1.24.66 2.32 1.65 2.92"/></svg></span></div>
+        </div>
+      </div></div>
+      <figcaption><h3>Главная, которая про тебя</h3><p>Сколько ты слушаешь в этом месяце, кто у тебя главный исполнитель и что стоит на повторе.</p></figcaption>
+    </figure>
+
+    <figure class="shot" style="margin:0">
+      <div class="phone"><div class="screen"><div class="island"></div>
+        <div class="wave"><img src="/assets/night.webp" alt="" loading="lazy">
+          <div class="sheet"><div class="grab"></div>
+            <h4>Волна по треку</h4><div class="from">«Окна напротив» · Полуночники</div>
+            <div class="modes">
+              <div class="on">Похожее звучание<span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 12.5 4.2 4.2L18.5 7.8"/></svg></span></div>
+              <div>Этот исполнитель</div><div>Открытия</div><div>Любимое</div><div>Спокойнее</div><div>Бодрее</div>
+            </div>
+            <div class="len"><span>25</span><span class="on">50</span><span>100</span></div>
+            <div class="go"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 12v.01M8 8.5v7M12 5v14M16 8.5v7M20 11v2"/></svg></span>Запустить волну</div>
+          </div>
+        </div>
+      </div></div>
+      <figcaption><h3>Волна из одного трека</h3><p>Шесть режимов: похожее звучание, хиты исполнителя, новые имена, любимое, тише или бодрее.</p></figcaption>
+    </figure>
+
+    <figure class="shot" style="margin:0">
+      <div class="phone"><div class="screen"><div class="island"></div>
+        <div class="month">
+          <small style="color:var(--ash);font-weight:600;font-size:.72em">Итоги месяца</small>
+          <p class="big">Твой<br>октябрь</p>
+          <p class="sum">52 часа музыки, 318 треков, 41 новый исполнитель</p>
+          <div class="top3">
+            <div><em>1</em><img src="/assets/night-sq.webp" alt="" loading="lazy"><p>Полуночники<span>11 ч 40 мин</span></p></div>
+            <div><em>2</em><img src="/assets/focus-sq.webp" alt="" loading="lazy"><p>Сад камней<span>8 ч 15 мин</span></p></div>
+            <div><em>3</em><img src="/assets/motion-sq.webp" alt="" loading="lazy"><p>Дальний свет<span>6 ч 02 мин</span></p></div>
+          </div>
+          <div class="days" aria-hidden="true"><i class="a"></i><i class=""></i><i class="a"></i><i class=""></i><i class=""></i><i class="b"></i><i class=""></i><i class="a"></i><i class="b"></i><i class=""></i><i class="b"></i><i class=""></i><i class=""></i><i class=""></i><i class="a"></i><i class="a"></i><i class=""></i><i class=""></i><i class=""></i><i class="b"></i><i class="a"></i><i class=""></i><i class="b"></i><i class=""></i><i class=""></i><i class="b"></i><i class=""></i><i class="b"></i><i class="b"></i><i class="a"></i></div>
+        </div>
+      </div></div>
+      <figcaption><h3>Итоги каждого месяца</h3><p>Часы музыки, любимые исполнители, треки на повторе и дни, когда ты слушал больше всего.</p></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="features" aria-labelledby="h-feat" style="padding-top:0">
+  <h2 class="h2" id="h-feat">Что умеет</h2>
+  <div class="feats">
+    <div class="feat"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 12v.01M8 8.5v7M12 5v14M16 8.5v7M20 11v2"/></svg></span><h3>Волна по любому треку</h3><p>Нажми на трек — и музыка дальше подберётся сама, без повторов и с новыми именами.</p></div>
+    <div class="feat"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.8c.4 0 .75.27.86.66l.95 3.4a4.6 4.6 0 0 0 3.33 3.33l3.4.95a.9.9 0 0 1 0 1.72l-3.4.95a4.6 4.6 0 0 0-3.33 3.33l-.95 3.4a.9.9 0 0 1-1.72 0l-.95-3.4a4.6 4.6 0 0 0-3.33-3.33l-3.4-.95a.9.9 0 0 1 0-1.72l3.4-.95a4.6 4.6 0 0 0 3.33-3.33l.95-3.4c.11-.39.46-.66.86-.66z"/></svg></span><h3>Рекомендации с настройками</h3><p>Ползунок «знакомое — новое», запрет повторов, сколько треков одного исполнителя подряд, учёт пропусков.</p></div>
+    <div class="feat"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 20v-6"/><path d="M12 20V5"/><path d="M18 20v-9"/></svg></span><h3>Итоги месяца</h3><p>Сколько и кого ты слушал, что не отпускало и в какие дни было больше всего музыки.</p></div>
+    <div class="feat"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 19.6s-7.6-4.6-7.6-10.1A4.1 4.1 0 0 1 12 7.2a4.1 4.1 0 0 1 7.6 2.3c0 5.5-7.6 10.1-7.6 10.1z"/></svg></span><h3>Перенос из YouTube Music</h3><p>Подключи аккаунт Google — лайки станут любимыми треками, а плейлисты появятся в Lull.</p></div>
+    <div class="feat"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 6h11M4 11.5h11M4 17h6"/><path d="M14.5 14.8v5.2c0 .4.45.65.8.43l4.1-2.6a.5.5 0 0 0 0-.86l-4.1-2.6a.52.52 0 0 0-.8.43z" fill="currentColor"/></svg></span><h3>Очередь и свои плейлисты</h3><p>Поставь трек следующим, собери плейлист, скрой то, что не хочешь слышать.</p></div>
+    <div class="feat"><span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 12.5 4.2 4.2L18.5 7.8"/></svg></span><h3>Вход за пару секунд</h3><p>Через Telegram или Google: нажал, подтвердил и вернулся в приложение.</p></div>
+  </div>
+</section>
+
+<div class="covers" aria-hidden="true">
+  <img src="/assets/focus.webp" alt="" loading="lazy"><img src="/assets/foryou.webp" alt="" loading="lazy"><img src="/assets/night.webp" alt="" loading="lazy"><img src="/assets/exhale.webp" alt="" loading="lazy"><img src="/assets/motion.webp" alt="" loading="lazy">
+</div>
+
+<section id="install" aria-labelledby="h-inst">
+  <h2 class="h2" id="h-inst">Поставить</h2>
+  <div class="qr"><div><svg role="img" aria-label="QR-код: lull.website" width="100%" height="100%" version="1.1" viewBox="0 0 29 29" xmlns="http://www.w3.org/2000/svg"><path fill="#000" d="M0,0H1V1H0zM1,0H2V1H1zM2,0H3V1H2zM3,0H4V1H3zM4,0H5V1H4zM5,0H6V1H5zM6,0H7V1H6zM9,0H10V1H9zM10,0H11V1H10zM11,0H12V1H11zM14,0H15V1H14zM17,0H18V1H17zM18,0H19V1H18zM19,0H20V1H19zM22,0H23V1H22zM23,0H24V1H23zM24,0H25V1H24zM25,0H26V1H25zM26,0H27V1H26zM27,0H28V1H27zM28,0H29V1H28zM0,1H1V2H0zM6,1H7V2H6zM12,1H13V2H12zM16,1H17V2H16zM17,1H18V2H17zM20,1H21V2H20zM22,1H23V2H22zM28,1H29V2H28zM0,2H1V3H0zM2,2H3V3H2zM3,2H4V3H3zM4,2H5V3H4zM6,2H7V3H6zM9,2H10V3H9zM14,2H15V3H14zM15,2H16V3H15zM17,2H18V3H17zM19,2H20V3H19zM22,2H23V3H22zM24,2H25V3H24zM25,2H26V3H25zM26,2H27V3H26zM28,2H29V3H28zM0,3H1V4H0zM2,3H3V4H2zM3,3H4V4H3zM4,3H5V4H4zM6,3H7V4H6zM11,3H12V4H11zM12,3H13V4H12zM13,3H14V4H13zM16,3H17V4H16zM18,3H19V4H18zM19,3H20V4H19zM22,3H23V4H22zM24,3H25V4H24zM25,3H26V4H25zM26,3H27V4H26zM28,3H29V4H28zM0,4H1V5H0zM2,4H3V5H2zM3,4H4V5H3zM4,4H5V5H4zM6,4H7V5H6zM9,4H10V5H9zM11,4H12V5H11zM17,4H18V5H17zM18,4H19V5H18zM20,4H21V5H20zM22,4H23V5H22zM24,4H25V5H24zM25,4H26V5H25zM26,4H27V5H26zM28,4H29V5H28zM0,5H1V6H0zM6,5H7V6H6zM8,5H9V6H8zM10,5H11V6H10zM15,5H16V6H15zM16,5H17V6H16zM17,5H18V6H17zM18,5H19V6H18zM19,5H20V6H19zM22,5H23V6H22zM28,5H29V6H28zM0,6H1V7H0zM1,6H2V7H1zM2,6H3V7H2zM3,6H4V7H3zM4,6H5V7H4zM5,6H6V7H5zM6,6H7V7H6zM8,6H9V7H8zM10,6H11V7H10zM12,6H13V7H12zM14,6H15V7H14zM16,6H17V7H16zM18,6H19V7H18zM20,6H21V7H20zM22,6H23V7H22zM23,6H24V7H23zM24,6H25V7H24zM25,6H26V7H25zM26,6H27V7H26zM27,6H28V7H27zM28,6H29V7H28zM9,7H10V8H9zM10,7H11V8H10zM12,7H13V8H12zM13,7H14V8H13zM15,7H16V8H15zM16,7H17V8H16zM17,7H18V8H17zM19,7H20V8H19zM20,7H21V8H20zM0,8H1V9H0zM3,8H4V9H3zM5,8H6V9H5zM6,8H7V9H6zM8,8H9V9H8zM9,8H10V9H9zM10,8H11V9H10zM12,8H13V9H12zM14,8H15V9H14zM16,8H17V9H16zM19,8H20V9H19zM21,8H22V9H21zM23,8H24V9H23zM0,9H1V10H0zM1,9H2V10H1zM4,9H5V10H4zM5,9H6V10H5zM8,9H9V10H8zM10,9H11V10H10zM12,9H13V10H12zM13,9H14V10H13zM15,9H16V10H15zM16,9H17V10H16zM17,9H18V10H17zM18,9H19V10H18zM21,9H22V10H21zM22,9H23V10H22zM23,9H24V10H23zM25,9H26V10H25zM28,9H29V10H28zM2,10H3V11H2zM3,10H4V11H3zM4,10H5V11H4zM6,10H7V11H6zM9,10H10V11H9zM10,10H11V11H10zM11,10H12V11H11zM13,10H14V11H13zM14,10H15V11H14zM15,10H16V11H15zM17,10H18V11H17zM18,10H19V11H18zM19,10H20V11H19zM21,10H22V11H21zM22,10H23V11H22zM24,10H25V11H24zM25,10H26V11H25zM26,10H27V11H26zM27,10H28V11H27zM0,11H1V12H0zM8,11H9V12H8zM13,11H14V12H13zM16,11H17V12H16zM18,11H19V12H18zM19,11H20V12H19zM21,11H22V12H21zM22,11H23V12H22zM23,11H24V12H23zM24,11H25V12H24zM26,11H27V12H26zM27,11H28V12H27zM0,12H1V13H0zM1,12H2V13H1zM6,12H7V13H6zM7,12H8V13H7zM8,12H9V13H8zM9,12H10V13H9zM10,12H11V13H10zM14,12H15V13H14zM15,12H16V13H15zM17,12H18V13H17zM20,12H21V13H20zM21,12H22V13H21zM22,12H23V13H22zM25,12H26V13H25zM27,12H28V13H27zM28,12H29V13H28zM0,13H1V14H0zM5,13H6V14H5zM11,13H12V14H11zM13,13H14V14H13zM14,13H15V14H14zM15,13H16V14H15zM16,13H17V14H16zM17,13H18V14H17zM18,13H19V14H18zM19,13H20V14H19zM20,13H21V14H20zM3,14H4V15H3zM5,14H6V15H5zM6,14H7V15H6zM8,14H9V15H8zM11,14H12V15H11zM12,14H13V15H12zM13,14H14V15H13zM14,14H15V15H14zM17,14H18V15H17zM21,14H22V15H21zM22,14H23V15H22zM23,14H24V15H23zM24,14H25V15H24zM25,14H26V15H25zM26,14H27V15H26zM27,14H28V15H27zM28,14H29V15H28zM0,15H1V16H0zM4,15H5V16H4zM7,15H8V16H7zM9,15H10V16H9zM11,15H12V16H11zM15,15H16V16H15zM17,15H18V16H17zM19,15H20V16H19zM20,15H21V16H20zM22,15H23V16H22zM24,15H25V16H24zM25,15H26V16H25zM27,15H28V16H27zM0,16H1V17H0zM2,16H3V17H2zM6,16H7V17H6zM8,16H9V17H8zM9,16H10V17H9zM13,16H14V17H13zM17,16H18V17H17zM19,16H20V17H19zM21,16H22V17H21zM27,16H28V17H27zM2,17H3V18H2zM5,17H6V18H5zM7,17H8V18H7zM9,17H10V18H9zM10,17H11V18H10zM13,17H14V18H13zM14,17H15V18H14zM15,17H16V18H15zM16,17H17V18H16zM21,17H22V18H21zM22,17H23V18H22zM23,17H24V18H23zM25,17H26V18H25zM28,17H29V18H28zM0,18H1V19H0zM2,18H3V19H2zM3,18H4V19H3zM6,18H7V19H6zM7,18H8V19H7zM9,18H10V19H9zM10,18H11V19H10zM11,18H12V19H11zM12,18H13V19H12zM14,18H15V19H14zM15,18H16V19H15zM16,18H17V19H16zM18,18H19V19H18zM21,18H22V19H21zM22,18H23V19H22zM23,18H24V19H23zM24,18H25V19H24zM27,18H28V19H27zM28,18H29V19H28zM3,19H4V20H3zM4,19H5V20H4zM7,19H8V20H7zM8,19H9V20H8zM12,19H13V20H12zM14,19H15V20H14zM17,19H18V20H17zM18,19H19V20H18zM22,19H23V20H22zM27,19H28V20H27zM28,19H29V20H28zM0,20H1V21H0zM2,20H3V21H2zM3,20H4V21H3zM4,20H5V21H4zM5,20H6V21H5zM6,20H7V21H6zM8,20H9V21H8zM9,20H10V21H9zM15,20H16V21H15zM19,20H20V21H19zM20,20H21V21H20zM21,20H22V21H21zM22,20H23V21H22zM23,20H24V21H23zM24,20H25V21H24zM26,20H27V21H26zM8,21H9V22H8zM14,21H15V22H14zM15,21H16V22H15zM19,21H20V22H19zM20,21H21V22H20zM24,21H25V22H24zM26,21H27V22H26zM27,21H28V22H27zM28,21H29V22H28zM0,22H1V23H0zM1,22H2V23H1zM2,22H3V23H2zM3,22H4V23H3zM4,22H5V23H4zM5,22H6V23H5zM6,22H7V23H6zM10,22H11V23H10zM11,22H12V23H11zM12,22H13V23H12zM16,22H17V23H16zM20,22H21V23H20zM22,22H23V23H22zM24,22H25V23H24zM27,22H28V23H27zM0,23H1V24H0zM6,23H7V24H6zM8,23H9V24H8zM10,23H11V24H10zM11,23H12V24H11zM12,23H13V24H12zM14,23H15V24H14zM15,23H16V24H15zM20,23H21V24H20zM24,23H25V24H24zM25,23H26V24H25zM26,23H27V24H26zM0,24H1V25H0zM2,24H3V25H2zM3,24H4V25H3zM4,24H5V25H4zM6,24H7V25H6zM9,24H10V25H9zM10,24H11V25H10zM16,24H17V25H16zM17,24H18V25H17zM20,24H21V25H20zM21,24H22V25H21zM22,24H23V25H22zM23,24H24V25H23zM24,24H25V25H24zM27,24H28V25H27zM0,25H1V26H0zM2,25H3V26H2zM3,25H4V26H3zM4,25H5V26H4zM6,25H7V26H6zM8,25H9V26H8zM9,25H10V26H9zM10,25H11V26H10zM11,25H12V26H11zM15,25H16V26H15zM19,25H20V26H19zM20,25H21V26H20zM22,25H23V26H22zM24,25H25V26H24zM25,25H26V26H25zM26,25H27V26H26zM28,25H29V26H28zM0,26H1V27H0zM2,26H3V27H2zM3,26H4V27H3zM4,26H5V27H4zM6,26H7V27H6zM10,26H11V27H10zM12,26H13V27H12zM15,26H16V27H15zM16,26H17V27H16zM17,26H18V27H17zM24,26H25V27H24zM25,26H26V27H25zM26,26H27V27H26zM28,26H29V27H28zM0,27H1V28H0zM6,27H7V28H6zM9,27H10V28H9zM10,27H11V28H10zM14,27H15V28H14zM16,27H17V28H16zM17,27H18V28H17zM20,27H21V28H20zM21,27H22V28H21zM23,27H24V28H23zM27,27H28V28H27zM0,28H1V29H0zM1,28H2V29H1zM2,28H3V29H2zM3,28H4V29H3zM4,28H5V29H4zM5,28H6V29H5zM6,28H7V29H6zM8,28H9V29H8zM10,28H11V29H10zM11,28H12V29H11zM12,28H13V29H12zM14,28H15V29H14zM15,28H16V29H15zM18,28H19V29H18zM20,28H21V29H20zM22,28H23V29H22zM23,28H24V29H23zM25,28H26V29H25zM27,28H28V29H27z" id="qr-path" fill="#000000" fill-opacity="1" fill-rule="nonzero" stroke="none"/></svg></div><p><b>Открываешь с компьютера?</b> Наведи камеру телефона на код — откроется эта страница, и Lull можно будет поставить сразу.</p></div>
+  <div class="install">
+    <div class="plat">
+      <h3>Android</h3>
+      <p class="sub">Установка из файла, без Google Play</p>
+      <ol>
+        <li><span>Скачай <b>Lull.apk</b> кнопкой ниже.</span></li>
+        <li><span>Открой файл и разреши установку из этого источника, если телефон спросит.</span></li>
+        <li><span>Запусти Lull и войди через Telegram или Google.</span></li>
+      </ol>
+      <a class="btn white" href="/downloads/Lull.apk" download>Скачать для Android <span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></svg></span></a>
+    </div>
+    <div class="plat">
+      <h3>iPhone</h3>
+      <p class="sub">Без App Store, ставится с экрана «Домой»</p>
+      <ol>
+        <li><span>Открой <b>app.lull.website</b> в Safari.</span></li>
+        <li><span>Нажми <b>Поделиться</b>, затем <b>На экран «Домой»</b>.</span></li>
+        <li><span>Запускай Lull с иконки — он откроется на весь экран, как обычное приложение.</span></li>
+      </ol>
+      <a class="btn white" href="https://app.lull.website">Открыть app.lull.website</a>
+    </div>
+  </div>
+</section>
+
+<section id="faq" aria-labelledby="h-faq" style="padding-top:0">
+  <h2 class="h2" id="h-faq">Вопросы</h2>
+  <div class="faq">
+    <details><summary>Сколько стоит Lull?<span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></svg></span></summary><p>Нисколько. Подписки и рекламы нет.</p></details>
+    <details><summary>Нужен ли аккаунт?<span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></svg></span></summary><p>Да, вход через Telegram или Google. Пароль придумывать не нужно: подтверждаешь вход в боте или в Google и возвращаешься в приложение.</p></details>
+    <details><summary>Почему Lull нет в App Store?<span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></svg></span></summary><p>Пока Lull ставится на iPhone с экрана «Домой». Он открывается без адресной строки, на весь экран и работает как обычное приложение.</p></details>
+    <details><summary>Можно перенести музыку из YouTube Music?<span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></svg></span></summary><p>Да. В настройках нажми «Подключить YouTube Music» — Lull перенесёт понравившуюся музыку и твои плейлисты.</p></details>
+    <details><summary>Android предупреждает об установке. Это нормально?<span class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></svg></span></summary><p>Да, так Android реагирует на любое приложение не из Google Play. Разреши установку для браузера или файлового менеджера, из которого открываешь файл.</p></details>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="poster" aria-hidden="true">Lull</div>
+  <small>© 2026 Lull</small>
+</footer>
+
+<script>
+/* На iPhone главной делаем кнопку установки для iPhone */
+if(/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)){
+  var c=document.querySelector('.hero .cta'),a=c.children[0],b=c.children[1];
+  a.className='btn glass';b.className='btn white';c.insertBefore(b,a);
+  var g=document.querySelector('.install');g.insertBefore(g.children[1],g.children[0]);
+}
+(function(){
+  var tracks=[["Окна напротив","Полуночники",204],["Тёплый свет","Мира Лес",187],["Тихий этаж","Сад камней",231],["Выдох","Северный берег",199],["Попутный ветер","Дальний свет",176]];
+  var tints=document.querySelectorAll('.tints i'), wash=document.querySelectorAll('.wash i'), covers=document.querySelectorAll('.p-cover img');
+  var pt=document.getElementById('pt'), pa=document.getElementById('pa'), pb=document.getElementById('pb'), pc=document.getElementById('pc');
+  var i=0, t=0, STEP=6000, reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function show(n){
+    [tints,wash,covers].forEach(function(l){l.forEach(function(e,k){e.classList.toggle('on',k===n)})});
+    pt.textContent=tracks[n][0]; pa.textContent=tracks[n][1];
+  }
+  function fmt(s){s=Math.floor(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
+  if(reduce) return;
+  var start=performance.now();
+  function frame(now){
+    var el=now-start;
+    if(el>STEP){start=now;el=0;i=(i+1)%tracks.length;show(i)}
+    /* прогресс трека идёт в реальном времени, а переключение — раз в шесть секунд */
+    var sec=24+el/1000; pb.style.width=(sec/tracks[i][2]*100)+'%'; pc.textContent=fmt(sec);
+    if(!document.hidden) requestAnimationFrame(frame); else setTimeout(function(){requestAnimationFrame(frame)},500);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
