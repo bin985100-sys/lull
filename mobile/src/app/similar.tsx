@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { resetTo } from '@/nav';
 import { useState } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { audius, type Artist } from '@/api/audius';
 import { lull } from '@/api/lull';
@@ -22,13 +22,14 @@ export default function Similar() {
     return out.slice(0, 6);
   });
   const [picked, setPicked] = useState<string[]>([]);
-  const { width } = useWindowDimensions();
-  const size = Math.min(150, (Math.min(width, 560) - 40 - 48) / 2);
+  /* ширину колонки считаем от реальной ширины сетки — иначе третья колонка не помещалась */
+  const [gridW, setGridW] = useState(0);
+  const size = gridW ? Math.floor((gridW - 24 * 1) / 2) : 0;
   const finish = (skip?: boolean) => {
     const lib = useLibrary.getState();
     if (!skip && data) lib.setFavArtists([...lib.favArtists, ...data.filter((a) => picked.includes(a.id))]);
     lib.setOnboarded(true);
-    router.replace('/listen');
+    resetTo('/listen');
   };
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
@@ -36,9 +37,9 @@ export default function Similar() {
         <TopBar />
         <T v="h1" style={{ marginTop: 10, marginBottom: 8 }} accessibilityRole="header">Похожие исполнители</T>
         <T v="sub" style={{ marginBottom: 24 }}>Можно добавить ещё — или сразу слушать.</T>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 24, rowGap: 20 }}>
-          {loading && !data ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} h={size} w={size} r={size / 2} />) : null}
-          {(data || []).map((a) => <ArtistPick key={a.id} a={a} size={size} on={picked.includes(a.id)} onPress={() => setPicked((p) => (p.includes(a.id) ? p.filter((x) => x !== a.id) : [...p, a.id]))} />)}
+        <View onLayout={(e) => setGridW(e.nativeEvent.layout.width)} style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 24, rowGap: 20 }}>
+          {size && loading && !data ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} h={size} w={size} r={size / 2} />) : null}
+          {size ? (data || []).map((a) => <ArtistPick key={a.id} a={a} size={size} on={picked.includes(a.id)} onPress={() => setPicked((p) => (p.includes(a.id) ? p.filter((x) => x !== a.id) : [...p, a.id]))} />) : null}
         </View>
       </Screen>
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 56, paddingBottom: 18, gap: 6 }}>

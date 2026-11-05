@@ -34,3 +34,6 @@ export function useData<T>(key: string | null, fn: (signal: AbortSignal) => Prom
   const reload = useCallback(() => { if (key) cache.delete(key); setNonce((n) => n + 1); }, [key]);
   return { ...state, reload };
 }
+
+/* Сбросить кэш подборок после изменения настроек вкуса */
+export function invalidate(prefix: string) { for (const k of [...cache.keys()]) if (k.startsWith(prefix)) cache.delete(k); }

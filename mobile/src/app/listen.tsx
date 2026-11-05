@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { MIXES } from '@/api/mixes';
 import { useData } from '@/api/useData';
+import { Insights } from '@/components/Insights';
 import { TrackRow } from '@/components/TrackRow';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { useLibrary } from '@/store/library';
@@ -48,6 +49,8 @@ export default function Listen() {
           </View>
         ) : null}
 
+        <Insights />
+
         <View>
           <SectionHead title="Сегодня в фокусе" />
           <Press scaleTo={0.98} onPress={() => router.push({ pathname: '/mix/[id]', params: { id: 'foryou' } })} accessibilityRole="button" accessibilityLabel="Открыть подборку «Для тебя»"
@@ -63,7 +66,7 @@ export default function Listen() {
         </View>
 
         <View>
-          <Pressable onPress={() => router.push('/settings')} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }}>
+          <Pressable onPress={() => router.push('/prefs')} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }}>
             <T v="h2">Настроить подборку</T><Icon name="sliders" size={30} />
           </Pressable>
           <SectionHead title="Дальше по звучанию" more="Все" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'recommended' } })} />

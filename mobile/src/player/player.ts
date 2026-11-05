@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { streamUrl, type Track } from '@/api/audius';
 import { lull, streamUrlYt } from '@/api/lull';
 import { useLibrary } from '@/store/library';
+import { useTaste } from '@/store/taste';
 
 export type Repeat = 'off' | 'all' | 'one';
 type Dir = 'next' | 'prev';
@@ -39,6 +40,7 @@ function engine() {
   pl = createAudioPlaylist({ sources: [], updateInterval: 250, loop: 'none' });
   pl.addListener('playlistStatusUpdate', (st) => {
     useProgress.setState({ time: st.currentTime || 0, duration: st.duration || currentTrack()?.duration || 0 });
+    meter(st.playing, st.currentTime || 0);
     const s = usePlayer.getState();
     if (s.playing !== st.playing || s.buffering !== st.isBuffering) usePlayer.setState({ playing: st.playing, buffering: st.isBuffering });
     if (st.didJustFinish && st.currentIndex >= st.trackCount - 1 && s.repeat === 'off') usePlayer.setState({ playing: false });
@@ -60,6 +62,30 @@ async function init() {
 }
 
 const source = (t: Track) => ({ uri: t.source === 'yt' ? streamUrlYt(t.id) : streamUrl(t.id), name: t.title });
+
+/* ---------- учёт прослушивания: время, засчитанные прослушивания, пропуски ---------- */
+let lastTs = 0, buf = 0, bufTrack: Track | undefined, counted = false;
+function flush() {
+  if (bufTrack && buf >= 1) useTaste.getState().addListen(bufTrack, Math.round(buf));
+  buf = 0;
+}
+function meter(playing: boolean, time: number) {
+  const now = Date.now();
+  const t = currentTrack();
+  if (t !== bufTrack) { flush(); bufTrack = t; counted = false; }
+  if (playing && lastTs && t) {
+    buf += Math.min(1.5, (now - lastTs) / 1000);
+    if (!counted && (time >= 30 || (t.duration && time >= t.duration * 0.5))) { counted = true; useTaste.getState().addPlay(t); }
+    if (buf >= 10) flush();
+  }
+  lastTs = playing ? now : 0;
+}
+/* Переключил сам в первые 30 секунд — считаем пропуском */
+function noteSkip() {
+  const t = currentTrack();
+  const time = useProgress.getState().time;
+  if (t && time < 30 && (t.duration || 0) > 60) useTaste.getState().addSkip(t);
+}
 
 /* Радио: когда очередь подходит к концу, дозаполняем похожими треками, как в YouTube Music */
 let radioFor = '';
@@ -131,6 +157,7 @@ export const player = {
   next() {
     const s = usePlayer.getState();
     if (!currentTrack(s)) return;
+    noteSkip();
     const p = engine();
     if (s.index < s.queue.length - 1) { usePlayer.setState({ index: s.index + 1, lastDir: 'next' }); p.next(); onTrackStart(); }
     else if (s.repeat === 'all' && s.queue.length) { usePlayer.setState({ index: 0, lastDir: 'next' }); p.skipTo(0); onTrackStart(); }
@@ -148,6 +175,7 @@ export const player = {
   skipTo(i: number) {
     const s = usePlayer.getState();
     if (i < 0 || i >= s.queue.length) return;
+    if (i > s.index) noteSkip();
     usePlayer.setState({ index: i, lastDir: i < s.index ? 'prev' : 'next' });
     engine().skipTo(i); engine().play();
     onTrackStart();
@@ -178,6 +206,20 @@ export const player = {
     const q = s.queue.slice(); const [t] = q.splice(from, 1); q.splice(to, 0, t);
     const p = engine(); p.remove(from); p.insert(source(t), to);
     usePlayer.setState({ queue: q });
+  },
+  /* Волна: если исходный трек уже играет, не перезапускаем его, а меняем всё, что дальше */
+  startWave(list: Track[]) {
+    const s = usePlayer.getState();
+    const cur = currentTrack(s);
+    if (cur && list[0]?.id === cur.id) {
+      const p = engine();
+      for (let i = s.queue.length - 1; i > s.index; i--) p.remove(i);
+      list.slice(1).forEach((t) => p.add(source(t)));
+      usePlayer.setState({ queue: [...s.queue.slice(0, s.index + 1), ...list.slice(1)], shuffle: false });
+      if (!s.playing) player.toggle();
+      return;
+    }
+    return player.play(list, list[0]?.id, { shuffle: false });
   },
   clearUpcoming() {
     const s = usePlayer.getState();

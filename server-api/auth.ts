@@ -1,0 +1,179 @@
+/**
+ * Вход в Lull: Telegram (через бота) и Google (OAuth). Один и тот же сценарий для приложения и веб-версии:
+ *   1. приложение: POST /api/auth/start {provider} → { nonce, url }, открывает url;
+ *   2. пользователь подтверждает вход в Telegram-боте или в Google;
+ *   3. приложение опрашивает GET /api/auth/poll?nonce= → { status: 'ok', token, user }.
+ * Секреты только в переменных окружения сервера: LULL_TG_TOKEN, LULL_GOOGLE_ID, LULL_GOOGLE_SECRET.
+ */
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const DATA = process.env.LULL_API_DATA || './data';
+const PUBLIC = process.env.LULL_PUBLIC_URL || 'https://api.lull.website';
+const APP_URL = process.env.LULL_APP_URL || 'https://app.lull.website';
+const TG = process.env.LULL_TG_TOKEN || '';
+const TG_API = process.env.LULL_TG_API || 'https://api.telegram.org';
+const G_ID = process.env.LULL_GOOGLE_ID || '';
+const G_SECRET = process.env.LULL_GOOGLE_SECRET || '';
+
+export type User = { id: string; name: string; avatar?: string; provider: 'telegram' | 'google'; tgId?: number; tgUsername?: string; googleSub?: string; email?: string; createdAt: number };
+type Db = { users: Record<string, User>; sessions: Record<string, { userId: string; at: number }> };
+
+const FILE = path.join(DATA, 'auth.json');
+let db: Db = { users: {}, sessions: {} };
+try { db = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { /* первый запуск */ }
+let saveT: NodeJS.Timeout | undefined;
+const save = () => {
+  clearTimeout(saveT);
+  saveT = setTimeout(() => {
+    fs.mkdirSync(DATA, { recursive: true });
+    fs.writeFileSync(FILE + '.tmp', JSON.stringify(db));
+    fs.renameSync(FILE + '.tmp', FILE);
+  }, 200);
+};
+
+/* Незавершённые входы живут 10 минут */
+const pending = new Map<string, { provider: string; at: number; token?: string }>();
+setInterval(() => { const now = Date.now(); for (const [k, v] of pending) if (now - v.at > 10 * 60e3) pending.delete(k); }, 60e3).unref();
+
+const rid = (n = 24) => crypto.randomBytes(n).toString('base64url');
+const pub = (u: User) => ({ id: u.id, name: u.name, avatar: u.avatar, provider: u.provider, username: u.tgUsername, email: u.email });
+
+function login(find: (u: User) => boolean, make: () => Omit<User, 'id' | 'createdAt'>): string {
+  let u = Object.values(db.users).find(find);
+  const fresh = make();
+  if (!u) { u = { ...fresh, id: rid(9), createdAt: Date.now() }; db.users[u.id] = u; }
+  else Object.assign(u, { name: fresh.name || u.name, avatar: fresh.avatar || u.avatar, tgUsername: fresh.tgUsername ?? u.tgUsername, email: fresh.email ?? u.email });
+  const token = rid(32);
+  db.sessions[token] = { userId: u.id, at: Date.now() };
+  save();
+  return token;
+}
+
+let botName = '';
+async function tg(method: string, body: unknown) {
+  const r = await fetch(`${TG_API}/bot${TG}/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = (await r.json()) as { ok: boolean; result: any; description?: string };
+  if (!j.ok) throw new Error(`telegram ${method}: ${j.description}`);
+  return j.result;
+}
+
+export const authEnabled = () => ({ telegram: !!TG, google: !!(G_ID && G_SECRET) });
+
+export async function start(provider: string) {
+  if (provider === 'telegram') {
+    if (!TG) throw Object.assign(new Error('Вход через Telegram ещё не настроен на сервере'), { status: 503 });
+    if (!botName) botName = (await tg('getMe', {})).username;
+    const nonce = rid(18);
+    pending.set(nonce, { provider, at: Date.now() });
+    return { nonce, url: `https://t.me/${botName}?start=${nonce}` };
+  }
+  if (provider === 'google') {
+    if (!G_ID || !G_SECRET) throw Object.assign(new Error('Вход через Google ещё не настроен на сервере'), { status: 503 });
+    const nonce = rid(18);
+    pending.set(nonce, { provider, at: Date.now() });
+    return { nonce, url: `${PUBLIC}/api/auth/google/go?nonce=${nonce}` };
+  }
+  throw Object.assign(new Error('unknown provider'), { status: 400 });
+}
+
+export function poll(nonce: string) {
+  const p = pending.get(nonce);
+  if (!p) return { status: 'expired' };
+  if (!p.token) return { status: 'pending' };
+  pending.delete(nonce);
+  const s = db.sessions[p.token];
+  return { status: 'ok', token: p.token, user: pub(db.users[s.userId]) };
+}
+
+export function me(token: string) {
+  const s = db.sessions[token];
+  const u = s && db.users[s.userId];
+  if (!u) throw Object.assign(new Error('unauthorized'), { status: 401 });
+  return pub(u);
+}
+export function logout(token: string) { delete db.sessions[token]; save(); return { ok: true }; }
+
+/* ---------- страница «вернись в приложение» (relay не пробрасывает Location, поэтому без 302) ---------- */
+export function page(title: string, text: string, nonce?: string, redirect?: string) {
+  const back = `lull://auth${nonce ? `?nonce=${nonce}` : ''}`;
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#000"><title>Lull</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#000;color:#f5f5f4;font:600 17px/1.45 system-ui,-apple-system,sans-serif;text-align:center;padding:24px;box-sizing:border-box}
+h1{font-size:26px;margin:0 0 10px}p{color:#9ba0a7;margin:0 0 26px}a{display:block;margin:10px auto;max-width:320px;padding:17px 22px;border-radius:999px;text-decoration:none;font-weight:700}
+.w{background:#f5f5f4;color:#000}.d{background:#1a1c1f;color:#f5f5f4}</style></head><body><div>
+<h1>${title}</h1><p>${text}</p>${redirect ? '' : `<a class="w" href="${back}">Вернуться в Lull</a><a class="d" href="${APP_URL}">Открыть веб-версию</a>`}</div>
+<script>${redirect ? `location.replace(${JSON.stringify(redirect)})` : `setTimeout(function(){location.href=${JSON.stringify(back)}},400)`}</script></body></html>`;
+}
+
+/* ---------- Google ---------- */
+export function googleGo(nonce: string) {
+  if (!pending.has(nonce)) return page('Ссылка устарела', 'Вернись в Lull и нажми «Продолжить с Google» ещё раз.');
+  const q = new URLSearchParams({ client_id: G_ID, redirect_uri: `${PUBLIC}/api/auth/google/callback`, response_type: 'code', scope: 'openid email profile', state: nonce, prompt: 'select_account' });
+  return page('Переходим в Google…', '', undefined, `https://accounts.google.com/o/oauth2/v2/auth?${q}`);
+}
+export async function googleCallback(q: URLSearchParams) {
+  const nonce = q.get('state') || '';
+  const p = pending.get(nonce);
+  if (!p || !q.get('code')) return page('Не получилось войти', 'Вернись в Lull и попробуй ещё раз.');
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ code: q.get('code')!, client_id: G_ID, client_secret: G_SECRET, redirect_uri: `${PUBLIC}/api/auth/google/callback`, grant_type: 'authorization_code' }),
+  });
+  const j = (await r.json()) as { id_token?: string };
+  if (!j.id_token) return page('Не получилось войти', 'Google не подтвердил вход. Попробуй ещё раз.');
+  /* id_token получен напрямую от Google по TLS — подпись не перепроверяем */
+  const c = JSON.parse(Buffer.from(j.id_token.split('.')[1], 'base64url').toString());
+  if (c.aud !== G_ID) return page('Не получилось войти', 'Попробуй ещё раз.');
+  p.token = login((u) => u.googleSub === c.sub, () => ({ provider: 'google', googleSub: c.sub, name: c.name || c.email, avatar: c.picture, email: c.email }));
+  return page('Готово', 'Ты вошёл в Lull. Возвращаемся в приложение…', nonce);
+}
+
+/* ---------- Telegram-бот: долгий опрос, без вебхука ---------- */
+export async function runBot() {
+  if (!TG) { console.log('[auth] LULL_TG_TOKEN не задан — вход через Telegram выключен'); return; }
+  let offset = 0;
+  try { botName = (await tg('getMe', {})).username; console.log(`[auth] бот @${botName}`); } catch (e) { console.warn('[auth]', (e as Error).message); }
+  for (;;) {
+    try {
+      const ups = (await tg('getUpdates', { offset, timeout: 50, allowed_updates: ['message'] })) as any[];
+      for (const u of ups) {
+        offset = u.update_id + 1;
+        const m = u.message;
+        if (!m?.text || !m.from) continue;
+        const [cmd, arg] = m.text.trim().split(/\s+/, 2);
+        if (cmd !== '/start') continue;
+        const p = arg ? pending.get(arg) : undefined;
+        if (!p) {
+          await tg('sendMessage', { chat_id: m.chat.id, text: 'Привет! Это бот входа в Lull. Чтобы войти, нажми «Продолжить с Telegram» в приложении.', reply_markup: { inline_keyboard: [[{ text: 'Открыть Lull', url: APP_URL }]] } });
+          continue;
+        }
+        let avatar: string | undefined;
+        try {
+          const ph = await tg('getUserProfilePhotos', { user_id: m.from.id, limit: 1 });
+          const fid = ph.photos?.[0]?.slice(-1)[0]?.file_id;
+          if (fid) avatar = `${PUBLIC}/api/auth/tgphoto/${encodeURIComponent(fid)}`;
+        } catch { /* без аватара */ }
+        const name = [m.from.first_name, m.from.last_name].filter(Boolean).join(' ') || m.from.username || 'Слушатель';
+        p.token = login((x) => x.tgId === m.from.id, () => ({ provider: 'telegram', tgId: m.from.id, tgUsername: m.from.username, name, avatar }));
+        await tg('sendMessage', {
+          chat_id: m.chat.id,
+          text: `Готово, ${m.from.first_name || 'ты'} — ты зарегистрирован в Lull ✅\nВозвращайся в приложение, там уже всё готово.`,
+          reply_markup: { inline_keyboard: [[{ text: 'Вернуться в Lull', url: `${PUBLIC}/api/auth/back?nonce=${arg}` }]] },
+        });
+      }
+    } catch (e) {
+      console.warn('[auth] бот:', (e as Error).message);
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+}
+
+/* Аватар из Telegram отдаём через сервер, не раскрывая токен бота */
+export async function tgPhoto(fileId: string): Promise<{ type: string; body: Buffer } | null> {
+  if (!TG) return null;
+  const f = await tg('getFile', { file_id: fileId });
+  const r = await fetch(`${TG_API}/file/bot${TG}/${f.file_path}`);
+  if (!r.ok) return null;
+  return { type: r.headers.get('content-type') || 'image/jpeg', body: Buffer.from(await r.arrayBuffer()) };
+}

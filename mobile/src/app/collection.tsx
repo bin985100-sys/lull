@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { resetTo } from '@/nav';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
@@ -26,7 +27,7 @@ export default function Collection() {
   if (empty) return (
     <Screen>{head}
       <Empty icon="stack" title="Здесь пока пусто" text="Сохраняй треки, плейлисты и исполнителей — они появятся здесь.">
-        <Btn label="Открыть музыку" icon="arrow" onPress={() => router.navigate('/discover')} />
+        <Btn label="Открыть музыку" icon="arrow" onPress={() => resetTo('/discover')} />
         <Btn label="Создать плейлист" icon="plus" kind="dark" onPress={() => router.push('/new-playlist')} />
       </Empty>
     </Screen>

@@ -17,16 +17,18 @@ import { Icon, type IconName } from '@/ui/Icon';
 import { haptic, T } from '@/ui/kit';
 import { PlayPause } from '@/ui/PlayPause';
 import { slideIn } from '@/ui/anim';
+import { resetTo } from '@/nav';
 import { TintLayer } from './TintLayer';
 import { likeWithUndo, openSelectPlaylist } from './TrackRow';
+import { openWave } from './Wave';
 
 const ease = Easing.bezier(...EASE);
 const fmt = (s: number) => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 type Tab = 'listen' | 'discover' | 'collection';
 export const useTab = create<{ tab: Tab }>(() => ({ tab: 'listen' }));
-const ROOT: Record<string, Tab> = { '/listen': 'listen', '/discover': 'discover', '/collection': 'collection', '/search': 'discover', '/favorites': 'collection', '/history': 'listen', '/settings': 'listen' };
-const HIDDEN = ['/', '/welcome', '/onboarding', '/similar', '/new-playlist', '/edit-playlist', '/add-tracks'];
+const ROOT: Record<string, Tab> = { '/listen': 'listen', '/discover': 'discover', '/collection': 'collection', '/search': 'discover', '/favorites': 'collection', '/history': 'listen', '/settings': 'listen', '/month': 'listen', '/prefs': 'listen' };
+const HIDDEN = ['/', '/welcome', '/auth', '/onboarding', '/similar', '/new-playlist', '/edit-playlist', '/add-tracks'];
 
 /* ---------- цвет обложки: плавная смена размытого фона ---------- */
 function Tint({ uri, strong }: { uri?: string; strong: boolean }) {
@@ -176,6 +178,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
         </Pressable>
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 18 }}>
+        <Pressable onPress={() => openWave(t)} accessibilityRole="button" style={st.extra}><Icon name="waves" size={28} /><T style={{ fontSize: 16 }}>Волна</T></Pressable>
         <Pressable onPress={() => { close(); router.push('/queue'); }} accessibilityRole="button" style={st.extra}><Icon name="queue" size={28} /><T style={{ fontSize: 16 }}>Очередь</T></Pressable>
       </View>
     </View>
@@ -213,7 +216,7 @@ function Nav({ active }: { active: Tab | null }) {
         const on = active === k;
         return (
           <Pressable key={k} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={l}
-            onPress={() => { haptic(); player.expand(false); useTab.setState({ tab: k }); router.navigate(`/${k}`); }} style={st.navBtn}>
+            onPress={() => { haptic(); player.expand(false); useTab.setState({ tab: k }); resetTo(`/${k}` as '/listen'); }} style={st.navBtn}>
             <Icon name={ic} size={27} color={on ? '#fff' : C.tx2} />
             <T v="label" style={{ color: on ? '#fff' : C.tx2 }}>{l}</T>
           </Pressable>

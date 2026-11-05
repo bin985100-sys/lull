@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { resetTo } from '@/nav';
 import { Pressable, View } from 'react-native';
 
 import { TrackRow } from '@/components/TrackRow';
@@ -13,7 +13,7 @@ export default function Queue() {
   const up = s.queue.slice(s.index + 1);
   if (!cur) return (
     <Screen><TopBar title="Очередь" />
-      <Empty icon="queue" title="Очередь пуста" text="Добавь трек через меню — он заиграет следующим."><Btn label="Открыть музыку" icon="arrow" onPress={() => router.navigate('/discover')} /></Empty>
+      <Empty icon="queue" title="Очередь пуста" text="Добавь трек через меню — он заиграет следующим."><Btn label="Открыть музыку" icon="arrow" onPress={() => resetTo('/discover')} /></Empty>
     </Screen>
   );
   return (

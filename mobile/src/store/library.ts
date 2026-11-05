@@ -11,7 +11,7 @@ export type HistoryItem = { track: Track; at: number };
 
 type Lib = {
   onboarded: boolean;
-  account: { name: string; provider: 'Google' | 'Apple' | null };
+  account: { name: string; provider: 'Google' | 'Telegram' | null; avatar?: string; token?: string; userId?: string };
   favArtists: Artist[];
   liked: Track[];
   savedPlaylists: Playlist[];

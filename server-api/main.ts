@@ -7,6 +7,7 @@ import http from 'node:http';
 import { album, artist, charts, home, homeChips, playlist, search, suggest, suggestRich, upNext } from '../electron/yt';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
+import { authEnabled, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
 const cache = new Map<string, { t: number; body: string }>();
@@ -39,6 +40,30 @@ async function image(u: string, res: http.ServerResponse) {
   res.end(Buffer.from(await r.arrayBuffer()));
 }
 
+const json = (res: http.ServerResponse, v: unknown, status = 200) => res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(v));
+const html = (res: http.ServerResponse, v: string) => res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }).end(v);
+
+async function auth(rest: string[], q: URLSearchParams, body: string, res: http.ServerResponse) {
+  const b = body ? (JSON.parse(body) as Record<string, string>) : {};
+  switch (rest[0]) {
+    case 'config': return json(res, authEnabled());
+    case 'start': return json(res, await start(b.provider ?? q.get('provider') ?? ''));
+    case 'poll': return json(res, poll(q.get('nonce') ?? ''));
+    case 'me': return json(res, me(b.token ?? ''));
+    case 'logout': return json(res, logout(b.token ?? ''));
+    case 'back': return html(res, page('Готово', 'Ты вошёл в Lull. Возвращаемся в приложение…', q.get('nonce') ?? undefined));
+    case 'google': return html(res, rest[1] === 'callback' ? await googleCallback(q) : googleGo(q.get('nonce') ?? ''));
+    case 'tgphoto': {
+      const f = await tgPhoto(decodeURIComponent(rest.slice(1).join('/')));
+      if (!f) return void res.writeHead(404).end();
+      return void res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': 'public, max-age=86400' }).end(f.body);
+    }
+    default: return json(res, { error: 'not found' }, 404);
+  }
+}
+
+runBot();
+
 http
   .createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
@@ -49,6 +74,7 @@ http
       if (name === 'health') return void res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"ok":true}');
       let body = '';
       for await (const c of req) body += c;
+      if (name === 'auth') return void (await auth(rest, url.searchParams, body, res));
       const key = `${url.pathname}?${url.searchParams}#${body}`;
       const ttl = (TTL[name] ?? 0) * 60_000;
       const hit = cache.get(key);

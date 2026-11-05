@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { resetTo } from '@/nav';
 import { View } from 'react-native';
 
 import { TrackRow } from '@/components/TrackRow';
@@ -12,7 +12,7 @@ export default function History() {
   if (!h.length) return (
     <Screen><TopBar title="История" />
       <Empty icon="clock" title="История пуста" text={save ? 'Здесь появится то, что ты слушал.' : 'Сохранение истории выключено в настройках.'}>
-        <Btn label="Открыть музыку" icon="arrow" onPress={() => router.navigate('/discover')} />
+        <Btn label="Открыть музыку" icon="arrow" onPress={() => resetTo('/discover')} />
       </Empty>
     </Screen>
   );
