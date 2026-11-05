@@ -1,0 +1,45 @@
+# Диагностика Lull Mobile: сервер (скорость звука) и APK в эмуляторе. Результаты — аннотации сборки.
+name: Lull Mobile diag
+on:
+  push:
+    branches: [mobile]
+    paths: ['.github/diag/**', '.github/workflows/mobile-diag.yml']
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Скорость сервера
+        run: |
+          A=https://api.lull.website
+          for id in dQw4w9WgXcQ kJQP7kiw5Fk 4NRXx6U8ABQ; do
+            t=$(curl -s -o /dev/null -H "Range: bytes=0-65535" -w "%{http_code} first=%{time_starttransfer}s total=%{time_total}s" "$A/api/stream/$id?q=aac")
+            t2=$(curl -s -o /dev/null -H "Range: bytes=65536-131071" -w "%{http_code} first=%{time_starttransfer}s" "$A/api/stream/$id?q=aac")
+            h=$(curl -s -D - -o /dev/null -H "Range: bytes=0-1" "$A/api/stream/$id?q=aac" | tr -d '\r' | grep -iE "content-type|content-range|accept-ranges" | tr '\n' ' ')
+            echo "::warning title=stream $id::cold $t | warm $t2 | $h"
+          done
+          echo "::warning title=search::$(curl -s -o /dev/null -w "%{http_code} %{time_total}s" "$A/api/search?q=weeknd&f=all")"
+  emulator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: mobile/package-lock.json }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: npm ci
+        working-directory: mobile
+      - run: npx expo prebuild -p android --no-install
+        working-directory: mobile
+      - run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64
+        working-directory: mobile/android
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash .github/diag/run.sh

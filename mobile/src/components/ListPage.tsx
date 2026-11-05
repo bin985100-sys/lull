@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import type { Track } from '@/api/audius';
+import { warm } from '@/api/lull';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { C } from '@/theme/tokens';
 import { Btn, IconBtn, ListSkeleton, Offline, Screen, Skeleton, T, TopBar } from '@/ui/kit';
@@ -50,6 +51,7 @@ export function ListPage(p: Props) {
   const { width } = useWindowDimensions();
   const size = Math.min(270, width * 0.7);
   const tracks = p.tracks || [];
+  useEffect(() => { if (tracks.length) warm(tracks.slice(0, 2)); }, [tracks]);
   const playingHere = usePlayer((s) => s.playing && !!currentTrack(s) && tracks.some((t) => t.id === currentTrack(s)!.id));
   const disabled = !tracks.length;
   return (

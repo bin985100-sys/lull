@@ -30,7 +30,16 @@ sleep 2
 curl -fsS http://127.0.0.1:8787/api/health >/dev/null && echo "  каталог работает"
 echo "  вход: $(curl -fsS http://127.0.0.1:8787/api/auth/config)"
 
-echo "== 2. Веб-приложение"
+echo "== 2. Звук: быстрый старт треков"
+if [ -f "$HERE/server.py" ]; then
+  cp "$APP/server.py" "$APP/server.py.bak-$(date +%s)" 2>/dev/null || true
+  cp "$HERE/server.py" "$APP/server.py"
+  systemctl restart lull-relay
+  sleep 2
+  systemctl is-active --quiet lull-relay && echo "  звук работает" || { echo "  !! relay не стартовал, возвращаю прошлую версию"; cp "$(ls -t $APP/server.py.bak-* | head -1)" "$APP/server.py"; systemctl restart lull-relay; }
+fi
+
+echo "== 3. Веб-приложение"
 mkdir -p /var/www/lull-app
 rm -rf /var/www/lull-app/*
 tar xzf "$HERE/web.tgz" -C /var/www/lull-app

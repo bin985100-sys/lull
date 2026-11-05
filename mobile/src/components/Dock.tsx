@@ -3,7 +3,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { PanResponder, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, PanResponder, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   cubicBezier, Easing, FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -73,14 +73,14 @@ function SkipBtn({ dir, size = 28, box = 48 }: { dir: 'next' | 'prev'; size?: nu
 }
 
 /* ---------- кнопка запуска с упругим нажатием ---------- */
-function BigPlay({ playing }: { playing: boolean }) {
+function BigPlay({ playing, loading }: { playing: boolean; loading?: boolean }) {
   const sc = useSharedValue(1);
   const a = useAnimatedStyle(() => ({ transform: [{ scale: sc.value }] }));
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : 'Слушать'}
       onPress={() => { haptic(); sc.value = withSequence(withTiming(0.9, { duration: 100 }), withSpring(1, { damping: 10, stiffness: 240 })); player.toggle(); }}>
       <Animated.View style={[{ width: 84, height: 84, borderRadius: 30, backgroundColor: C.tx, alignItems: 'center', justifyContent: 'center' }, a]}>
-        <PlayPause playing={playing} size={46} color="#000" stroke={1.8} />
+        {loading ? <ActivityIndicator color="#000" size="large" /> : <PlayPause playing={playing} size={46} color="#000" stroke={1.8} />}
       </Animated.View>
     </Pressable>
   );
@@ -137,6 +137,7 @@ function Seek({ active }: { active: boolean }) {
 function Full({ h, active }: { h: number; active: boolean }) {
   const s = usePlayer();
   const t = currentTrack(s)!;
+  const loading = useProgress((x) => s.buffering && x.time < 0.5);
   const liked = useLibrary((x) => x.liked.some((y) => y.id === t.id));
   const reduced = useReducedMotion();
   const { width: ww } = useWindowDimensions();
@@ -171,7 +172,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
         <Pressable onPress={() => { haptic(); player.toggleShuffle(); }} accessibilityRole="button" accessibilityLabel="Перемешивать" accessibilityState={{ selected: s.shuffle }} style={st.ctl}><Icon name="shuffle" size={28} color={s.shuffle ? C.tx : C.tx3} /></Pressable>
         <SkipBtn dir="prev" size={32} box={56} />
-        <BigPlay playing={s.playing} />
+        <BigPlay playing={s.playing} loading={loading} />
         <SkipBtn dir="next" size={32} box={56} />
         <Pressable onPress={() => { haptic(); player.cycleRepeat(); }} accessibilityRole="button" accessibilityLabel={`Повтор: ${{ off: 'выключен', all: 'все', one: 'трек' }[s.repeat]}`} style={st.ctl}>
           <Icon name={s.repeat === 'one' ? 'repeatOne' : 'repeat'} size={28} color={s.repeat === 'off' ? C.tx3 : C.tx} />
@@ -188,6 +189,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
 /* ---------- мини-строка ---------- */
 function Mini() {
   const s = usePlayer();
+  const loading = useProgress((x) => s.buffering && x.time < 0.5);
   const t = currentTrack(s)!;
   const reduced = useReducedMotion();
   const enter = reduced ? undefined : slideIn(s.lastDir === 'next' ? 28 : -28, 1, 420);
@@ -200,7 +202,7 @@ function Mini() {
         </Animated.View>
       </Pressable>
       <Pressable onPress={() => { haptic(); player.toggle(); }} hitSlop={6} accessibilityRole="button" accessibilityLabel={s.playing ? 'Пауза' : 'Слушать'} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
-        <PlayPause playing={s.playing} size={28} />
+        {loading ? <ActivityIndicator color={C.tx} /> : <PlayPause playing={s.playing} size={28} />}
       </Pressable>
       <SkipBtn dir="next" />
     </View>

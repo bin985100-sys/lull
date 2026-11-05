@@ -1,10 +1,11 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { audius, type Artist, type Track } from '@/api/audius';
-import { lull, type Section } from '@/api/lull';
+import { lull, warm, type Section } from '@/api/lull';
 import { useData } from '@/api/useData';
 import { ArtistRail, Sections } from '@/components/Cards';
 import { TrackRow } from '@/components/TrackRow';
@@ -28,6 +29,7 @@ export default function ArtistScreen() {
   const { data, loading, error, reload } = useData(`artistpage:${src}:${id}`, (sig) => (isAudius ? loadAudius(id, sig) : lull.artist(id, sig)));
   const fol = useLibrary((x) => x.favArtists.some((a) => a.id === id));
   const tracks = data?.top ?? [];
+  useEffect(() => { if (tracks.length) warm(tracks.slice(0, 2)); }, [tracks]);
   const playingHere = usePlayer((x) => x.playing && !!currentTrack(x) && tracks.some((t) => t.id === currentTrack(x)!.id));
   const art = data?.artist;
   return (

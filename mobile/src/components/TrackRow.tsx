@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import type { Track } from '@/api/audius';
+import { warm } from '@/api/lull';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { useLibrary } from '@/store/library';
 import { artistKey, useTaste } from '@/store/taste';
@@ -27,7 +28,7 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
 
   return (
     <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 66, borderRadius: 16, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
-      <Pressable onPress={play} onLongPress={more} delayLongPress={420} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 4 }}
+      <Pressable onPress={play} onPressIn={() => warm([track])} onLongPress={more} delayLongPress={420} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 4 }}
         accessibilityRole="button" accessibilityLabel={`${track.title}, ${track.artist}`} accessibilityHint="Двойное касание — слушать, удержание — меню трека"
         accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Меню трека' }]}
         onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'longpress' ? more() : play())}>

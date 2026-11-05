@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 import { streamUrl, type Track } from '@/api/audius';
-import { lull, streamUrlYt } from '@/api/lull';
+import { lull, streamUrlYt, warm } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 import { useTaste } from '@/store/taste';
 import { report } from '@/ui/Crash';
@@ -108,6 +108,7 @@ function onTrackStart() {
   /* радио дозаполняем чуть позже, когда трек уже стартовал, и не больше 10 треков за раз */
   setTimeout(() => extendRadio().catch((e) => report(e, 'radio')), 4000);
   try { useLibrary.getState().pushHistory(t); } catch (e) { report(e, 'history'); }
+  { const s = usePlayer.getState(); warm(s.queue.slice(s.index + 1, s.index + 4)); }
   useProgress.setState({ time: 0, duration: t.duration });
   const meta = { title: t.title, artist: t.artist, artworkUrl: t.artworkLarge || t.artwork };
   try {

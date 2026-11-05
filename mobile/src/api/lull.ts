@@ -54,6 +54,16 @@ export const cardPlaylist = (c: Card): Playlist => ({ id: c.id, title: c.title, 
 
 export const streamUrlYt = (id: string) => `${LULL_API}/api/stream/${enc(id)}?q=aac`;
 
+/* Просим сервер заранее подготовить ссылки на звук — тогда трек стартует сразу */
+const warmed = new Map<string, number>();
+export function warm(tracks: (Track | undefined)[]) {
+  const now = Date.now();
+  const ids = tracks.filter((t): t is Track => !!t && t.source === 'yt' && now - (warmed.get(t.id) || 0) > 30 * 60e3).map((t) => t.id).slice(0, 6);
+  if (!ids.length) return;
+  ids.forEach((id) => warmed.set(id, now));
+  fetch(`${LULL_API}/api/warm?q=aac&ids=${ids.map(enc).join(',')}`).catch(() => {});
+}
+
 export const lull = {
   home: (chip?: string, s?: AbortSignal) => get<Raw[]>(`home${chip ? `?chip=${enc(chip)}` : ''}`, s).then((l) => l.map(mapSection)),
   charts: (s?: AbortSignal) => get<Raw[]>('charts', s).then((l) => l.map(mapSection)),
