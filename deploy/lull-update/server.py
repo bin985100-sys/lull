@@ -176,7 +176,7 @@ async def forward(request: web.Request) -> web.StreamResponse:
 
 
 # ---------- yt-dlp: прогретый экземпляр и кэш ссылок ----------
-pool = ThreadPoolExecutor(max_workers=int(os.environ.get("LULL_WORKERS", "6")))
+pool = ThreadPoolExecutor(max_workers=int(os.environ.get("LULL_WORKERS", "12")))
 cache: "OrderedDict[str, tuple[float, dict]]" = OrderedDict()
 inflight: dict[str, asyncio.Future] = {}
 
@@ -269,10 +269,9 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             s = await loop.run_in_executor(pool, resolve_sync, vid, fmt, client)
         except Exception as e:
             msg = str(e).replace("ERROR: ", "")
+            # «недоступно» запасной клиент (tv и др.) пишет и про нормальные видео — решает только итог по всем
             if "unavailable" in msg.lower() or "not available" in msg.lower():
                 result.setdefault("fatal", e)
-                done.set()
-                return
             errors.append(f"{client or 'default'}: {msg}")
             return
         if done.is_set():
@@ -290,7 +289,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
     done.set()
     if "ok" in result:
         return result["ok"]
-    if "fatal" in result:
+    if "fatal" in result and all(("unavailable" in x.lower() or "not available" in x.lower()) for x in errors):
         raise result["fatal"]
     raise RuntimeError("; ".join(errors) or "no stream")
 
