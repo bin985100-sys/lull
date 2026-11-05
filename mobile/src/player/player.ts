@@ -87,9 +87,13 @@ function engine() {
 
 /* «Играть поверх других приложений»: в режиме mixWithOthers Lull не забирает аудиофокус,
    поэтому TikTok, Reels и видео не ставят его на паузу — звук идёт вместе. Иначе ведём себя как обычный плеер. */
+/* На Android режим mixWithOthers не берёт аудиофокус, а свежий Android глушит приложения без фокуса:
+   плеер «играет», позиция идёт, а звука нет. Поэтому на Android берём фокус «с приглушением»:
+   Lull звучит всегда, а другие приложения не останавливаются, а становятся тише. */
+type Mode = 'mixWithOthers' | 'duckOthers' | 'doNotMixPersistent';
 const audioMode = () => ({
   playsInSilentMode: true, shouldPlayInBackground: true,
-  interruptionMode: (useLibrary.getState().settings.mixAudio ? 'mixWithOthers' : 'doNotMixPersistent') as 'mixWithOthers' | 'doNotMixPersistent',
+  interruptionMode: (useLibrary.getState().settings.mixAudio ? (Platform.OS === 'android' ? 'duckOthers' : 'mixWithOthers') : 'doNotMixPersistent') as Mode,
 });
 async function init() {
   if (!ready) {

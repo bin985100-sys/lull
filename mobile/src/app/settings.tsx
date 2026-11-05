@@ -32,7 +32,7 @@ export default function Settings() {
     if (!canMix) return toast('На iPhone Safari сам останавливает звук сайта, когда играет другое приложение. Это ограничение iOS', 'info');
     player.setMix(v);
     if (!v) return toast('Lull снова ставится на паузу, когда играет другое приложение', 'check');
-    toast('Готово: TikTok и видео больше не остановят Lull', 'check');
+    toast('Готово: Lull не будет останавливать другие приложения — они станут тише', 'check');
     /* при первом включении просим разрешить работу в фоне — иначе Samsung может усыпить плеер */
     if (!lib.settings.bgAsked) {
       lib.setSetting('bgAsked', true);
@@ -53,7 +53,7 @@ export default function Settings() {
         <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={lib.settings.saveHistory ? '#000' : '#8a8f96'} accessibilityLabel="Сохранять историю" />} />
       </Group>
       <Group title="Воспроизведение">
-        <Row icon="stack" label="Играть поверх других приложений" sub={canMix ? 'TikTok, Reels и видео не будут ставить Lull на паузу — звук пойдёт вместе' : 'Недоступно на iPhone: iOS сама останавливает звук сайта'}
+        <Row icon="stack" label="Играть поверх других приложений" sub={canMix ? 'Lull не останавливает другие приложения, а приглушает их. Если другое приложение само забирает звук, Android поставит Lull на паузу' : 'Недоступно на iPhone: iOS сама останавливает звук сайта'}
           right={<Switch value={mix && canMix} disabled={!canMix} onValueChange={toggleMix} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={mix && canMix ? '#000' : '#8a8f96'} accessibilityLabel="Играть поверх других приложений" />} />
         {canMix ? <Row icon="shield" label="Работа в фоне" sub="Разрешить Lull играть без ограничений батареи" onPress={() => askBattery().catch(openAppSettings)} /> : null}
       </Group>
