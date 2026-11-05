@@ -12,7 +12,7 @@ import { Icon } from '@/ui/Icon';
 type Props = {
   title: string;
   sub?: ReactNode;
-  cover?: { uri?: string; source?: any; collage?: (string | undefined)[] };
+  cover?: { uri?: string; source?: any; collage?: (string | undefined)[]; wide?: boolean };
   tracks?: Track[];
   loading?: boolean;
   error?: boolean;
@@ -55,7 +55,11 @@ export function ListPage(p: Props) {
   return (
     <Screen>
       <TopBar right={p.right} />
-      <View style={{ marginTop: 4, marginBottom: 18 }}>{p.loading && !p.cover?.uri && !p.cover?.source ? <Skeleton h={size} w={size} r={34} style={{ alignSelf: 'center' }} /> : <CoverArt cover={p.cover} size={size} />}</View>
+      <View style={{ marginTop: 4, marginBottom: 18 }}>{p.cover?.wide ? (
+        <View style={{ width: '100%', aspectRatio: 1.5, borderRadius: 30, overflow: 'hidden', backgroundColor: '#000', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine }}>
+          <Image source={p.cover.source} style={StyleSheet.absoluteFill} contentFit="cover" />
+        </View>
+      ) : p.loading && !p.cover?.uri && !p.cover?.source ? <Skeleton h={size} w={size} r={34} style={{ alignSelf: 'center' }} /> : <CoverArt cover={p.cover} size={size} />}</View>
       <T v="h1" accessibilityRole="header">{p.title}</T>
       {p.sub ? <View style={{ marginTop: 6 }}>{p.sub}</View> : null}
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>

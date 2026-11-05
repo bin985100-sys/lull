@@ -42,7 +42,7 @@ export function Insights() {
   const mName = monthName(now);
   const title = `Твой ${mName}`;
   if (!m || m.secs < 60) {
-    cards.push(<Card key="start" eyebrow={title} title={`Твой ${mName} начнётся с первого трека`} sub="Здесь появятся любимые исполнители и треки месяца" icon="sparkle" onPress={() => router.push('/discover')} wide />);
+    cards.push(<Card key="start" eyebrow={title} title="Начнётся с первого трека" sub="Здесь появятся любимые исполнители и треки месяца" icon="sparkle" onPress={() => router.push('/discover')} wide />);
   } else {
     const topA = m.artists[0];
     const topT = m.tracks[0];

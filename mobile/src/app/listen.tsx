@@ -54,10 +54,8 @@ export default function Listen() {
         <View>
           <SectionHead title="Сегодня в фокусе" />
           <Press scaleTo={0.98} onPress={() => router.push({ pathname: '/mix/[id]', params: { id: 'foryou' } })} accessibilityRole="button" accessibilityLabel="Открыть подборку «Для тебя»"
-            style={{ height: 252, borderRadius: 30, overflow: 'hidden', backgroundColor: C.s2 }}>
+            style={{ width: '100%', aspectRatio: 1.5, borderRadius: 30, overflow: 'hidden', backgroundColor: '#000', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine }}>
             <Image source={MIXES.foryou.image} style={StyleSheet.absoluteFill} contentFit="cover" />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.22)' }]} />
-            <T style={{ position: 'absolute', left: 22, bottom: 22, right: 92, fontFamily: F.bold, fontSize: 27, lineHeight: 31 }}>Для тебя</T>
             <Pressable onPress={() => mix.data && player.play(mix.data)} accessibilityRole="button" accessibilityLabel="Слушать «Для тебя»"
               style={{ position: 'absolute', right: 16, bottom: 16, width: 56, height: 48, borderRadius: 18, backgroundColor: 'rgba(28,30,33,0.75)', alignItems: 'center', justifyContent: 'center' }}>
               <Icon name="play" size={26} />

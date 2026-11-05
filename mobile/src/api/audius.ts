@@ -109,9 +109,9 @@ export const audius = {
 /* Подборки «Под настроение» = жанровые чарты Audius. Картинки — свои. */
 /* Подборки «Под настроение»: настроения каталога Lull (chip) и запасной жанр Audius. Картинки — свои. */
 export const MOODS = [
-  { id: 'exhale', title: 'Выдохнуть', chip: 'Релакс', genre: 'Ambient', image: require('../../assets/moods/m_exhale.webp') },
-  { id: 'motion', title: 'В движении', chip: 'В дороге', genre: 'Electronic', image: require('../../assets/moods/m_motion.webp') },
-  { id: 'focus', title: 'Сосредоточиться', chip: 'Концентрация', genre: 'Lo-Fi', image: require('../../assets/moods/m_focus.webp') },
-  { id: 'night', title: 'Ночной город', chip: 'Вечеринка', genre: 'Hip-Hop/Rap', image: require('../../assets/moods/m_night.webp') },
+  { id: 'exhale', title: 'Выдохнуть', chip: 'Релакс', genre: 'Ambient', image: require('../../assets/moods/cover_exhale.webp') },
+  { id: 'motion', title: 'В движении', chip: 'В дороге', genre: 'Electronic', image: require('../../assets/moods/cover_motion.webp') },
+  { id: 'focus', title: 'Сосредоточиться', chip: 'Концентрация', genre: 'Lo-Fi', image: require('../../assets/moods/cover_focus.webp') },
+  { id: 'night', title: 'Ночной город', chip: 'Вечеринка', genre: 'Hip-Hop/Rap', image: require('../../assets/moods/cover_night.webp') },
 ] as const;
-export const FOCUS_IMAGE = require('../../assets/moods/focus_route.webp');
+export const FOCUS_IMAGE = require('../../assets/moods/cover_foryou.webp');

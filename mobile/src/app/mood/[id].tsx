@@ -6,8 +6,8 @@ import { MOODS } from '@/api/audius';
 import { lull } from '@/api/lull';
 import { useData } from '@/api/useData';
 import { Sections } from '@/components/Cards';
-import { C, F } from '@/theme/tokens';
-import { Empty, ListSkeleton, Offline, Screen, T, TopBar } from '@/ui/kit';
+import { C } from '@/theme/tokens';
+import { Empty, ListSkeleton, Offline, Screen, TopBar } from '@/ui/kit';
 
 /* Настроение: плейлисты каталога Lull под выбранное состояние */
 export default function MoodScreen() {
@@ -17,10 +17,9 @@ export default function MoodScreen() {
   return (
     <Screen>
       <TopBar />
-      <View style={{ height: 190, borderRadius: 30, overflow: 'hidden', marginTop: 10, marginBottom: 24, backgroundColor: C.s2 }}>
+      <View style={{ width: '100%', aspectRatio: 1.5, borderRadius: 30, overflow: 'hidden', marginTop: 10, marginBottom: 24, backgroundColor: '#000', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine }}
+        accessibilityRole="header" accessibilityLabel={m.title}>
         <Image source={m.image} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.25)' }]} />
-        <T accessibilityRole="header" style={{ position: 'absolute', left: 22, bottom: 20, fontFamily: F.bold, fontSize: 32 }}>{m.title}</T>
       </View>
       {error && !data ? <Offline onRetry={reload} /> : loading && !data ? <ListSkeleton n={5} /> : data?.length ? <Sections sections={data} /> : <Empty icon="note" title="Пока пусто" text="Попробуй позже — подборки обновляются." />}
     </Screen>
