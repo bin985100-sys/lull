@@ -11,11 +11,33 @@ export const useCrash = create<{ error: string | null }>(() => ({ error: null })
 export function report(e: unknown, where: string) {
   const err = e as Error;
   const text = `${where}: ${err?.message ?? String(e)}\n${(err?.stack ?? '').split('\n').slice(0, 8).join('\n')}`;
+  log(`ОШИБКА ${text}`);
   useCrash.setState({ error: text });
   AsyncStorage.setItem(KEY, `${new Date().toISOString()}\n${text}`).catch(() => {});
   if (where === 'fatal' || where.startsWith('player')) sendCrash(text);
 }
 export const lastError = () => AsyncStorage.getItem(KEY);
+
+/* ---------- журнал: последние ~300 событий, хранится на телефоне и переживает вылет ---------- */
+const LOG_KEY = 'lull.log';
+let logLines: string[] = [];
+let logLoaded = AsyncStorage.getItem(LOG_KEY).then((v) => { if (v) logLines = [...v.split('\n').slice(-250), ...logLines]; }).catch(() => {});
+let flushT: ReturnType<typeof setTimeout> | null = null;
+const stamp = () => new Date().toISOString().slice(11, 23);
+function push(msg: string) {
+  logLines.push(`${stamp()} ${msg}`);
+  if (logLines.length > 300) logLines = logLines.slice(-300);
+}
+const flush = () => AsyncStorage.setItem(LOG_KEY, logLines.join('\n')).catch(() => {});
+/* обычная запись — сохраняется пачкой через полсекунды */
+export function log(msg: string) {
+  push(msg);
+  if (!flushT) flushT = setTimeout(() => { flushT = null; flush(); }, 500);
+}
+/* важная запись перед рискованным шагом — дожидаемся сохранения, чтобы она осталась даже при вылете */
+export async function logNow(msg: string) { push(msg); await logLoaded; await flush(); }
+export async function readLog() { await logLoaded; return logLines.join('\n'); }
+export async function clearLog() { logLines = []; await AsyncStorage.removeItem(LOG_KEY).catch(() => {}); }
 
 /* Нативный вылет прошлого запуска (его записывает Android-часть приложения): показываем и отправляем на сервер */
 const device = () => {
@@ -29,11 +51,13 @@ export async function sendCrash(text: string) {
   } catch {}
 }
 (async () => {
+  log(`--- запуск, ${device()}`);
   try {
     const native = await AsyncStorage.getItem('lull.nativeCrash');
     if (!native) return;
     await AsyncStorage.removeItem('lull.nativeCrash');
     const text = `Прошлый запуск закрылся с ошибкой (${device()}):\n${native}`;
+    logNow(`ВЫЛЕТ прошлого запуска:\n${native}`);
     useCrash.setState({ error: text.slice(0, 3000) });
     AsyncStorage.setItem(KEY, text).catch(() => {});
     sendCrash(native);

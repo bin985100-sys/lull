@@ -54,6 +54,7 @@ export default function Settings() {
       <Group title="О приложении">
         <Row icon="info" label="Музыка — каталог Lull и Audius" />
         <Row icon="doc" label="Версия 0.1 · ранняя сборка" />
+        <Row icon="doc" label="Журнал — отправить разработчику" onPress={() => router.push('/log')} />
         <Row icon="info" label="Показать последнюю ошибку" onPress={async () => { const e = await lastError(); if (e) useCrash.setState({ error: e }); else toast('Ошибок не было', 'check'); }} />
       </Group>
     </Screen>

@@ -9,7 +9,12 @@ const CODE = `
       try {
         val sw = java.io.StringWriter()
         e.printStackTrace(java.io.PrintWriter(sw))
-        val text = java.util.Date().toString() + "\\nnative " + t.name + ": " + sw.toString().take(8000)
+        var tail = ""
+        try {
+          val pr = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-t", "150", "--pid=" + android.os.Process.myPid()))
+          tail = pr.inputStream.bufferedReader().readText().takeLast(9000)
+        } catch (_: Throwable) {}
+        val text = java.util.Date().toString() + "\\nnative " + t.name + ": " + sw.toString().take(6000) + "\\n--- logcat ---\\n" + tail
         val path = getDatabasePath("RKStorage")
         path.parentFile?.mkdirs()
         val db = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(path, null)

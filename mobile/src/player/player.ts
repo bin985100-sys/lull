@@ -8,7 +8,7 @@ import { streamUrl, type Track } from '@/api/audius';
 import { lull, streamUrlYt, warm } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 import { useTaste } from '@/store/taste';
-import { report } from '@/ui/Crash';
+import { log, logNow, report } from '@/ui/Crash';
 
 export type Repeat = 'off' | 'all' | 'one';
 type Dir = 'next' | 'prev';
@@ -42,13 +42,16 @@ let nativeLen = 0;
 
 function engine() {
   if (pl) return pl;
+  log('engine: создаю плеер');
   pl = createAudioPlaylist({ sources: [], updateInterval: 250, loop: 'none' });
+  log('engine: плеер создан');
   let said = false;
   pl.addListener('playlistStatusUpdate', (st) => {
-    if (!said && (st.currentTime || 0) > 0.5) { said = true; console.log(`[lull] playing ${currentTrack()?.id} t=${st.currentTime}`); setTimeout(() => { said = false; }, 30000); }
+    if (!said && (st.currentTime || 0) > 0.5) { said = true; log(`звук пошёл: ${currentTrack()?.title} t=${(st.currentTime || 0).toFixed(1)}`); console.log(`[lull] playing ${currentTrack()?.id} t=${st.currentTime}`); setTimeout(() => { said = false; }, 30000); }
     useProgress.setState({ time: st.currentTime || 0, duration: st.duration || currentTrack()?.duration || 0 });
     try { meter(st.playing, st.currentTime || 0); } catch (e) { report(e, 'meter'); }
     const s = usePlayer.getState();
+    if (s.playing !== st.playing || s.buffering !== st.isBuffering) log(`статус: playing=${st.playing} buffering=${st.isBuffering} i=${st.currentIndex}/${st.trackCount}`);
     if (s.playing !== st.playing || s.buffering !== st.isBuffering) usePlayer.setState({ playing: st.playing, buffering: st.isBuffering });
     if (st.didJustFinish && st.currentIndex >= st.trackCount - 1) {
       /* дошли до конца окна: дальше по очереди или по кругу */
@@ -58,6 +61,7 @@ function engine() {
     }
   });
   pl.addListener('trackChanged', ({ currentIndex }) => {
+    log(`trackChanged: ${currentIndex} (base ${base})`);
     const s = usePlayer.getState();
     const idx = base + currentIndex;
     if (idx === s.index || idx >= s.queue.length) return;
@@ -69,6 +73,7 @@ function engine() {
 
 async function init() {
   if (!ready) {
+    log('init: режим звука');
     ready = setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' }).catch(() => {});
   }
   await ready;
@@ -123,9 +128,14 @@ function onTrackStart() {
   { const s = usePlayer.getState(); warm(s.queue.slice(s.index + 2, s.index + 5)); setTimeout(() => prime(usePlayer.getState().queue[usePlayer.getState().index + 1]), 1500); }
   useProgress.setState({ time: 0, duration: t.duration });
   const meta = { title: t.title, artist: t.artist, artworkUrl: t.artworkLarge || t.artwork };
-  try {
-    pl.setActiveForLockScreen(true, meta, { showNextTrack: true, showPreviousTrack: true, showSeekForward: false, showSeekBackward: false });
-  } catch {}
+  const p = pl;
+  (async () => {
+    await logNow(`экран блокировки: включаю для «${t.title}»`);
+    try {
+      p.setActiveForLockScreen(true, meta, { showNextTrack: true, showPreviousTrack: true, showSeekForward: false, showSeekBackward: false });
+      log('экран блокировки: готово');
+    } catch (e) { report(e, 'player.lockscreen'); }
+  })();
 }
 
 function shuffled<T>(a: T[]) {
@@ -155,6 +165,7 @@ async function jump(i: number, dir: 'next' | 'prev') {
 /* Поставить в плеер трек i очереди и следующий за ним, и сразу играть */
 function mount(i: number) {
   const q = usePlayer.getState().queue;
+  log(`mount: ${i} «${q[i]?.title}» ${q[i]?.id}`);
   const p = engine();
   p.pause();
   p.clear();
@@ -198,7 +209,9 @@ async function load(queue: Track[], index: number) {
   usePlayer.setState({ queue, index, lastDir: 'next', error: null, playing: true, buffering: true });
   useProgress.setState({ time: 0, duration: queue[index]?.duration || 0 });
   const t0 = Date.now();
+  await logNow(`play: «${queue[index]?.title}» ${queue[index]?.id}, в очереди ${queue.length}`);
   await prime(queue[index]);
+  log(`prime: ${Date.now() - t0} мс`);
   console.log(`[lull] prime ${queue[index]?.id} ${Date.now() - t0}ms`);
   if (seq !== loadSeq) return; // пока ждали, выбрали другой трек
   mount(index);
