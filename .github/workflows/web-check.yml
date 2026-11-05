@@ -1,0 +1,20 @@
+# Проверка веб-версии: CORS и ответы API для app.lull.website
+name: Lull web check
+on:
+  workflow_dispatch:
+  push:
+    branches: [mobile]
+    paths: ['.github/workflows/web-check.yml']
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          A=https://api.lull.website; O=https://app.lull.website
+          w() { echo "::warning title=$1::$2"; }
+          w app "$(curl -s -o /dev/null -w '%{http_code} %{time_total}s' $O/welcome)"
+          w preflight "$(curl -s -D - -o /dev/null -X OPTIONS -H "Origin: $O" -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type' $A/api/auth/start | tr -d '\r' | grep -iE '^HTTP|access-control' | tr '\n' ' ')"
+          w auth-config "$(curl -s -D - -H "Origin: $O" $A/api/auth/config | tr -d '\r' | grep -iE '^HTTP|access-control-allow-origin|^\{' | tr '\n' ' ' | head -c 400)"
+          w health "$(curl -s -D - -H "Origin: $O" $A/api/health | tr -d '\r' | grep -iE '^HTTP|access-control-allow-origin|^\{' | tr '\n' ' ' | head -c 300)"
+          w home "$(curl -s -o /dev/null -w '%{http_code} %{time_total}s' -H "Origin: $O" $A/api/home)"
+          w post-start "$(curl -s -D - -X POST -H "Origin: $O" -H 'Content-Type: application/json' -d '{"provider":"telegram"}' $A/api/auth/start | tr -d '\r' | grep -iE '^HTTP|access-control-allow-origin|^\{' | tr '\n' ' ' | head -c 300)"
