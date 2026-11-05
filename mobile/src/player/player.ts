@@ -39,6 +39,7 @@ let ready: Promise<void> | null = null;
    Так очередь приложения и плеера не расходятся: раньше после волны и пропусков мог играть не тот трек. */
 let base = 0;
 let nativeLen = 0;
+let mountedAt = 0;
 
 function engine() {
   if (pl) return pl;
@@ -53,7 +54,12 @@ function engine() {
     const s = usePlayer.getState();
     if (s.playing !== st.playing || s.buffering !== st.isBuffering) log(`статус: playing=${st.playing} buffering=${st.isBuffering} i=${st.currentIndex}/${st.trackCount}`);
     if (s.playing !== st.playing || s.buffering !== st.isBuffering) usePlayer.setState({ playing: st.playing, buffering: st.isBuffering });
-    if (st.didJustFinish && st.currentIndex >= st.trackCount - 1) {
+    /* «трек закончился» верим, только если играл именно текущий трек, он реально дошёл до конца
+       и с переключения прошло больше пары секунд: после clear() плеер присылает такой сигнал от прошлого трека */
+    const real = st.didJustFinish && base + st.currentIndex === s.index && Date.now() - mountedAt > 2500
+      && (st.duration || 0) > 5 && (st.currentTime || 0) >= (st.duration || 0) - 2;
+    if (st.didJustFinish && !real) log(`пропускаю ложный конец трека: i=${st.currentIndex} t=${st.currentTime}/${st.duration}`);
+    if (real && st.currentIndex >= st.trackCount - 1) {
       /* дошли до конца окна: дальше по очереди или по кругу */
       if (s.index < s.queue.length - 1) jump(s.index + 1, 'next');
       else if (s.repeat === 'all' && s.queue.length) jump(0, 'next');
@@ -62,6 +68,7 @@ function engine() {
   });
   pl.addListener('trackChanged', ({ currentIndex }) => {
     log(`trackChanged: ${currentIndex} (base ${base})`);
+    if (Date.now() - mountedAt < 1500 && currentIndex !== 0) return;
     const s = usePlayer.getState();
     const idx = base + currentIndex;
     if (idx === s.index || idx >= s.queue.length) return;
@@ -175,6 +182,7 @@ function mount(i: number) {
   if (q[i + 1]) { p.add(source(q[i + 1])); nativeLen = 2; }
   p.skipTo(0);
   p.play();
+  mountedAt = Date.now();
   usePlayer.setState({ playing: true });
 }
 /* Следующий трек очереди должен лежать в плеере сразу за текущим (после добавлений, волны, перемешивания) */

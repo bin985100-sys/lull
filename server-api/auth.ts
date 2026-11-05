@@ -112,11 +112,12 @@ h1{font-size:26px;margin:0 0 10px}p{color:#9ba0a7;margin:0 0 26px}a{display:bloc
 export function googleGo(nonce: string) {
   const p = pending.get(nonce);
   if (!p) return page('Ссылка устарела', 'Вернись в Lull и нажми кнопку ещё раз.');
-  const yt = p.provider === 'yt';
+  /* вход через Google сразу просит и доступ к YouTube Music (только чтение): лайки и плейлисты подключаются сами */
+  const yt = p.provider === 'yt' || p.provider === 'google';
   const q = new URLSearchParams({
     client_id: G_ID, redirect_uri: `${PUBLIC}/api/auth/google/callback`, response_type: 'code', state: nonce,
     scope: yt ? 'openid email profile https://www.googleapis.com/auth/youtube.readonly' : 'openid email profile',
-    ...(yt ? { access_type: 'offline', prompt: 'consent select_account' } : { prompt: 'select_account' }),
+    ...(yt ? { access_type: 'offline', include_granted_scopes: 'true', prompt: 'consent select_account' } : { prompt: 'select_account' }),
   });
   return page('Переходим в Google…', '', undefined, `https://accounts.google.com/o/oauth2/v2/auth?${q}`);
 }
@@ -144,6 +145,13 @@ export async function googleCallback(q: URLSearchParams) {
     return page('YouTube Music подключён', 'Возвращаемся в Lull — там можно перенести лайки и плейлисты.', nonce);
   }
   p.token = login((u) => u.googleSub === c.sub, () => ({ provider: 'google', googleSub: c.sub, name: c.name || c.email, avatar: c.picture, email: c.email }));
+  /* если на экране Google оставили галочку YouTube — сразу подключаем YouTube Music к аккаунту */
+  if (j.refresh_token && j.scope?.includes('youtube')) {
+    const u = db.users[db.sessions[p.token].userId];
+    u.ytRefresh = j.refresh_token; u.ytName = c.email || c.name; u.ytAt = Date.now();
+    if (j.access_token) yt.set(u.id, { token: j.access_token, exp: Date.now() + (j.expires_in || 3000) * 1000 - 60e3 });
+    save();
+  }
   return page('Готово', 'Ты вошёл в Lull. Возвращаемся в приложение…', nonce);
 }
 
