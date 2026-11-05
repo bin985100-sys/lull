@@ -8,16 +8,16 @@ import { Innertube, type Types } from 'youtubei.js';
 import { yt } from '../electron/yt';
 import { mint, potState, resetMinter, warmMinter } from './potoken';
 
-type Way = { name: string; client: Types.InnerTubeClient; pot: '' | 'video' | 'visitor' };
-// pot: к чему привязан токен в ссылке на файл — к id видео (так сейчас делает сайт YouTube) или к сессии (как было раньше)
+type Way = { name: string; client: Types.InnerTubeClient; pot: '' | 'video' | 'visitor'; playerPot?: boolean };
+// pot — токен в ссылке на файл: привязан к id видео (так сейчас делает сайт YouTube) или к сессии (как раньше).
+// playerPot — токен ещё и в запросе плеера; с ним YouTube иногда не отдаёт обычных ссылок («No valid URL»).
 const WAYS: Way[] = [
-  { name: 'MWEB+токен', client: 'MWEB', pot: 'video' },
-  { name: 'WEB+токен', client: 'WEB', pot: 'video' },
-  { name: 'MWEB+токен(сессия)', client: 'MWEB', pot: 'visitor' },
-  { name: 'TV+токен', client: 'TV', pot: 'video' },
-  { name: 'WEB_EMBEDDED+токен', client: 'WEB_EMBEDDED', pot: 'video' },
-  { name: 'MWEB', client: 'MWEB', pot: '' },
-  { name: 'TV', client: 'TV', pot: '' }
+  { name: 'MWEB+токен в ссылке', client: 'MWEB', pot: 'video' },
+  { name: 'MWEB+токен в ссылке(сессия)', client: 'MWEB', pot: 'visitor' },
+  { name: 'MWEB+токен', client: 'MWEB', pot: 'video', playerPot: true },
+  { name: 'WEB+токен в ссылке', client: 'WEB', pot: 'video' },
+  { name: 'TV+токен', client: 'TV', pot: 'video', playerPot: true },
+  { name: 'MWEB', client: 'MWEB', pot: '' }
 ];
 let best: string | null = null;
 
@@ -64,7 +64,9 @@ async function tryWay(id: string, w: Way) {
   const opts: any = { client: w.client };
   if (w.pot) {
     const visitor = c.session.context.client.visitorData ?? '';
-    [opts.po_token, gvs] = await timeout(Promise.all([mint(id), w.pot === 'video' ? mint(id) : mint(visitor)]), 15000, 'токен');
+    const [p, g] = await timeout(Promise.all([mint(id), w.pot === 'video' ? mint(id) : mint(visitor)]), 15000, 'токен');
+    if (w.playerPot) opts.po_token = p;
+    gvs = g;
   }
   const info: any = await timeout(c.getBasicInfo(id, opts), 5000, w.client);
   const st = info.playability_status?.status;
