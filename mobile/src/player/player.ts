@@ -71,7 +71,7 @@ function engine() {
     /* Верим только настоящему переходу на соседний трек (сам доиграл, кнопки на экране блокировки/в наушниках).
        Отголоски от clear()/skipTo() приходят с опозданием и раньше откатывали экран на прошлый трек,
        пока играл уже другой — отсюда «играет 505, а на экране Sparks». */
-    if (loading || !nativeLen || Date.now() - mountedAt < 1500) return;
+    if (loading || !nativeLen || Date.now() - mountedAt < 700) return; // короткое окно: отголоски от пересборки плеера
     const s = usePlayer.getState();
     const cur = s.index - base;
     if (currentIndex === cur) return;
@@ -144,18 +144,26 @@ function onTrackStart() {
   /* радио дозаполняем чуть позже, когда трек уже стартовал, и не больше 10 треков за раз */
   setTimeout(() => extendRadio().catch((e) => report(e, 'radio')), 4000);
   try { useLibrary.getState().pushHistory(t); } catch (e) { report(e, 'history'); }
-  setTimeout(primeAhead, 600);
+  setTimeout(primeAhead, 200);
   useProgress.setState({ time: 0, duration: t.duration });
   const meta = { title: t.title, artist: t.artist, artworkUrl: t.artworkLarge || t.artwork };
   const p = pl;
+  /* Плеер на экране блокировки и в шторке регистрируем один раз, дальше только меняем название и обложку.
+     Повторная регистрация пересоздаёт медиасессию Android: строка в шторке пропадала и кнопки «глючили». */
+  if (lockActive) {
+    try { p.updateLockScreenMetadata(meta); } catch (e) { report(e, 'player.lockscreen.update'); }
+    return;
+  }
+  lockActive = true;
   (async () => {
     await logNow(`экран блокировки: включаю для «${t.title}»`);
     try {
       p.setActiveForLockScreen(true, meta, { showNextTrack: true, showPreviousTrack: true, showSeekForward: false, showSeekBackward: false });
       log('экран блокировки: готово');
-    } catch (e) { report(e, 'player.lockscreen'); }
+    } catch (e) { lockActive = false; report(e, 'player.lockscreen'); }
   })();
 }
+let lockActive = false;
 
 function shuffled<T>(a: T[]) {
   a = a.slice();
@@ -190,7 +198,13 @@ function prime(t: Track | undefined): Promise<boolean> {
 function primeAhead() {
   const s = usePlayer.getState();
   const next = s.queue.slice(s.index + 1, s.index + 3);
-  (async () => { for (const t of next) await prime(t); })().catch(() => {});
+  (async () => {
+    for (const [k, t] of next.entries()) {
+      const ok = await prime(t);
+      /* следующий готов — кладём его в плеер телефона, чтобы кнопка «следующий» в шторке сработала сразу */
+      if (k === 0 && ok) { const st = usePlayer.getState(); if (st.queue[st.index + 1]?.id === t.id) ensureNext(); }
+    }
+  })().catch(() => {});
   warm(s.queue.slice(s.index + 3, s.index + 6));
 }
 
@@ -217,7 +231,7 @@ function mount(i: number) {
   base = i;
   p.add(source(q[i]));
   nativeLen = 1;
-  if (q[i + 1]) { p.add(source(q[i + 1])); nativeLen = 2; }
+  if (q[i + 1] && isPrimed(q[i + 1])) { p.add(source(q[i + 1])); nativeLen = 2; }
   p.skipTo(0);
   if (wantPlay) p.play();
   mountedAt = Date.now();
@@ -245,7 +259,11 @@ function ensureNext() {
   const want = s.queue[s.index + 1];
   for (let k = nativeLen - 1; k > cur; k--) pl.remove(k);
   nativeLen = cur + 1;
-  if (want) { pl.add(source(want)); nativeLen++; }
+  if (!want) return;
+  /* в плеер телефона кладём только подготовленный трек: кнопка «следующий» в шторке и на экране блокировки
+     переключает плеер напрямую, мимо приложения — неподготовленный трек там зависал */
+  if (isPrimed(want)) { pl.add(source(want)); nativeLen++; return; }
+  prime(want).then((ok) => { const st = usePlayer.getState(); if (ok && st.queue[st.index + 1]?.id === want.id) ensureNext(); });
 }
 
 async function jumpInner(i: number, dir: 'next' | 'prev') {
@@ -409,6 +427,7 @@ export const player = {
   stop() {
     loadSeq++; loading = false; if (dogTimer) clearTimeout(dogTimer);
     if (pl) { pl.pause(); pl.clear(); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }
+    lockActive = false;
     usePlayer.setState({ queue: [], index: -1, playing: false, expanded: false });
   },
 };

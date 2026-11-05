@@ -4,7 +4,7 @@ import { Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import type { Track } from '@/api/audius';
-import { warm } from '@/api/lull';
+import { warm, warmSoon } from '@/api/lull';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { useLibrary } from '@/store/library';
 import { artistKey, useTaste } from '@/store/taste';
@@ -21,6 +21,8 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
   const isCur = usePlayer((s) => currentTrack(s)?.id === track.id);
   const playing = usePlayer((s) => s.playing && currentTrack(s)?.id === track.id);
   const lit = useSharedValue(0);
+  /* первые три трека списка сервер готовит, как только список показан */
+  useEffect(() => { const i = list.indexOf(track); if (i >= 0 && i < 3) warmSoon(track); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (isCur) lit.value = withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 800 })); }, [isCur, lit]);
   /* прозрачность пишем обычным числом: «6e-8» из конца анимации ронял приложение на новых Android */
   const bg = useAnimatedStyle(() => ({ backgroundColor: `rgba(255,255,255,${(Math.max(0, lit.value) * 0.1).toFixed(3)})` }));

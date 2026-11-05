@@ -289,7 +289,8 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             log.warning("resolve %s %s: ссылка отдаёт 403", vid, client or "default")
             errors.append(f"{client or 'default'}: 403")
 
-    tasks = [asyncio.ensure_future(one(c, i * 2.5)) for i, c in enumerate(FALLBACK_CLIENTS)]
+    # запасной клиент стартует через 1.2 с, следующие — с шагом 1.5 с: «задумавшийся» основной больше не держит трек
+    tasks = [asyncio.ensure_future(one(c, 0 if i == 0 else 1.2 + (i - 1) * 1.5)) for i, c in enumerate(FALLBACK_CLIENTS)]
     waiter = asyncio.ensure_future(done.wait())
     await asyncio.wait([waiter, asyncio.ensure_future(asyncio.gather(*tasks, return_exceptions=True))], return_when=asyncio.FIRST_COMPLETED)
     done.set()

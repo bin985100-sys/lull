@@ -28,7 +28,7 @@ globalThis.__makePlaylist = () => {
     play() { p.playing = p.sources.length > 0; },
     pause() { p.playing = false; },
     seekTo(t) { p.time = t; },
-    setActiveForLockScreen() {}, clearLockScreenControls() {},
+    setActiveForLockScreen() { p.lockSets = (p.lockSets || 0) + 1; }, updateLockScreenMetadata() { p.lockUpdates = (p.lockUpdates || 0) + 1; }, clearLockScreenControls() {},
     get current() { return p.playing ? p.sources[p.currentIndex]?.uri : null; },
     /* «звук идёт»: раз в 100 мс шлём статус, как настоящий плеер */
     tick() {
@@ -155,6 +155,26 @@ await test('Новый список во время подготовки про�
   const b = m.player.play(LIST, 's6');
   await Promise.all([a, b]); await settle(1200);
   if (same(m, 'итог') !== 's6') throw new Error('должен играть s6');
+});
+
+await test('Шторка/экран блокировки: плеер регистрируется один раз, дальше только обновляется название', async () => {
+  const m = await freshApp(); await m.player.play(LIST, 's0'); await settle(1500);
+  m.player.next(); await settle(600); m.player.next(); await settle(600);
+  const p = globalThis.__pl;
+  if (p.lockSets !== 1) throw new Error(`регистраций ${p.lockSets}, а должна быть одна`);
+  if (!(p.lockUpdates >= 2)) throw new Error('название в шторке не обновлялось');
+});
+
+await test('«Дальше» из шторки, когда следующий трек ещё готовится: ничего не ломается, потом переключается', async () => {
+  slow = new Set(['s1']);
+  const m = await freshApp(); await m.player.play(LIST, 's0'); await settle(100);
+  const p = globalThis.__pl;
+  if (p.sources.length > 1) throw new Error('неподготовленный трек уже лежит в плеере телефона');
+  p.next(); await settle(300);                     // кнопка в шторке: следующего ещё нет — остаёмся на s0
+  if (same(m, 'пока готовится') !== 's0') throw new Error('сломалось');
+  await settle(800);                               // s1 подготовился и лёг в плеер
+  p.next(); await settle(800);
+  if (same(m, 'после подготовки') !== 's1') throw new Error('должен играть s1');
 });
 
 console.log(`\n${pass} прошло, ${fail} упало`);

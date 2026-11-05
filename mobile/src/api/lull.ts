@@ -64,6 +64,21 @@ export function warm(tracks: (Track | undefined)[]) {
   fetch(`${LULL_API}/api/warm?q=aac&ids=${ids.map(enc).join(',')}`).catch(() => {});
 }
 
+/* Прогрев «на показе»: первые треки каждого открытого списка сервер готовит заранее —
+   нажал, и звук стартует почти сразу. Копим 400 мс и шлём пачками по 6. */
+let soon: Track[] = [];
+let soonT: ReturnType<typeof setTimeout> | null = null;
+export function warmSoon(t: Track) {
+  if (t.source !== 'yt' || soon.some((x) => x.id === t.id)) return;
+  soon.push(t);
+  if (soonT) return;
+  soonT = setTimeout(() => {
+    soonT = null;
+    const batch = soon.slice(0, 12); soon = [];
+    for (let i = 0; i < batch.length; i += 6) warm(batch.slice(i, i + 6));
+  }, 400);
+}
+
 export const lull = {
   home: (chip?: string, s?: AbortSignal) => get<Raw[]>(`home${chip ? `?chip=${enc(chip)}` : ''}`, s).then((l) => l.map(mapSection)),
   charts: (s?: AbortSignal) => get<Raw[]>('charts', s).then((l) => l.map(mapSection)),
