@@ -1,0 +1,21 @@
+# Проверка файла звука с сервера Lull: формат, длительность, громкость
+name: Lull audio check
+on:
+  workflow_dispatch:
+  push:
+    branches: [mobile]
+    paths: ['.github/workflows/audio-check.yml']
+jobs:
+  audio:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sudo apt-get install -y -qq ffmpeg >/dev/null
+      - run: |
+          A=https://api.lull.website
+          for id in kJQP7kiw5Fk 9qnqYL0eNNI gm-Y9idMMQ4; do
+            h=$(curl -s -D - -o /tmp/$id.bin -m 90 -H "Range: bytes=0-" -w "code=%{http_code} size=%{size_download} t=%{time_total}" "$A/api/stream/$id?q=aac" | tr -d '\r' | grep -iE "^(content-type|content-range|content-length)|code=" | tr '\n' ' ')
+            p=$(ffprobe -v error -show_entries format=format_name,duration:stream=codec_name,sample_rate,channels -of compact /tmp/$id.bin 2>&1 | tr '\n' ' ' | head -c 400)
+            v=$(ffmpeg -hide_banner -i /tmp/$id.bin -af volumedetect -f null - 2>&1 | grep -E "mean_volume|max_volume" | sed 's/.*\] //' | tr '\n' ' ')
+            e=$(ffmpeg -hide_banner -v error -i /tmp/$id.bin -f null - 2>&1 | head -3 | tr '\n' ' ' | head -c 300)
+            echo "::warning title=$id::$h | $p | $v | errors: $e | head: $(head -c 12 /tmp/$id.bin | xxd -p)"
+          done
