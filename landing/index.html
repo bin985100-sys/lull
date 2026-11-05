@@ -57,8 +57,18 @@ a{color:inherit}
 .life li span{color:var(--mute);font-size:15px}
 
 /* ---------- 3. Music is here и обложки ---------- */
-.mih-s .in{display:grid;place-items:center;min-height:100svh;padding:clamp(70px,10vh,110px) var(--gut)}
-.mih{width:min(1300px,100%);height:auto;aspect-ratio:1539/1022;object-fit:contain}
+.mih-s .in{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(20px,3vh,36px);min-height:100svh;padding:clamp(80px,11vh,120px) var(--gut)}
+.mih-wrap{width:min(1400px,100%);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2.6fr) minmax(0,1fr);grid-template-rows:auto auto;align-items:center;column-gap:clamp(12px,2vw,32px);row-gap:clamp(24px,5vh,64px)}
+.mih{grid-column:2;grid-row:1/3;width:100%;height:auto;aspect-ratio:1330/650;object-fit:contain;max-height:60svh}
+.note{display:flex;flex-direction:column;gap:6px;max-width:30ch}
+.note b{font-weight:600;font-size:clamp(16px,1.25vw,19px);letter-spacing:-.01em}
+.note span{color:var(--mute);font-size:clamp(14px,1.05vw,16px);line-height:1.5}
+.n1{grid-column:1;grid-row:1;align-self:end}
+.n3{grid-column:1;grid-row:2;align-self:start}
+.n2{grid-column:3;grid-row:1;align-self:end;justify-self:end;text-align:right}
+.n4{grid-column:3;grid-row:2;align-self:start;justify-self:end;text-align:right}
+.mih-line{margin:0;text-align:center;text-wrap:balance;font-weight:200;font-size:clamp(28px,3.4vw,58px);letter-spacing:-.04em;line-height:1.05;max-width:22ch}
+.note.rv{transition-delay:.25s}.mih-line.rv{transition-delay:.4s}
 .here{background:#000 url(/assets/gradient.webp) center/cover no-repeat}
 .here .in{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:clamp(80px,11vh,130px) var(--gut)}
 .grid{width:min(1100px,100%,calc((100svh - 170px) * 1.5));display:flex;flex-direction:column;gap:6px;background:#000;border:6px solid #000;box-shadow:0 40px 90px -30px rgba(0,0,40,.6)}
@@ -85,6 +95,9 @@ a{color:inherit}
 .foot{margin-top:auto;padding-top:90px;display:flex;justify-content:space-between;color:var(--mute);font-size:14px}
 
 @media (max-width:860px){
+  .mih-wrap{grid-template-columns:1fr 1fr;grid-template-rows:auto}
+  .mih{grid-column:1/3;grid-row:1;max-height:none}
+  .n1,.n2,.n3,.n4{grid-row:auto;grid-column:auto;justify-self:start;text-align:left;align-self:start}
   .life .in{grid-template-columns:1fr;align-content:center}
   .life video{max-height:56svh;justify-self:start;width:auto}
   .row{gap:4px}.grid{gap:4px;border-width:4px}
@@ -126,7 +139,14 @@ a{color:inherit}
 
   <section class="s mih-s" aria-label="Music is here">
     <div class="in">
-      <img class="mih rv" src="/assets/music-is-here.webp" alt="Music is here">
+      <div class="mih-wrap">
+        <div class="note n1 rv"><b>Chart hits and the underground</b><span>Mainstream stars, indie names and the tracks your friends just found, all in one search.</span></div>
+        <div class="note n2 rv"><b>Starts in a tap</b><span>Pick a song and it plays. The next tracks are ready before this one ends.</span></div>
+        <img class="mih rv" src="/assets/music-is-here.webp" alt="Music is here">
+        <div class="note n3 rv"><b>Free, without ads</b><span>No subscription, no banners between songs. Sign in with Telegram or Google and listen.</span></div>
+        <div class="note n4 rv"><b>Looks like the music</b><span>The screen takes the colour of every cover, so each album feels like its own place.</span></div>
+      </div>
+      <p class="mih-line rv">Everything you want to hear, in your pocket.</p>
     </div>
     <div class="shade"></div>
   </section>
