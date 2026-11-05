@@ -27,7 +27,7 @@ const fmt = (s: number) => { s = Math.max(0, Math.floor(s || 0)); return `${Math
 
 type Tab = 'listen' | 'discover' | 'collection';
 export const useTab = create<{ tab: Tab }>(() => ({ tab: 'listen' }));
-const ROOT: Record<string, Tab> = { '/listen': 'listen', '/discover': 'discover', '/collection': 'collection', '/search': 'discover', '/favorites': 'collection', '/history': 'listen', '/settings': 'listen', '/month': 'listen', '/prefs': 'listen' };
+const ROOT: Record<string, Tab> = { '/listen': 'listen', '/discover': 'discover', '/collection': 'collection', '/search': 'discover', '/favorites': 'collection', '/history': 'listen', '/settings': 'listen', '/month': 'listen', '/prefs': 'listen', '/youtube': 'listen' };
 const HIDDEN = ['/', '/welcome', '/auth', '/onboarding', '/similar', '/new-playlist', '/edit-playlist', '/add-tracks'];
 
 /* ---------- цвет обложки: плавная смена размытого фона ---------- */

@@ -3,6 +3,7 @@ import { resetTo } from '@/nav';
 import { Pressable, Switch, View } from 'react-native';
 
 import { logoutServer } from '@/api/auth';
+import { linkYouTube } from '@/api/youtube';
 import { player } from '@/player/player';
 import { lastError, useCrash } from '@/ui/Crash';
 import { useLibrary } from '@/store/library';
@@ -36,6 +37,14 @@ export default function Settings() {
         <Row icon="chart" label="Итоги месяца" onPress={() => router.push('/month')} />
         <Row icon="heart" label={`Любимые исполнители · ${lib.favArtists.length}`} onPress={() => router.push('/onboarding')} />
         <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={lib.settings.saveHistory ? '#000' : '#8a8f96'} accessibilityLabel="Сохранять историю" />} />
+      </Group>
+      <Group title="YouTube Music">
+        {lib.account.youtube
+          ? <Row icon="download" label={`Перенести лайки и плейлисты · ${lib.account.youtube}`} onPress={() => router.push('/youtube')} />
+          : <Row icon="google" label="Подключить YouTube Music" onPress={() => {
+              if (!lib.account.token) return toast('Сначала войди в Lull через Google или Telegram', 'info');
+              linkYouTube(() => { toast('YouTube Music подключён', 'check'); router.push('/youtube'); }).catch((e) => toast(e.message, 'info'));
+            }} />}
       </Group>
       <Group title="Данные">
         <Row icon="eraser" label="Очистить историю" onPress={() => confirm({ icon: 'eraser', title: 'Очистить историю?', text: 'Любимые треки и плейлисты останутся.', safe: 'Отмена', danger: 'Очистить историю', onDanger: () => { lib.clearHistory(); toast('История очищена', 'check'); } })} />

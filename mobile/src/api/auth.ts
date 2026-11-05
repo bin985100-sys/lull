@@ -29,7 +29,7 @@ export async function checkNow() {
     const r = await fetch(`${LULL_API}/api/auth/poll?nonce=${encodeURIComponent(w.nonce)}`).then((x) => x.json());
     if (r.status === 'ok') {
       stop();
-      useLibrary.getState().setAccount({ provider: w.provider === 'telegram' ? 'Telegram' : 'Google', name: r.user.name, avatar: r.user.avatar, token: r.token, userId: r.user.id });
+      useLibrary.getState().setAccount({ provider: w.provider === 'telegram' ? 'Telegram' : 'Google', name: r.user.name, avatar: r.user.avatar, token: r.token, userId: r.user.id, youtube: r.user.youtube?.name ?? null });
       const f = onDone; onDone = null; f?.();
     } else if (r.status === 'expired') {
       stop();

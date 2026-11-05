@@ -34,6 +34,7 @@ echo "== 2. Звук: быстрый старт треков"
 if [ -f "$HERE/server.py" ]; then
   cp "$APP/server.py" "$APP/server.py.bak-$(date +%s)" 2>/dev/null || true
   cp "$HERE/server.py" "$APP/server.py"
+  [ -f "$DATA/yt-cookies.txt" ] && chown lull:lull "$DATA/yt-cookies.txt" && chmod 600 "$DATA/yt-cookies.txt" && echo "  аккаунт YouTube для звука: подключён (cookies)"
   systemctl restart lull-relay
   sleep 2
   systemctl is-active --quiet lull-relay && echo "  звук работает" || { echo "  !! relay не стартовал, возвращаю прошлую версию"; cp "$(ls -t $APP/server.py.bak-* | head -1)" "$APP/server.py"; systemctl restart lull-relay; }

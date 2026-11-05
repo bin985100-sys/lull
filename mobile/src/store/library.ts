@@ -11,7 +11,7 @@ export type HistoryItem = { track: Track; at: number };
 
 type Lib = {
   onboarded: boolean;
-  account: { name: string; provider: 'Google' | 'Telegram' | null; avatar?: string; token?: string; userId?: string };
+  account: { name: string; provider: 'Google' | 'Telegram' | null; avatar?: string; token?: string; userId?: string; youtube?: string | null };
   favArtists: Artist[];
   liked: Track[];
   savedPlaylists: Playlist[];
@@ -25,6 +25,7 @@ type Lib = {
   toggleArtist(a: Artist): void;
   toggleLike(t: Track): boolean;
   isLiked(id: string): boolean;
+  addLikes(t: Track[]): number;
   toggleSavedPlaylist(p: Playlist): void;
   createPlaylist(name: string, tracks?: Track[]): string;
   renamePlaylist(id: string, name: string): void;
@@ -66,6 +67,12 @@ export const useLibrary = create<Lib>()(
         const has = get().liked.some((x) => x.id === t.id);
         set({ liked: has ? get().liked.filter((x) => x.id !== t.id) : [t, ...get().liked] });
         return !has;
+      },
+      addLikes: (list) => {
+        const have = new Set(get().liked.map((x) => x.id));
+        const add = list.filter((t) => t?.id && !have.has(t.id) && (have.add(t.id), true));
+        if (add.length) set({ liked: [...get().liked, ...add] });
+        return add.length;
       },
       isLiked: (id) => get().liked.some((x) => x.id === id),
       toggleSavedPlaylist: (p) => {

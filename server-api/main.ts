@@ -7,7 +7,7 @@ import http from 'node:http';
 import { album, artist, charts, home, homeChips, playlist, search, suggest, suggestRich, upNext } from '../electron/yt';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
-import { authEnabled, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto } from './auth';
+import { authEnabled, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
 const cache = new Map<string, { t: number; body: string }>();
@@ -52,6 +52,14 @@ async function auth(rest: string[], q: URLSearchParams, body: string, res: http.
     case 'me': return json(res, me(b.token ?? ''));
     case 'logout': return json(res, logout(b.token ?? ''));
     case 'back': return html(res, page('Готово', 'Ты вошёл в Lull. Возвращаемся в приложение…', q.get('nonce') ?? undefined));
+    case 'yt': {
+      const tok = b.token ?? '';
+      if (rest[1] === 'start') return json(res, ytLinkStart(tok));
+      if (rest[1] === 'library') return json(res, await ytLibrary(tok));
+      if (rest[1] === 'playlist') return json(res, await ytPlaylist(tok, b.id ?? ''));
+      if (rest[1] === 'unlink') return json(res, ytUnlink(tok));
+      return json(res, { error: 'not found' }, 404);
+    }
     case 'google': return html(res, rest[1] === 'callback' ? await googleCallback(q) : googleGo(q.get('nonce') ?? ''));
     case 'tgphoto': {
       const f = await tgPhoto(decodeURIComponent(rest.slice(1).join('/')));

@@ -187,6 +187,7 @@ FORMATS = {
     "auto": "ba[protocol=https][ext=webm]/ba[protocol=https]/ba/18/b",
 }
 _local = threading.local()
+COOKIES = Path(os.environ.get("LULL_YT_COOKIES", str(DATA / "yt-cookies.txt")))
 
 
 def ydl_for(fmt: str, client: str = "") -> yt_dlp.YoutubeDL:
@@ -207,6 +208,9 @@ def ydl_for(fmt: str, client: str = "") -> yt_dlp.YoutubeDL:
             "format": FORMATS[fmt], "socket_timeout": 10, "cachedir": str(DATA / "yt-dlp-cache"),
             "source_address": "0.0.0.0", "extractor_args": {"youtube": yt_args},
             "js_runtimes": {"node": {}},
+            # Аккаунт YouTube для треков с ограничениями (18+, «войдите, чтобы подтвердить…»):
+            # файл cookies в формате Netscape кладёт владелец сервера, в репозиторий он не попадает.
+            **({"cookiefile": str(COOKIES)} if COOKIES.is_file() else {}),
         })
     return _ydl[k]
 

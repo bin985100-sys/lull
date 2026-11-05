@@ -17,7 +17,7 @@ const TG_API = process.env.LULL_TG_API || 'https://api.telegram.org';
 const G_ID = process.env.LULL_GOOGLE_ID || '';
 const G_SECRET = process.env.LULL_GOOGLE_SECRET || '';
 
-export type User = { id: string; name: string; avatar?: string; provider: 'telegram' | 'google'; tgId?: number; tgUsername?: string; googleSub?: string; email?: string; createdAt: number };
+export type User = { id: string; name: string; avatar?: string; provider: 'telegram' | 'google'; tgId?: number; tgUsername?: string; googleSub?: string; email?: string; createdAt: number; ytRefresh?: string; ytName?: string; ytAt?: number };
 type Db = { users: Record<string, User>; sessions: Record<string, { userId: string; at: number }> };
 
 const FILE = path.join(DATA, 'auth.json');
@@ -34,11 +34,11 @@ const save = () => {
 };
 
 /* Незавершённые входы живут 10 минут */
-const pending = new Map<string, { provider: string; at: number; token?: string }>();
+const pending = new Map<string, { provider: string; at: number; token?: string; userId?: string; done?: boolean }>();
 setInterval(() => { const now = Date.now(); for (const [k, v] of pending) if (now - v.at > 10 * 60e3) pending.delete(k); }, 60e3).unref();
 
 const rid = (n = 24) => crypto.randomBytes(n).toString('base64url');
-const pub = (u: User) => ({ id: u.id, name: u.name, avatar: u.avatar, provider: u.provider, username: u.tgUsername, email: u.email });
+const pub = (u: User) => ({ id: u.id, name: u.name, avatar: u.avatar, provider: u.provider, username: u.tgUsername, email: u.email, youtube: u.ytRefresh ? { name: u.ytName || '' } : null });
 
 function login(find: (u: User) => boolean, make: () => Omit<User, 'id' | 'createdAt'>): string {
   let u = Object.values(db.users).find(find);
@@ -81,6 +81,7 @@ export async function start(provider: string) {
 export function poll(nonce: string) {
   const p = pending.get(nonce);
   if (!p) return { status: 'expired' };
+  if (p.provider === 'yt') { if (!p.done) return { status: 'pending' }; pending.delete(nonce); return { status: 'ok', user: pub(db.users[p.userId!]) }; }
   if (!p.token) return { status: 'pending' };
   pending.delete(nonce);
   const s = db.sessions[p.token];
@@ -108,8 +109,14 @@ h1{font-size:26px;margin:0 0 10px}p{color:#9ba0a7;margin:0 0 26px}a{display:bloc
 
 /* ---------- Google ---------- */
 export function googleGo(nonce: string) {
-  if (!pending.has(nonce)) return page('Ссылка устарела', 'Вернись в Lull и нажми «Продолжить с Google» ещё раз.');
-  const q = new URLSearchParams({ client_id: G_ID, redirect_uri: `${PUBLIC}/api/auth/google/callback`, response_type: 'code', scope: 'openid email profile', state: nonce, prompt: 'select_account' });
+  const p = pending.get(nonce);
+  if (!p) return page('Ссылка устарела', 'Вернись в Lull и нажми кнопку ещё раз.');
+  const yt = p.provider === 'yt';
+  const q = new URLSearchParams({
+    client_id: G_ID, redirect_uri: `${PUBLIC}/api/auth/google/callback`, response_type: 'code', state: nonce,
+    scope: yt ? 'openid email profile https://www.googleapis.com/auth/youtube.readonly' : 'openid email profile',
+    ...(yt ? { access_type: 'offline', prompt: 'consent select_account' } : { prompt: 'select_account' }),
+  });
   return page('Переходим в Google…', '', undefined, `https://accounts.google.com/o/oauth2/v2/auth?${q}`);
 }
 export async function googleCallback(q: URLSearchParams) {
@@ -120,11 +127,21 @@ export async function googleCallback(q: URLSearchParams) {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ code: q.get('code')!, client_id: G_ID, client_secret: G_SECRET, redirect_uri: `${PUBLIC}/api/auth/google/callback`, grant_type: 'authorization_code' }),
   });
-  const j = (await r.json()) as { id_token?: string };
+  const j = (await r.json()) as { id_token?: string; refresh_token?: string; access_token?: string; expires_in?: number; scope?: string };
   if (!j.id_token) return page('Не получилось войти', 'Google не подтвердил вход. Попробуй ещё раз.');
   /* id_token получен напрямую от Google по TLS — подпись не перепроверяем */
   const c = JSON.parse(Buffer.from(j.id_token.split('.')[1], 'base64url').toString());
   if (c.aud !== G_ID) return page('Не получилось войти', 'Попробуй ещё раз.');
+  if (p.provider === 'yt') {
+    const u = db.users[p.userId!];
+    if (!u) return page('Не получилось', 'Войди в Lull заново и попробуй ещё раз.');
+    if (!j.refresh_token || !j.scope?.includes('youtube')) return page('Нет доступа к YouTube', 'Отметь галочку доступа к YouTube на экране Google и попробуй ещё раз.');
+    u.ytRefresh = j.refresh_token; u.ytName = c.email || c.name; u.ytAt = Date.now();
+    if (j.access_token) yt.set(u.id, { token: j.access_token, exp: Date.now() + (j.expires_in || 3000) * 1000 - 60e3 });
+    save();
+    p.done = true;
+    return page('YouTube Music подключён', 'Возвращаемся в Lull — там можно перенести лайки и плейлисты.', nonce);
+  }
   p.token = login((u) => u.googleSub === c.sub, () => ({ provider: 'google', googleSub: c.sub, name: c.name || c.email, avatar: c.picture, email: c.email }));
   return page('Готово', 'Ты вошёл в Lull. Возвращаемся в приложение…', nonce);
 }
@@ -176,4 +193,101 @@ export async function tgPhoto(fileId: string): Promise<{ type: string; body: Buf
   const r = await fetch(`${TG_API}/file/bot${TG}/${f.file_path}`);
   if (!r.ok) return null;
   return { type: r.headers.get('content-type') || 'image/jpeg', body: Buffer.from(await r.arrayBuffer()) };
+}
+
+/* ---------- YouTube Music пользователя: лайки и плейлисты (YouTube Data API, только чтение) ---------- */
+const yt = new Map<string, { token: string; exp: number }>();
+const userOf = (token: string) => { const s = db.sessions[token]; const u = s && db.users[s.userId]; if (!u) throw Object.assign(new Error('Войди в Lull заново'), { status: 401 }); return u; };
+
+export function ytLinkStart(token: string) {
+  const u = userOf(token);
+  if (!G_ID || !G_SECRET) throw Object.assign(new Error('Google ещё не настроен на сервере'), { status: 503 });
+  const nonce = rid(18);
+  pending.set(nonce, { provider: 'yt', at: Date.now(), userId: u.id });
+  return { nonce, url: `${PUBLIC}/api/auth/google/go?nonce=${nonce}` };
+}
+export function ytUnlink(token: string) {
+  const u = userOf(token);
+  const rt = u.ytRefresh;
+  delete u.ytRefresh; delete u.ytName; yt.delete(u.id); save();
+  if (rt) fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(rt)}`, { method: 'POST' }).catch(() => {});
+  return { ok: true };
+}
+
+async function access(u: User) {
+  const c = yt.get(u.id);
+  if (c && c.exp > Date.now()) return c.token;
+  if (!u.ytRefresh) throw Object.assign(new Error('YouTube Music не подключён'), { status: 409 });
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: G_ID, client_secret: G_SECRET, refresh_token: u.ytRefresh, grant_type: 'refresh_token' }),
+  });
+  const j = (await r.json()) as { access_token?: string; expires_in?: number; error?: string };
+  if (!j.access_token) {
+    if (j.error === 'invalid_grant') { delete u.ytRefresh; save(); }
+    throw Object.assign(new Error('Google отозвал доступ — подключи YouTube Music заново'), { status: 409 });
+  }
+  yt.set(u.id, { token: j.access_token, exp: Date.now() + (j.expires_in || 3000) * 1000 - 60e3 });
+  return j.access_token;
+}
+
+async function gapi(u: User, path: string, q: Record<string, string>) {
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${new URLSearchParams(q)}`, { headers: { Authorization: `Bearer ${await access(u)}` } });
+  const j = (await r.json()) as any;
+  if (!r.ok) throw Object.assign(new Error(j?.error?.message || `YouTube ${r.status}`), { status: r.status === 401 ? 409 : 502 });
+  return j;
+}
+async function pages(u: User, path: string, q: Record<string, string>, max: number) {
+  const out: any[] = [];
+  let pageToken = '';
+  while (out.length < max) {
+    const j = await gapi(u, path, { ...q, maxResults: '50', ...(pageToken ? { pageToken } : {}) });
+    out.push(...(j.items || []));
+    if (!j.nextPageToken) break;
+    pageToken = j.nextPageToken;
+  }
+  return out.slice(0, max);
+}
+
+const iso = (d = '') => { const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d); return m ? (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60 + (+(m[3] || 0)) : 0; };
+const thumb = (t: any) => (t?.maxres || t?.high || t?.medium || t?.default)?.url;
+/* «Исполнитель - Topic» → «Исполнитель»; у клипов вида «Артист - Название» берём артиста из названия */
+function toTrack(v: any) {
+  const sn = v.snippet || {};
+  let title: string = sn.title || '';
+  let artist: string = (sn.videoOwnerChannelTitle || sn.channelTitle || '').replace(/ - Topic$/, '');
+  const chId: string = sn.videoOwnerChannelId || sn.channelId;
+  if (!/ - Topic$/.test(sn.videoOwnerChannelTitle || sn.channelTitle || '')) {
+    const m = /^(.+?)\s+[-–—]\s+(.+)$/.exec(title);
+    if (m) { artist = m[1]; title = m[2].replace(/\s*[\[(](official|music|lyric|audio|video|clip|hd|4k)[^\])]*[\])]/gi, '').trim(); }
+  }
+  return { id: v.id, title, artists: [{ id: chId, name: artist }], durationSec: iso(v.contentDetails?.duration), thumb: thumb(sn.thumbnails) };
+}
+async function videos(u: User, ids: string[]) {
+  const out: any[] = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const j = await gapi(u, 'videos', { part: 'snippet,contentDetails', id: ids.slice(i, i + 50).join(','), maxResults: '50' });
+    out.push(...(j.items || []));
+  }
+  return out;
+}
+
+export async function ytLibrary(token: string) {
+  const u = userOf(token);
+  const [liked, lists] = await Promise.all([
+    pages(u, 'videos', { part: 'snippet,contentDetails', myRating: 'like' }, 1000),
+    pages(u, 'playlists', { part: 'snippet,contentDetails', mine: 'true' }, 200),
+  ]);
+  return {
+    account: u.ytName || '',
+    /* лайки YouTube общие для клипов и музыки — оставляем только категорию «Музыка» */
+    liked: liked.filter((v) => v.snippet?.categoryId === '10').map(toTrack),
+    playlists: lists.map((p) => ({ id: p.id, title: p.snippet?.title || 'Плейлист', count: p.contentDetails?.itemCount || 0, thumb: thumb(p.snippet?.thumbnails) })),
+  };
+}
+export async function ytPlaylist(token: string, id: string) {
+  const u = userOf(token);
+  const items = await pages(u, 'playlistItems', { part: 'contentDetails', playlistId: id }, 1000);
+  const vs = await videos(u, items.map((x) => x.contentDetails?.videoId).filter(Boolean));
+  return vs.map(toTrack);
 }
