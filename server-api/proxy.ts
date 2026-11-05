@@ -26,7 +26,15 @@ if (ytProxy) {
     const socks = socksDispatcher({ type: 5, host: u.hostname, port: Number(u.port) || 1080 }, { connect: { timeout: 10_000 } } as any);
     setGlobalDispatcher(new Split(new Agent(), socks as any) as any);
     // встроенный fetch Node может быть другой версии undici, чем диспетчер — берём fetch той же версии
-    (globalThis as any).fetch = ufetch;
+    // youtubei.js передаёт в fetch встроенный Request — для другой версии undici это чужой объект, разворачиваем его
+    (globalThis as any).fetch = async (input: any, init?: any) => {
+      if (input && typeof input === 'object' && !(input instanceof URL) && typeof input.url === 'string' && typeof input.arrayBuffer === 'function') {
+        const r = input as Request;
+        const body = r.method === 'GET' || r.method === 'HEAD' ? undefined : await r.arrayBuffer();
+        return ufetch(r.url, { method: r.method, headers: Array.from(r.headers as any), body, redirect: r.redirect, signal: r.signal, ...(init || {}) } as any);
+      }
+      return ufetch(input, init);
+    };
     console.log(`[api] YouTube через прокси ${u.host}`);
   } catch (e) {
     console.log('[api] прокси для YouTube не подключился:', (e as Error).message);
