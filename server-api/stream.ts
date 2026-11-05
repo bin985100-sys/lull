@@ -75,6 +75,9 @@ async function tryWay(id: string, w: Way) {
   const f = audio.filter((x: any) => String(x.mime_type).includes('mp4a')).sort((a: any, b: any) => b.bitrate - a.bitrate)[0] ?? audio[0];
   if (!f) throw new Error('нет аудио');
   let url: string = await f.decipher(c.session.player);
+  // youtubei.js при ошибке разгадки пишет в n «enhanced_except_…» и всё равно отдаёт ссылку — она обрывается после 256 КБ
+  const n = new URL(url).searchParams.get('n') || '';
+  if (n.startsWith('enhanced_except_')) throw new Error('n не разгадан');
   if (gvs) {
     const u = new URL(url);
     u.searchParams.set('pot', gvs);

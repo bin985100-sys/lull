@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import socket
 import ssl
 import threading
@@ -395,9 +396,7 @@ async def api_warm(request: web.Request) -> web.Response:
     fmt = request.query.get("q", "aac")
     ids = [x for x in request.query.get("ids", "").split(",") if 5 <= len(x) <= 20][:6]
     for vid in ids:
-        key = f"{fmt}:{vid}"
-        hit = cache.get(key)
-        if (hit and hit[0] > time.time()) or key in inflight:
+        if prep_find(vid, fmt) or f"{fmt}:{vid}" in prep_inflight:
             continue
         asyncio.ensure_future(_warm(vid, fmt))
     r = web.json_response({"ok": True, "queued": len(ids)}, status=202)
@@ -430,7 +429,7 @@ async def api_diag(request: web.Request) -> web.Response:
 
 async def _warm(vid: str, fmt: str):
     try:
-        await get_stream(vid, fmt)
+        await prepared(vid, fmt if fmt in FORMATS else "auto")
     except Exception as e:
         log.info("warm %s: %s", vid, e)
 
@@ -588,11 +587,132 @@ async def fetch_range(s: dict, a: int, b: int) -> bytes:
     raise RuntimeError(f"кусок {a}-{b}: {last}")
 
 
+def range_getter(vid: str, fmt: str, s: dict):
+    """Загрузчик кусков файла: при 403 одна новая ссылка на всех (остальные куски ждут и повторяют с ней)."""
+    state = {"s": s, "refreshes": 0}
+    lock = asyncio.Lock()
+
+    async def get(span):
+        for _ in range(3):
+            cur = state["s"]
+            try:
+                return await fetch_range(cur, *span)
+            except PermissionError:
+                async with lock:
+                    if state["s"] is cur:
+                        if state["refreshes"] >= 2:
+                            raise
+                        state["refreshes"] += 1
+                        await stream_forbidden(cur)
+                        state["s"] = await get_stream(vid, fmt, fresh=True)
+        raise RuntimeError("ссылка не отдаёт файл")
+    return get
+
+
+# ---------- готовые файлы: трек целиком на диске, переупакованный в обычный m4a ----------
+# YouTube отдаёт звук «дроблёным» MP4 (DASH). Плееры телефонов (Media3, AVPlayer) с ним при обычной загрузке
+# по ссылке спотыкаются: позиция идёт, а звука нет, долгий старт. Поэтому качаем трек целиком (через WARP ~0.5 с),
+# переупаковываем ffmpeg без перекодирования (-c copy, faststart) и отдаём файлом с диска — с перемоткой.
+PREP = DATA / "prep"
+FFMPEG = shutil.which("ffmpeg")
+PREP_MAX = int(os.environ.get("LULL_PREP_MB", "3000")) * 1024 * 1024
+prep_inflight: dict[str, asyncio.Future] = {}
+prep_sem = asyncio.Semaphore(3)
+
+
+def prep_find(vid: str, fmt: str) -> "Path | None":
+    for p in PREP.glob(f"{fmt}-{vid}.*"):
+        if p.suffix in (".m4a", ".webm", ".mp4"):
+            return p
+    return None
+
+
+def prep_cleanup():
+    try:
+        files = sorted((p for p in PREP.iterdir() if p.is_file()), key=lambda p: p.stat().st_mtime)
+        total = sum(p.stat().st_size for p in files)
+        for p in files:
+            if total <= PREP_MAX:
+                break
+            total -= p.stat().st_size
+            p.unlink(missing_ok=True)
+    except Exception as e:
+        log.warning("очистка готовых файлов: %s", e)
+
+
+async def _prepare(vid: str, fmt: str) -> Path:
+    async with prep_sem:
+        t0 = time.monotonic()
+        s = await get_stream(vid, fmt)
+        if not s.get("contentLength"):
+            await verify(s)
+        total = int(s.get("contentLength") or 0)
+        if not total:
+            raise RuntimeError("нет размера файла")
+        get = range_getter(vid, fmt, s)
+        spans, pos = [], 0
+        while pos < total:
+            spans.append((pos, min(pos + CHUNK - 1, total - 1)))
+            pos += CHUNK
+        parts = await asyncio.gather(*(get(x) for x in spans))
+        t1 = time.monotonic()
+        PREP.mkdir(parents=True, exist_ok=True)
+        mime = s.get("mime") or "audio/mp4"
+        ext = ".webm" if "webm" in mime else ".m4a"
+        raw = PREP / f"{fmt}-{vid}.raw"
+        out = PREP / f"{fmt}-{vid}{ext}"
+        raw.write_bytes(b"".join(parts))
+        if FFMPEG and ext == ".m4a":
+            tmp = PREP / f"{fmt}-{vid}.part.m4a"
+            proc = await asyncio.create_subprocess_exec(
+                FFMPEG, "-y", "-v", "error", "-i", str(raw), "-map", "0:a:0", "-vn", "-c:a", "copy",
+                "-movflags", "+faststart", "-f", "ipod", str(tmp),
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+            _, err = await proc.communicate()
+            if proc.returncode == 0 and tmp.exists() and tmp.stat().st_size > 10000:
+                tmp.replace(out)
+                raw.unlink(missing_ok=True)
+            else:
+                log.warning("ffmpeg %s: %s — отдаю как есть", vid, (err or b"").decode(errors="ignore")[:200])
+                tmp.unlink(missing_ok=True)
+                raw.replace(out)
+        else:
+            raw.replace(out)
+        log.info("prepare %s: %d КБ, скачано за %.1fs, всего %.1fs", vid, total // 1024, t1 - t0, time.monotonic() - t0)
+        prep_cleanup()
+        return out
+
+
+async def prepared(vid: str, fmt: str) -> Path:
+    """Готовый файл трека: с диска, а если нет — качаем (один раз на трек, сколько бы запросов ни пришло)."""
+    p = prep_find(vid, fmt)
+    if p:
+        try:
+            os.utime(p)
+        except OSError:
+            pass
+        return p
+    key = f"{fmt}:{vid}"
+    fut = prep_inflight.get(key)
+    if fut is None:
+        fut = prep_inflight[key] = asyncio.ensure_future(_prepare(vid, fmt))
+        fut.add_done_callback(lambda f: (prep_inflight.pop(key, None), f.cancelled() or f.exception()))
+    return await asyncio.shield(fut)
+
+
 async def api_stream(request: web.Request) -> web.StreamResponse:
     """Звук трека с перемоткой (Range). Браузер и телефон не могут открыть ссылку YouTube сами
     (она привязана к адресу сервера), поэтому отдаём её отсюда — кусками, с подкачкой следующего."""
     vid = request.match_info["vid"]
     fmt = request.query.get("q", "aac")
+    fmt = fmt if fmt in FORMATS else "auto"
+    try:
+        path = await asyncio.wait_for(prepared(vid, fmt), timeout=25)
+        r = web.FileResponse(path, headers={"Content-Type": "audio/webm" if path.suffix == ".webm" else "audio/mp4",
+                                            "Cache-Control": "no-store"})
+        return cors(request, r)
+    except Exception as e:
+        log.warning("готовый файл %s не получился (%s) — отдаю потоком", vid, str(e)[:200])
     try:
         s = await get_stream(vid, fmt)
         if not s.get("contentLength"):
@@ -635,23 +755,7 @@ async def api_stream(request: web.Request) -> web.StreamResponse:
         end = min(pos + size - 1, b)
         spans.append((pos, end))
         pos, size = end + 1, CHUNK
-    state = {"s": s, "refreshes": 0}
-    lock = asyncio.Lock()
-
-    async def get(span):
-        for _ in range(3):
-            cur = state["s"]
-            try:
-                return await fetch_range(cur, *span)
-            except PermissionError:
-                async with lock:  # новую ссылку берёт один кусок, остальные ждут и повторяют с ней
-                    if state["s"] is cur:
-                        if state["refreshes"] >= 2:
-                            raise
-                        state["refreshes"] += 1
-                        await stream_forbidden(cur)
-                        state["s"] = await get_stream(vid, fmt, fresh=True)
-        raise RuntimeError("ссылка не отдаёт файл")
+    get = range_getter(vid, fmt, s)
 
     tasks: list[asyncio.Task] = []
     try:

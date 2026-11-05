@@ -71,6 +71,9 @@ journalctl -u lull-api -n 30 --no-pager 2>/dev/null | grep -o "аккаунт Yo
 echo "  вход: $(curl -fsS http://127.0.0.1:8787/api/auth/config)"
 
 echo "== 2. Звук: быстрый старт треков"
+# ffmpeg — переупаковать звук YouTube (дроблёный MP4) в обычный m4a: на телефонах иначе «идёт, а звука нет»
+command -v ffmpeg >/dev/null 2>&1 || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg >/dev/null 2>&1 || echo "  !! ffmpeg не поставился"
+echo "  ffmpeg: $(command -v ffmpeg >/dev/null && ffmpeg -version | head -1 | cut -d' ' -f3 || echo нет)"
 if [ -f "$HERE/server.py" ]; then
   cp "$APP/server.py" "$APP/server.py.bak-$(date +%s)" 2>/dev/null || true
   cp "$HERE/server.py" "$APP/server.py"
@@ -100,9 +103,12 @@ echo "  проверка звука (до 30 с):"
 for id in kJQP7kiw5Fk JGwWNGJdvx8; do
   echo "   $id: $(curl -s -o /dev/null -m 40 -H 'Range: bytes=0-1' -w '%{http_code} за %{time_total}s' http://127.0.0.1:8480/api/stream/$id?q=aac 2>/dev/null || echo ошибка)"
 done
-echo "  трек целиком (первый звук / весь файл):"
+echo "  трек целиком (первый раз / повторно — уже с диска):"
 for id in kJQP7kiw5Fk JGwWNGJdvx8; do
-  echo "   $id: $(curl -s -o /dev/null -m 60 -w '%{http_code}, первый байт %{time_starttransfer}s, весь %{size_download} байт за %{time_total}s' http://127.0.0.1:8480/api/stream/$id?q=aac 2>/dev/null || echo ошибка)"
+  rm -f /var/lib/lull-relay/prep/aac-$id.* 2>/dev/null
+  t1=$(curl -s -o /dev/null -m 60 -w '%{http_code} %{size_download} байт за %{time_total}s' http://127.0.0.1:8480/api/stream/$id?q=aac 2>/dev/null || echo ошибка)
+  t2=$(curl -s -o /tmp/lull-$id.m4a -m 60 -w '%{time_total}s' http://127.0.0.1:8480/api/stream/$id?q=aac 2>/dev/null || echo ошибка)
+  echo "   $id: $t1 / повторно $t2, $(command -v ffprobe >/dev/null && ffprobe -v error -show_entries format=duration -of csv=p=0 /tmp/lull-$id.m4a 2>/dev/null | cut -d. -f1) с звука"; rm -f /tmp/lull-$id.m4a
 done
 journalctl -u lull-relay --since "-2 min" --no-pager -o cat 2>/dev/null | grep -E "resolve|ERROR|error|WARN" | tail -12 | sed 's/^/    /' 
 
