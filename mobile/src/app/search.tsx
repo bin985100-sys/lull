@@ -4,7 +4,7 @@ import { Pressable, TextInput, View } from 'react-native';
 
 import { lull } from '@/api/lull';
 import { useData } from '@/api/useData';
-import { ArtistRail, openPlaylist } from '@/components/Cards';
+import { ArtistRail, openArtist, openPlaylist } from '@/components/Cards';
 import { TrackRow } from '@/components/TrackRow';
 import { useLibrary } from '@/store/library';
 import { C, F } from '@/theme/tokens';
@@ -22,7 +22,9 @@ export default function Search() {
   const [f, setF] = useState<Filter>('all');
   const recent = useLibrary((x) => x.recentSearches);
   useEffect(() => { const t = setTimeout(() => setDebounced(q.trim()), 350); return () => clearTimeout(t); }, [q]);
-  const res = useData(debounced ? 'lsearch:' + debounced.toLowerCase() : null, (sig) => lull.search(debounced, sig));
+  /* вкладки ищут отдельно (раньше просто фильтровали общую выдачу — в «Треках» оставалось 3–5 песен) */
+  const sf = ({ all: 'all', tracks: 'songs', albums: 'albums', artists: 'artists' } as const)[f];
+  const res = useData(debounced ? `lsearch:${sf}:${debounced.toLowerCase()}` : null, (sig) => lull.search(debounced, sig, sf));
   const d = res.data;
   const nothing = d && !d.tracks.length && !d.artists.length && !d.albums.length && !d.playlists.length;
   const show = (k: Filter) => f === 'all' || f === k;
@@ -62,14 +64,18 @@ export default function Search() {
           </Empty>
         ) : d ? (
           <View style={{ gap: 28 }}>
-            {show('artists') && d.artists.length ? (
+            {f === 'all' && d.top ? <TopResult top={d.top} tracks={d.tracks} /> : null}
+            {show('artists') && d.artists.length && !(f === 'all' && d.top?.kind === 'track') ? (
               <View>{f === 'all' ? <SectionHead title="Артисты" /> : null}<ArtistRail items={d.artists} size={104} /></View>
             ) : null}
             {show('tracks') && d.tracks.length ? (
               <View>
                 {f === 'all' ? <SectionHead title="Треки" /> : null}
-                {(f === 'all' ? d.tracks.slice(0, 5) : d.tracks).map((t) => <TrackRow key={t.id} track={t} list={d.tracks} sub />)}
+                {(f === 'all' ? d.tracks.filter((t) => !(d.top?.kind === 'track' && d.top.track.id === t.id)).slice(0, 5) : d.tracks).map((t) => <TrackRow key={t.id} track={t} list={d.tracks} sub noWarm />)}
               </View>
+            ) : null}
+            {f === 'all' && d.top?.kind === 'track' && d.artists.length ? (
+              <View><SectionHead title="Артисты" /><ArtistRail items={d.artists} size={104} /></View>
             ) : null}
             {show('albums') && collections.length ? (
               <View>
@@ -88,5 +94,32 @@ export default function Search() {
           </View>
         ) : null}
     </Screen>
+  );
+}
+
+/* Лучший результат YouTube Music: то, что человек скорее всего искал — крупно и первым */
+type Top = NonNullable<Awaited<ReturnType<typeof lull.search>>['top']>;
+function TopResult({ top, tracks }: { top: Top; tracks: import('@/api/audius').Track[] }) {
+  if (top.kind === 'track') {
+    const list = [top.track, ...tracks.filter((t) => t.id !== top.track.id)];
+    return <View><SectionHead title="Лучший результат" /><TrackRow track={top.track} list={list} sub noWarm /></View>;
+  }
+  const isArtist = top.kind === 'artist';
+  const title = isArtist ? top.artist.name : top.album.title;
+  const sub = isArtist ? 'Артист' : top.album.artist || 'Альбом';
+  const img = isArtist ? top.artist.avatar : top.album.artwork;
+  return (
+    <View>
+      <SectionHead title="Лучший результат" />
+      <Press onPress={() => (isArtist ? openArtist(top.artist) : openPlaylist(top.album))} accessibilityRole="button" accessibilityLabel={title}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 16, padding: 14, borderRadius: 28, backgroundColor: C.s2 }}>
+        <Cover uri={img} size={88} radius={isArtist ? 44 : 20} />
+        <View style={{ flex: 1, gap: 4 }}>
+          <T numberOfLines={2} style={{ fontFamily: F.bold, fontSize: 20 }}>{title}</T>
+          <T v="small" numberOfLines={1}>{sub}</T>
+        </View>
+        <Icon name="arrowUR" size={22} color={C.tx2} />
+      </Press>
+    </View>
   );
 }

@@ -228,7 +228,7 @@ function primeAhead() {
       if (k === 0 && ok) { const st = usePlayer.getState(); if (st.queue[st.index + 1]?.id === t.id) ensureNext(); }
     }
   })().catch(() => {});
-  warm(s.queue.slice(s.index + 3, s.index + 6));
+  warm(s.queue.slice(s.index + 3, s.index + 6)); // дальние — только ссылка, два ближайших prime() качает целиком
 }
 
 let loadSeq = 0;

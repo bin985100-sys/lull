@@ -15,14 +15,14 @@ import { Cover, haptic, T } from '@/ui/kit';
 import { closeSheet, openSheet, toast } from '@/ui/overlay';
 import { PlayPause } from '@/ui/PlayPause';
 
-type Props = { track: Track; list: Track[]; num?: number; sub?: boolean; right?: 'play' | 'plus' | 'heart' | 'none'; playlistId?: string };
+type Props = { track: Track; list: Track[]; num?: number; sub?: boolean; right?: 'play' | 'plus' | 'heart' | 'none'; playlistId?: string; noWarm?: boolean };
 
-export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 'play', playlistId }: Props) {
+export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 'play', playlistId, noWarm }: Props) {
   const isCur = usePlayer((s) => currentTrack(s)?.id === track.id);
   const playing = usePlayer((s) => s.playing && currentTrack(s)?.id === track.id);
   const lit = useSharedValue(0);
-  /* первые три трека списка сервер готовит, как только список показан */
-  useEffect(() => { const i = list.indexOf(track); if (i >= 0 && i < 3) warmSoon(track); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /* у первых трёх треков списка сервер заранее берёт ссылку на звук (в поиске — нет: каждая буква давала новые запросы) */
+  useEffect(() => { const i = list.indexOf(track); if (!noWarm && i >= 0 && i < 3) warmSoon(track); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (isCur) lit.value = withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 800 })); }, [isCur, lit]);
   /* прозрачность пишем обычным числом: «6e-8» из конца анимации ронял приложение на новых Android */
   const bg = useAnimatedStyle(() => ({ backgroundColor: `rgba(255,255,255,${(Math.max(0, lit.value) * 0.1).toFixed(3)})` }));
@@ -31,7 +31,7 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
 
   return (
     <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 66, borderRadius: 16, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
-      <Pressable onPress={play} onPressIn={() => warm([track])} onLongPress={more} delayLongPress={420} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 4 }}
+      <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={more} delayLongPress={420} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 4 }}
         accessibilityRole="button" accessibilityLabel={`${track.title}, ${track.artist}`} accessibilityHint="Двойное касание — слушать, удержание — меню трека"
         accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Меню трека' }]}
         onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'longpress' ? more() : play())}>

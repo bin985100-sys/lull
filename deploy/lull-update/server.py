@@ -394,11 +394,17 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
 async def api_warm(request: web.Request) -> web.Response:
     """Готовим ссылки на звук заранее (следующие треки очереди): потом трек стартует сразу."""
     fmt = request.query.get("q", "aac")
+    fmt = fmt if fmt in FORMATS else "auto"
+    full = request.query.get("full") == "1"  # 1 — скачать трек целиком (нажали, следующий в очереди); иначе только ссылка
     ids = [x for x in request.query.get("ids", "").split(",") if 5 <= len(x) <= 20][:6]
     for vid in ids:
         if prep_find(vid, fmt) or f"{fmt}:{vid}" in prep_inflight:
             continue
-        asyncio.ensure_future(_warm(vid, fmt))
+        if not full:
+            hit = cache.get(f"{fmt}:{vid}")
+            if (hit and hit[0] > time.time()) or f"{fmt}:{vid}" in inflight:
+                continue
+        asyncio.ensure_future(_warm(vid, fmt, full))
     r = web.json_response({"ok": True, "queued": len(ids)}, status=202)
     return cors(request, r)
 
@@ -427,9 +433,9 @@ async def api_diag(request: web.Request) -> web.Response:
     return cors(request, web.json_response({"vid": vid, "yt_dlp": yt_dlp.version.__version__, "order": [c or "default" for c in ladder.order()], "ladder": ladder.state(), "clients": out}))
 
 
-async def _warm(vid: str, fmt: str):
+async def _warm(vid: str, fmt: str, full: bool = True):
     try:
-        await prepared(vid, fmt if fmt in FORMATS else "auto")
+        await (prepared(vid, fmt) if full else get_stream(vid, fmt))
     except Exception as e:
         log.info("warm %s: %s", vid, e)
 
@@ -806,11 +812,12 @@ async def api_proxy(request: web.Request) -> web.StreamResponse:
     try:
         up = await session.request(request.method, NODE_API + request.path_qs, data=body, headers=headers)
     except Exception as e:
-        return web.json_response({"error": f"api: {e}"}, status=502)
+        return cors(request, web.json_response({"error": f"api: {e}"}, status=502))
     resp = web.StreamResponse(status=up.status)
     for k in ("Content-Type", "Content-Length", "Cache-Control", "Content-Encoding"):
         if k in up.headers:
             resp.headers[k] = up.headers[k]
+    cors(request, resp)  # без этого браузер (веб-версия) не читает ответ: «Нет связи с сервером Lull»
     await resp.prepare(request)
     try:
         async for chunk in up.content.iter_chunked(64 * 1024):

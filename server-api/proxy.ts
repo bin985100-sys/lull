@@ -1,10 +1,14 @@
 /* Выход в YouTube через Cloudflare WARP (локальный SOCKS5-прокси на сервере, LULL_YT_PROXY=socks5://127.0.0.1:40000).
    Адрес самого сервера (дата-центр) YouTube режет: файлы обрываются после 256 КБ, «подтвердите, что не бот».
-   Через прокси идут только запросы к YouTube/Google; Telegram, тексты песен и локальные адреса — напрямую.
+   Через прокси идут только запросы за звуком; каталог, поиск, Telegram, тексты песен и локальные адреса — напрямую.
    Модуль должен импортироваться первым: он подменяет диспетчер у встроенного fetch. */
 import type { Dispatcher as D } from 'undici';
 
-const VIA = /(^|\.)(youtube\.com|googlevideo\.com|youtube-nocookie\.com|googleapis\.com|google\.com|ytimg\.com|ggpht\.com)$/i;
+/* Через WARP — только то, что связано со звуком: сам файл (googlevideo), запрос плеера и проверка BotGuard.
+   Каталог и поиск идут напрямую: через прокси они заметно медленнее, а YouTube их с адреса сервера не режет. */
+const via = (host: string, path: string) =>
+  /(^|\.)googlevideo\.com$/i.test(host) || /^jnn-pa\.googleapis\.com$/i.test(host) ||
+  (/(^|\.)youtube\.com$/i.test(host) && /^\/(youtubei\/v1\/(player|att\/)|api\/jnn\/)/.test(path));
 export const ytProxy = process.env.LULL_YT_PROXY || '';
 
 if (ytProxy) {
@@ -17,7 +21,7 @@ if (ytProxy) {
       dispatch(opts: D.DispatchOptions, handler: D.DispatchHandler) {
         let host = '';
         try { host = new URL(String(opts.origin)).hostname; } catch {}
-        return (VIA.test(host) ? this.proxied : this.direct).dispatch(opts, handler);
+        return (via(host, String(opts.path || '')) ? this.proxied : this.direct).dispatch(opts, handler);
       }
       async close() { await Promise.all([this.direct.close(), this.proxied.close()]); }
       async destroy() { await Promise.all([this.direct.destroy(), this.proxied.destroy()]); }

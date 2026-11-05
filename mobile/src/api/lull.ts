@@ -56,12 +56,14 @@ export const streamUrlYt = (id: string) => `${LULL_API}/api/stream/${enc(id)}?q=
 
 /* Просим сервер заранее подготовить ссылки на звук — тогда трек стартует сразу */
 const warmed = new Map<string, number>();
-export function warm(tracks: (Track | undefined)[]) {
+/* full — сервер скачивает трек целиком (нажали на трек, следующие в очереди); без него — только ссылку (показанные списки) */
+export function warm(tracks: (Track | undefined)[], full = false) {
   const now = Date.now();
-  const ids = tracks.filter((t): t is Track => !!t && t.source === 'yt' && now - (warmed.get(t.id) || 0) > 30 * 60e3).map((t) => t.id).slice(0, 6);
+  const key = (id: string) => (full ? 'f:' : 'l:') + id;
+  const ids = tracks.filter((t): t is Track => !!t && t.source === 'yt' && now - (warmed.get(key(t.id)) || 0) > 30 * 60e3).map((t) => t.id).slice(0, 6);
   if (!ids.length) return;
-  ids.forEach((id) => warmed.set(id, now));
-  fetch(`${LULL_API}/api/warm?q=aac&ids=${ids.map(enc).join(',')}`).catch(() => {});
+  ids.forEach((id) => warmed.set(key(id), now));
+  fetch(`${LULL_API}/api/warm?q=aac${full ? '&full=1' : ''}&ids=${ids.map(enc).join(',')}`).catch(() => {});
 }
 
 /* Прогрев «на показе»: первые треки каждого открытого списка сервер готовит заранее —
@@ -82,9 +84,14 @@ export function warmSoon(t: Track) {
 export const lull = {
   home: (chip?: string, s?: AbortSignal) => get<Raw[]>(`home${chip ? `?chip=${enc(chip)}` : ''}`, s).then((l) => l.map(mapSection)),
   charts: (s?: AbortSignal) => get<Raw[]>('charts', s).then((l) => l.map(mapSection)),
-  async search(q: string, s?: AbortSignal) {
-    const r = await get<Raw>(`search?q=${enc(q)}&f=all`, s);
+  async search(q: string, s?: AbortSignal, f: 'all' | 'songs' | 'albums' | 'artists' = 'all') {
+    const r = await get<Raw>(`search?q=${enc(q)}&f=${f}`, s);
+    const top: Raw | undefined = r.top;
     return {
+      /* лучший результат YouTube Music: что человек скорее всего искал — трек, артист или альбом */
+      top: !top ? undefined : top.kind === 'track' && top.track ? { kind: 'track' as const, track: mapTrack(top.track) as Track }
+        : top.kind === 'artist' ? { kind: 'artist' as const, artist: cardArtist(mapCard(top)) as Artist }
+        : { kind: 'album' as const, album: cardPlaylist(mapCard(top)) as Playlist },
       tracks: (r.tracks || []).map((t: Raw) => mapTrack(t)) as Track[],
       artists: (r.artists || []).map(mapCard).map(cardArtist) as Artist[],
       albums: (r.albums || []).map(mapCard).map(cardPlaylist) as Playlist[],
