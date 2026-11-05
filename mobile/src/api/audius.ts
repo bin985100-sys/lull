@@ -25,11 +25,13 @@ export type Playlist = { id: string; title: string; artist: string; artistId: st
 
 type Raw = Record<string, any>;
 
+/* Строку запроса собираем вручную: URLSearchParams в React Native умеет не всё (set не реализован) */
 function qs(params: Record<string, string | number | undefined>) {
-  const p = new URLSearchParams({ app_name: APP });
-  if (API_KEY) p.set('api_key', API_KEY);
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') p.set(k, String(v));
-  return p.toString();
+  const all: Record<string, string | number | undefined> = { app_name: APP, ...(API_KEY ? { api_key: API_KEY } : {}), ...params };
+  return Object.entries(all)
+    .filter(([, v]) => v !== undefined && v !== '')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&');
 }
 
 export class ApiError extends Error {

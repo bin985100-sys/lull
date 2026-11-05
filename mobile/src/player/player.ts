@@ -8,6 +8,7 @@ import { streamUrl, type Track } from '@/api/audius';
 import { lull, streamUrlYt } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 import { useTaste } from '@/store/taste';
+import { report } from '@/ui/Crash';
 
 export type Repeat = 'off' | 'all' | 'one';
 type Dir = 'next' | 'prev';
@@ -40,7 +41,7 @@ function engine() {
   pl = createAudioPlaylist({ sources: [], updateInterval: 250, loop: 'none' });
   pl.addListener('playlistStatusUpdate', (st) => {
     useProgress.setState({ time: st.currentTime || 0, duration: st.duration || currentTrack()?.duration || 0 });
-    meter(st.playing, st.currentTime || 0);
+    try { meter(st.playing, st.currentTime || 0); } catch (e) { report(e, 'meter'); }
     const s = usePlayer.getState();
     if (s.playing !== st.playing || s.buffering !== st.isBuffering) usePlayer.setState({ playing: st.playing, buffering: st.isBuffering });
     if (st.didJustFinish && st.currentIndex >= st.trackCount - 1 && s.repeat === 'off') usePlayer.setState({ playing: false });
@@ -49,7 +50,7 @@ function engine() {
     const s = usePlayer.getState();
     if (currentIndex === s.index) return;
     usePlayer.setState({ index: currentIndex, lastDir: currentIndex < previousIndex ? 'prev' : 'next' });
-    onTrackStart();
+    try { onTrackStart(); } catch (e) { report(e, 'trackChanged'); }
   });
   return pl;
 }
@@ -95,7 +96,8 @@ async function extendRadio() {
   if (!t || t.source !== 'yt' || s.repeat !== 'off' || s.index < s.queue.length - 2 || radioFor === t.id) return;
   radioFor = t.id;
   try {
-    const more = (await lull.upNext(t.id)).filter((x) => !usePlayer.getState().queue.some((q) => q.id === x.id)).slice(0, 20);
+    const more = (await lull.upNext(t.id)).filter((x) => x?.id && !usePlayer.getState().queue.some((q) => q.id === x.id)).slice(0, 10);
+    if (currentTrack()?.id !== t.id) return;
     more.forEach((x) => player.addToQueue(x));
   } catch {}
 }
@@ -103,8 +105,9 @@ async function extendRadio() {
 function onTrackStart() {
   const t = currentTrack();
   if (!t || !pl) return;
-  extendRadio();
-  useLibrary.getState().pushHistory(t);
+  /* радио дозаполняем чуть позже, когда трек уже стартовал, и не больше 10 треков за раз */
+  setTimeout(() => extendRadio().catch((e) => report(e, 'radio')), 4000);
+  try { useLibrary.getState().pushHistory(t); } catch (e) { report(e, 'history'); }
   useProgress.setState({ time: 0, duration: t.duration });
   const meta = { title: t.title, artist: t.artist, artworkUrl: t.artworkLarge || t.artwork };
   try {

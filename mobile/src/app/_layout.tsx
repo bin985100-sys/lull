@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Dock } from '@/components/Dock';
 import { useLibrary } from '@/store/library';
 import { C } from '@/theme/tokens';
+import { CrashBanner, Guard, ScreenError } from '@/ui/Crash';
 import { Overlays } from '@/ui/overlay';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -38,6 +39,7 @@ export default function Root() {
       <ThemeProvider value={theme}>
         <StatusBar style="light" />
         <View style={{ flex: 1, backgroundColor: C.bg }}>
+          <Guard name="screens">
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: 'slide_from_right' }}>
             <Stack.Screen name="index" options={{ animation: 'none' }} />
             <Stack.Screen name="listen" options={{ animation: 'fade' }} />
@@ -45,11 +47,18 @@ export default function Root() {
             <Stack.Screen name="collection" options={{ animation: 'fade' }} />
             <Stack.Screen name="new-playlist" options={{ animation: 'slide_from_bottom' }} />
           </Stack>
+          </Guard>
           {Platform.OS === 'web' ? <EdgeBack /> : null}
-          <Dock />
-          <Overlays />
+          <Guard name="dock" quiet><Dock /></Guard>
+          <Guard name="overlays" quiet><Overlays /></Guard>
+          <CrashBanner />
         </View>
       </ThemeProvider>
     </SafeAreaProvider>
   );
+}
+
+/* Ошибка внутри экрана показывается на этом экране, а не закрывает приложение */
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
+  return <ScreenError error={error} retry={retry} />;
 }
