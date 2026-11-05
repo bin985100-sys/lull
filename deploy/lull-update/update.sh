@@ -81,6 +81,11 @@ if [ -f "$HERE/landing.tgz" ]; then
   tar xzf "$HERE/landing.tgz" -C "$SITE"
   chmod -R a+rX "$SITE"
   if grep -q "^lull.website" /etc/caddy/Caddyfile; then systemctl reload caddy; echo "  лендинг обновлён: https://lull.website"; else echo "  !! lull.website не настроен в Caddy на этом сервере — файлы лежат в $SITE"; fi
+  # свежий APK из релиза mobile-latest на GitHub
+  mkdir -p "$SITE/downloads"
+  if curl -fsSL -o "$SITE/downloads/Lull.apk.new" https://github.com/bin985100-sys/lull/releases/download/mobile-latest/Lull-Mobile.apk && [ "$(stat -c%s "$SITE/downloads/Lull.apk.new")" -gt 5000000 ]; then
+    mv "$SITE/downloads/Lull.apk.new" "$SITE/downloads/Lull.apk"; chmod a+r "$SITE/downloads/Lull.apk"
+  else rm -f "$SITE/downloads/Lull.apk.new"; echo "  !! не удалось скачать свежий APK из релиза"; fi
   [ -f "$SITE/downloads/Lull.apk" ] && echo "  APK: $(du -h "$SITE/downloads/Lull.apk" | cut -f1), от $(date -r "$SITE/downloads/Lull.apk" '+%d.%m %H:%M')" || echo "  !! нет $SITE/downloads/Lull.apk — положи туда APK"
 fi
 

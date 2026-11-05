@@ -26,6 +26,8 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,3 +44,11 @@ jobs:
         run: mkdir -p out && cp "$(ls android/app/build/outputs/apk/release/*.apk | head -1)" out/Lull-Mobile.apk
       - uses: actions/upload-artifact@v4
         with: { name: Lull-Mobile-Android, path: mobile/out/Lull-Mobile.apk, if-no-files-found: error }
+      # Прямая ссылка без входа в GitHub: https://github.com/<repo>/releases/download/mobile-latest/Lull-Mobile.apk
+      - name: Прямая ссылка на APK
+        if: github.ref == 'refs/heads/mobile'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view mobile-latest >/dev/null 2>&1 || gh release create mobile-latest --prerelease --title "Lull Mobile" --notes "Свежая сборка Lull для Android. Обновляется после каждого изменения." --target "$GITHUB_SHA"
+          gh release upload mobile-latest out/Lull-Mobile.apk --clobber
