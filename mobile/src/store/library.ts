@@ -18,7 +18,7 @@ type Lib = {
   playlists: MyPlaylist[];
   history: HistoryItem[];
   recentSearches: string[];
-  settings: { saveHistory: boolean; balance: number };
+  settings: { saveHistory: boolean; balance: number; mixAudio?: boolean; bgAsked?: boolean };
   setOnboarded(v: boolean): void;
   setAccount(a: Partial<Lib['account']>): void;
   setFavArtists(a: Artist[]): void;
@@ -50,7 +50,7 @@ const initial = {
   playlists: [],
   history: [],
   recentSearches: [],
-  settings: { saveHistory: true, balance: 40 },
+  settings: { saveHistory: true, balance: 40, mixAudio: false, bgAsked: false },
 } as const;
 
 export const useLibrary = create<Lib>()(

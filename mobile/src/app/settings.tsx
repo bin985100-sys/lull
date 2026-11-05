@@ -5,6 +5,7 @@ import { Pressable, Switch, View } from 'react-native';
 import { logoutServer } from '@/api/auth';
 import { signOutSync } from '@/api/sync';
 import { linkYouTube } from '@/api/youtube';
+import { askBattery, canMix, openAppSettings } from '@/player/background';
 import { player } from '@/player/player';
 import { lastError, useCrash } from '@/ui/Crash';
 import { useLibrary } from '@/store/library';
@@ -13,10 +14,10 @@ import { Icon, type IconName } from '@/ui/Icon';
 import { Cover, Screen, T, TopBar } from '@/ui/kit';
 import { confirm, toast } from '@/ui/overlay';
 
-function Row({ icon, label, onPress, right }: { icon: IconName; label: string; onPress?: () => void; right?: React.ReactNode }) {
+function Row({ icon, label, sub, onPress, right }: { icon: IconName; label: string; sub?: string; onPress?: () => void; right?: React.ReactNode }) {
   return (
-    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 64 }}>
-      <Icon name={icon} size={28} /><T style={{ flex: 1, fontSize: 16.5 }}>{label}</T>{right ?? (onPress ? <Icon name="chev" size={22} /> : null)}
+    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 64, paddingVertical: sub ? 10 : 0 }}>
+      <Icon name={icon} size={28} /><View style={{ flex: 1 }}><T style={{ fontSize: 16.5 }}>{label}</T>{sub ? <T v="small" style={{ marginTop: 3 }}>{sub}</T> : null}</View>{right ?? (onPress ? <Icon name="chev" size={22} /> : null)}
     </Pressable>
   );
 }
@@ -26,6 +27,18 @@ const Group = ({ title, children }: { title: string; children: React.ReactNode }
 
 export default function Settings() {
   const lib = useLibrary();
+  const mix = !!lib.settings.mixAudio;
+  function toggleMix(v: boolean) {
+    if (!canMix) return toast('На iPhone Safari сам останавливает звук сайта, когда играет другое приложение. Это ограничение iOS', 'info');
+    player.setMix(v);
+    if (!v) return toast('Lull снова ставится на паузу, когда играет другое приложение', 'check');
+    toast('Готово: TikTok и видео больше не остановят Lull', 'check');
+    /* при первом включении просим разрешить работу в фоне — иначе Samsung может усыпить плеер */
+    if (!lib.settings.bgAsked) {
+      lib.setSetting('bgAsked', true);
+      confirm({ icon: 'shield', title: 'Разрешить работу в фоне?', text: 'Чтобы Samsung не выгружал Lull, пока ты в других приложениях, разреши ему работать без ограничений батареи. Если музыка всё равно остановится: Настройки → Батарея → Ограничения фоновой работы → убери Lull из «Спящих приложений».', safe: 'Позже', danger: 'Разрешить', onDanger: () => { askBattery(); } });
+    }
+  }
   return (
     <Screen>
       <TopBar title="Настройки" />
@@ -38,6 +51,11 @@ export default function Settings() {
         <Row icon="chart" label="Итоги месяца" onPress={() => router.push('/month')} />
         <Row icon="heart" label={`Любимые исполнители · ${lib.favArtists.length}`} onPress={() => router.push('/onboarding')} />
         <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={lib.settings.saveHistory ? '#000' : '#8a8f96'} accessibilityLabel="Сохранять историю" />} />
+      </Group>
+      <Group title="Воспроизведение">
+        <Row icon="stack" label="Играть поверх других приложений" sub={canMix ? 'TikTok, Reels и видео не будут ставить Lull на паузу — звук пойдёт вместе' : 'Недоступно на iPhone: iOS сама останавливает звук сайта'}
+          right={<Switch value={mix && canMix} disabled={!canMix} onValueChange={toggleMix} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={mix && canMix ? '#000' : '#8a8f96'} accessibilityLabel="Играть поверх других приложений" />} />
+        {canMix ? <Row icon="shield" label="Работа в фоне" sub="Разрешить Lull играть без ограничений батареи" onPress={() => askBattery().catch(openAppSettings)} /> : null}
       </Group>
       <Group title="Перенос музыки">
         <Row icon="download" label="Из Spotify, Apple Music и других" onPress={() => router.push('/import')} />

@@ -78,10 +78,16 @@ function engine() {
   return pl;
 }
 
+/* «Играть поверх других приложений»: в режиме mixWithOthers Lull не забирает аудиофокус,
+   поэтому TikTok, Reels и видео не ставят его на паузу — звук идёт вместе. Иначе ведём себя как обычный плеер. */
+const audioMode = () => ({
+  playsInSilentMode: true, shouldPlayInBackground: true,
+  interruptionMode: (useLibrary.getState().settings.mixAudio ? 'mixWithOthers' : 'doNotMixPersistent') as 'mixWithOthers' | 'doNotMixPersistent',
+});
 async function init() {
   if (!ready) {
-    log('init: режим звука');
-    ready = setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' }).catch(() => {});
+    log(`init: режим звука ${audioMode().interruptionMode}`);
+    ready = setAudioModeAsync(audioMode()).catch(() => {});
   }
   await ready;
 }
@@ -386,6 +392,13 @@ export const player = {
     const r: Repeat = ({ off: 'all', all: 'one', one: 'off' } as const)[usePlayer.getState().repeat];
     engine().loop = r === 'one' ? 'single' : 'none'; // «по кругу» для всей очереди делаем сами в конце окна
     usePlayer.setState({ repeat: r });
+  },
+  /* переключить «поверх других приложений» на лету */
+  async setMix(on: boolean) {
+    useLibrary.getState().setSetting('mixAudio', on);
+    ready = setAudioModeAsync(audioMode()).catch(() => {});
+    await ready;
+    log(`режим звука: ${audioMode().interruptionMode}`);
   },
   expand(v: boolean) { usePlayer.setState({ expanded: v && !!currentTrack() }); },
   stop() {
