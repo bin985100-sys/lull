@@ -11,6 +11,15 @@ import { artistKey, monthKey, prevMonthKey, useTaste, type WaveMode } from '@/st
 
 const safe = <T,>(p: Promise<T>, d: T) => p.catch(() => d);
 
+/* Случайность с зерном: «Для тебя» меняется каждые 4 часа и по кнопке «Обновить», но не скачет при каждом открытии экрана */
+export function rng(seed: number) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+export const seedNow = (extra = 0) => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate() + Math.floor(d.getHours() / 4) * 7919 + extra * 104729; };
+function mix<T>(list: T[], r: () => number) { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+const pick = <T,>(list: T[], n: number, r: () => number) => mix(list, r).slice(0, n);
+
 /* ---------- профиль вкуса ---------- */
 export function artistScores() {
   const t = useTaste.getState();
@@ -106,36 +115,48 @@ const chipTracks = async (chip: string | null, s: AbortSignal) => {
 };
 
 /* ---------- «Для тебя» ---------- */
-export async function forYou(s: AbortSignal): Promise<Track[]> {
+export async function forYou(s: AbortSignal, seed = seedNow()): Promise<Track[]> {
+  const r = rng(seed);
   const lib = useLibrary.getState();
-  const top = artistScores().slice(0, 8);
-  if (!top.length) {
+  const scored = artistScores();
+  if (!scored.length) {
     const home = await lull.home(undefined, s);
-    return cleanup(home.flatMap((x) => x.items).filter((c) => c.track).map((c) => c.track!));
+    return cleanup(mix(home.flatMap((x) => x.items).filter((c) => c.track).map((c) => c.track!), r));
   }
+  /* каждый раз — разные исполнители из первой десятки и разные их треки */
+  const top = [...scored.slice(0, 3), ...pick(scored.slice(3, 14), 4, r)];
   const known = knownArtists();
   const [tops, sims, radio, night] = await Promise.all([
-    Promise.all(top.slice(0, 6).map((a) => topOf(a, s))),
-    useTaste.getState().reco.similarArtists ? Promise.all(top.slice(0, 3).map((a) => similarOf(a, s))) : Promise.resolve([] as Artist[][]),
+    Promise.all(top.map((a) => topOf(a, s).then((l) => pick(l.slice(0, 12), 4, r)))),
+    useTaste.getState().reco.similarArtists ? Promise.all(pick(top, 3, r).map((a) => similarOf(a, s))) : Promise.resolve([] as Artist[][]),
     (() => {
-      const seeds = [...lib.liked.slice(0, 2), ...lib.history.slice(0, 2).map((h) => h.track)].filter((t) => t.source === 'yt');
-      return Promise.all(seeds.slice(0, 3).map((t) => safe(lull.upNext(t.id, s), [] as Track[])));
+      const seeds = pick([...lib.liked.slice(0, 30), ...lib.history.slice(0, 20).map((h) => h.track)].filter((t) => t.source === 'yt'), 3, r);
+      return Promise.all(seeds.map((t) => safe(lull.upNext(t.id, s), [] as Track[])));
     })(),
     chipTracks(dayChip(), s),
   ]);
-  const newArtists = sims.flat().filter((a) => !known.has(a.id)).slice(0, 6);
-  const fresh = await Promise.all(newArtists.map((a) => topOf(a, s).then((l) => l.slice(0, 3))));
+  const newArtists = pick(sims.flat().filter((a) => !known.has(a.id)), 6, r);
+  const fresh = await Promise.all(newArtists.map((a) => topOf(a, s).then((l) => pick(l.slice(0, 6), 3, r))));
   const familiar: Track[] = [];
   for (let i = 0; i < 4; i++) for (const l of tops) if (l[i]) familiar.push(l[i]);
-  const liked = lib.liked.slice(0, 15);
-  const discovery = [...fresh.flat(), ...radio.flat().filter((t) => !known.has(artistKey(t)))];
+  const liked = pick(lib.liked, 15, r);
+  const discovery = mix([...fresh.flat(), ...radio.flat().filter((t) => !known.has(artistKey(t)))], r);
   const f = familiarShare();
   return cleanup(blend([
     { list: familiar, w: f * 0.7 },
     { list: liked, w: f * 0.3 },
     { list: discovery, w: (1 - f) * 0.8 },
-    { list: night, w: (1 - f) * 0.2 + 0.05 },
+    { list: mix(night, r), w: (1 - f) * 0.2 + 0.05 },
   ], 60));
+}
+
+/* Микс исполнителя: его хиты вперемешку с похожими исполнителями */
+export async function artistMix(id: string, s: AbortSignal, seed = seedNow()): Promise<Track[]> {
+  const r = rng(seed + id.length * 31);
+  const a = { id, source: 'yt' as const };
+  const [own, sims] = await Promise.all([topOf(a, s), similarOf(a, s)]);
+  const simTracks = (await Promise.all(pick(sims, 5, r).map((x) => topOf(x, s).then((l) => pick(l.slice(0, 8), 3, r))))).flat();
+  return cleanup(blend([{ list: pick(own, 12, r), w: 0.45 }, { list: mix(simTracks, r), w: 0.55 }], 40));
 }
 
 /* ---------- Волна по треку ---------- */
