@@ -38,7 +38,8 @@ export default function Settings() {
         <Row icon="heart" label={`Любимые исполнители · ${lib.favArtists.length}`} onPress={() => router.push('/onboarding')} />
         <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={lib.settings.saveHistory ? '#000' : '#8a8f96'} accessibilityLabel="Сохранять историю" />} />
       </Group>
-      <Group title="YouTube Music">
+      <Group title="Перенос музыки">
+        <Row icon="download" label="Из Spotify, Apple Music и других" onPress={() => router.push('/import')} />
         {lib.account.youtube
           ? <Row icon="download" label={`Перенести лайки и плейлисты · ${lib.account.youtube}`} onPress={() => router.push('/youtube')} />
           : <Row icon="google" label="Подключить YouTube Music" onPress={() => {

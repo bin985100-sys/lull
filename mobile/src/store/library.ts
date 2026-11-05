@@ -23,6 +23,7 @@ type Lib = {
   setAccount(a: Partial<Lib['account']>): void;
   setFavArtists(a: Artist[]): void;
   toggleArtist(a: Artist): void;
+  addArtists(a: Artist[]): number;
   toggleLike(t: Track): boolean;
   isLiked(id: string): boolean;
   addLikes(t: Track[]): number;
@@ -59,6 +60,12 @@ export const useLibrary = create<Lib>()(
       setOnboarded: (v) => set({ onboarded: v }),
       setAccount: (a) => set({ account: { ...get().account, ...a } }),
       setFavArtists: (a) => set({ favArtists: a }),
+      addArtists: (list) => {
+        const have = new Set(get().favArtists.map((x) => x.id));
+        const add = list.filter((a) => a?.id && !have.has(a.id) && (have.add(a.id), true));
+        if (add.length) set({ favArtists: [...get().favArtists, ...add] });
+        return add.length;
+      },
       toggleArtist: (a) => {
         const has = get().favArtists.some((x) => x.id === a.id);
         set({ favArtists: has ? get().favArtists.filter((x) => x.id !== a.id) : [a, ...get().favArtists] });

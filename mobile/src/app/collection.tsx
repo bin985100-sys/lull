@@ -21,13 +21,17 @@ export default function Collection() {
   const head = (
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10, marginBottom: 18 }}>
       <T v="h1" accessibilityRole="header">Коллекция</T>
-      <IconBtn name="plus" label="Новый плейлист" onPress={() => router.push('/new-playlist')} />
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <IconBtn name="download" label="Перенести музыку из другого сервиса" onPress={() => router.push('/import')} />
+        <IconBtn name="plus" label="Новый плейлист" onPress={() => router.push('/new-playlist')} />
+      </View>
     </View>
   );
   if (empty) return (
     <Screen>{head}
       <Empty icon="stack" title="Здесь пока пусто" text="Сохраняй треки, плейлисты и исполнителей — они появятся здесь.">
         <Btn label="Открыть музыку" icon="arrow" onPress={() => resetTo('/discover')} />
+        <Btn label="Перенести музыку" icon="download" kind="dark" onPress={() => router.push('/import')} />
         <Btn label="Создать плейлист" icon="plus" kind="dark" onPress={() => router.push('/new-playlist')} />
       </Empty>
     </Screen>

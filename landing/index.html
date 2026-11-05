@@ -81,6 +81,19 @@ a{color:inherit}
 .rv.on{opacity:1;transform:none;filter:none}
 .grid .row:nth-child(2).rv{transition-delay:.15s}
 
+/* ---------- 5. перенос музыки ---------- */
+.move .in{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);align-items:center;gap:clamp(32px,6vw,110px);padding:clamp(100px,13vh,150px) var(--gut)}
+.move h2{margin:0;font-weight:200;font-size:clamp(54px,8.4vw,160px);line-height:.88;letter-spacing:-.06em}
+.move-l p{max-width:44ch;margin:30px 0 0;color:#c7c8ca;font-size:clamp(17px,1.35vw,20px)}
+.steps{list-style:none;margin:34px 0 0;padding:0;counter-reset:st;display:flex;flex-direction:column;gap:18px;max-width:520px}
+.steps li{counter-increment:st;display:grid;grid-template-columns:40px 1fr;column-gap:16px}
+.steps li::before{content:counter(st);grid-row:1/3;width:40px;height:40px;border-radius:50%;border:1px solid rgba(244,244,242,.22);display:grid;place-items:center;font-weight:500;font-size:15px}
+.steps b{font-weight:600;font-size:17px;letter-spacing:-.01em;align-self:center}
+.steps span{color:var(--mute);font-size:15px;margin-top:2px}
+.svc{list-style:none;margin:0;padding:0;border-top:1px solid rgba(244,244,242,.14)}
+.svc li{padding:clamp(12px,2vh,20px) 0;border-bottom:1px solid rgba(244,244,242,.14);font-weight:200;font-size:clamp(30px,3.8vw,64px);letter-spacing:-.04em;line-height:1.05;transition:padding .45s var(--ease),color .45s}
+@media (hover:hover){.svc li:hover{padding-left:18px}}
+
 /* ---------- 4. установка ---------- */
 .end .in{display:flex;flex-direction:column;justify-content:center;padding:clamp(100px,14vh,160px) var(--gut) 40px}
 .end h2{margin:0;font-weight:200;font-size:clamp(56px,10vw,190px);line-height:.88;letter-spacing:-.06em}
@@ -95,6 +108,7 @@ a{color:inherit}
 .foot{margin-top:auto;padding-top:90px;display:flex;justify-content:space-between;color:var(--mute);font-size:14px}
 
 @media (max-width:860px){
+  .move .in{grid-template-columns:1fr}
   .mih-wrap{grid-template-columns:1fr 1fr;grid-template-rows:auto}
   .mih{grid-column:1/3;grid-row:1;max-height:none}
   .n1,.n2,.n3,.n4{grid-row:auto;grid-column:auto;justify-self:start;text-align:left;align-self:start}
@@ -130,7 +144,7 @@ a{color:inherit}
         <ul>
           <li><b>Wave from any track</b><span>Similar sound, more of the artist, new names, calmer or louder.</span></li>
           <li><b>Your month in music</b><span>Hours played, top artists and the songs you could not stop replaying.</span></li>
-          <li><b>Bring your YouTube Music</b><span>Likes and playlists move over in one tap.</span></li>
+          <li><b>Bring your music</b><span>Playlists and albums from Spotify, Apple Music, SoundCloud and more.</span></li>
         </ul>
       </div>
     </div>
@@ -165,6 +179,24 @@ a{color:inherit}
           <div class="cell"><img src="/assets/covers/06.webp" alt="Album cover: track" loading="lazy"></div>
         </div>
       </div>
+    </div>
+    <div class="shade"></div>
+  </section>
+
+  <section class="s move" aria-labelledby="move">
+    <div class="in">
+      <div class="move-l">
+        <h2 id="move">Bring your<br>music.</h2>
+        <p>Moving apps should not mean starting over. Paste a link to a playlist or an album and Lull finds every track in its catalogue, then saves it as your own playlist. Your favourite artists come along too.</p>
+        <ol class="steps">
+          <li><b>Copy the link</b><span>Open a playlist or album in your old app and tap Share, then Copy link.</span></li>
+          <li><b>Paste it into Lull</b><span>Collection, then Import. Lull reads the list and matches each song.</span></li>
+          <li><b>Keep listening</b><span>Save it as a playlist, add the songs to your likes, follow the artists.</span></li>
+        </ol>
+      </div>
+      <ul class="svc" aria-label="Services you can import from">
+        <li>Spotify</li><li>Apple Music</li><li>YouTube Music</li><li>SoundCloud</li><li>Yandex Music</li><li>Deezer</li>
+      </ul>
     </div>
     <div class="shade"></div>
   </section>

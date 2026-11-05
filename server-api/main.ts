@@ -7,6 +7,7 @@ import http from 'node:http';
 import { album, artist, charts, home, homeChips, playlist, search, suggest, suggestRich, upNext } from '../electron/yt';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
+import { importStatus, startImport } from './importer';
 import { authEnabled, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
@@ -83,6 +84,7 @@ http
       let body = '';
       for await (const c of req) body += c;
       if (name === 'auth') return void (await auth(rest, url.searchParams, body, res));
+      if (name === 'import') return json(res, rest[0] ? importStatus(rest[0]) : startImport((body ? JSON.parse(body).url : url.searchParams.get('url')) ?? ''));
       const key = `${url.pathname}?${url.searchParams}#${body}`;
       const ttl = (TTL[name] ?? 0) * 60_000;
       const hit = cache.get(key);
