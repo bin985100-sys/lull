@@ -19,16 +19,16 @@ globalThis.__makePlaylist = () => {
   const p = {
     sources: [], currentIndex: 0, playing: false, time: 0, loop: 'none', log: [],
     addListener(ev, f) { (L[ev] ||= []).push(f); return { remove() {} }; },
-    add(s) { p.sources.push(s); },
+    add(s) { p.sources.push(s); p.lastChange = Date.now(); },
     remove(i) { p.sources.splice(i, 1); if (p.currentIndex > i) p.currentIndex--; if (p.currentIndex >= p.sources.length) p.currentIndex = Math.max(0, p.sources.length - 1); emit('trackChanged', { currentIndex: p.currentIndex }); },
     clear() { p.sources = []; p.currentIndex = 0; p.playing = false; emit('trackChanged', { currentIndex: 0 }); },
-    skipTo(i) { if (i < p.sources.length) { p.currentIndex = i; p.time = 0; emit('trackChanged', { currentIndex: i }); } },
+    skipTo(i) { if (i < p.sources.length) { p.currentIndex = i; p.time = 0; p.lastChange = Date.now(); emit('trackChanged', { currentIndex: i }); } },
     next() { p.skipTo(p.currentIndex + 1); },
     previous() { p.skipTo(p.currentIndex - 1); },
     play() { p.playing = p.sources.length > 0; },
     pause() { p.playing = false; },
     seekTo(t) { p.time = t; },
-    setActiveForLockScreen() { p.lockSets = (p.lockSets || 0) + 1; }, updateLockScreenMetadata() { p.lockUpdates = (p.lockUpdates || 0) + 1; }, clearLockScreenControls() {},
+    setActiveForLockScreen() { p.lockSets = (p.lockSets || 0) + 1; }, updateLockScreenMetadata() { if (Date.now() - (p.lastChange || 0) < 300) throw new Error('Invalid PlayerInfo update: метаданные во время переключения'); p.lockUpdates = (p.lockUpdates || 0) + 1; }, clearLockScreenControls() {},
     get current() { return p.playing ? p.sources[p.currentIndex]?.uri : null; },
     /* «звук идёт»: раз в 100 мс шлём статус, как настоящий плеер */
     tick() {
@@ -45,7 +45,7 @@ const STUBS = {
   'expo-audio': `export const createAudioPlaylist=()=>globalThis.__makePlaylist(); export const setAudioModeAsync=async()=>{};`,
   '@react-native-async-storage/async-storage': `const m=new Map(); export default { getItem:async k=>m.get(k)??null, setItem:async (k,v)=>{m.set(k,v)}, removeItem:async k=>{m.delete(k)} };`,
   'react-native': `export const Platform={OS:'android'}; export const AppState={addEventListener(){return {remove(){}}}};`,
-  '@/ui/Crash': `export const log=(m)=>{ if(process.env.V) console.log('   log:',m) }; export const logNow=async(m)=>{}; export const report=(e,w)=>{ console.log('   REPORT',w,e?.message) };`,
+  '@/ui/Crash': `export const log=(m)=>{ if(process.env.V) console.log('   log:',m) }; export const logNow=async(m)=>{}; export const report=(e,w)=>{ (globalThis.__reports ||= []).push(w+': '+e?.message); if(process.env.V) console.log('   REPORT',w,e?.message) };`,
   '@/api/lull': `export const streamUrlYt=id=>'yt:'+id; export const warm=()=>{}; export const lull={ upNext: async()=>[] };`,
   '@/api/audius': `export const streamUrl=id=>'au:'+id;`,
 };
@@ -157,10 +157,24 @@ await test('Новый список во время подготовки про�
   if (same(m, 'итог') !== 's6') throw new Error('должен играть s6');
 });
 
+await test('Свайпы подряд: название в шторке не обновляется во время переключения (падение Invalid PlayerInfo)', async () => {
+  globalThis.__reports = [];
+  const m = await freshApp(); await m.player.play(LIST, 's0'); await settle(1500);
+  for (let i = 0; i < 3; i++) { m.player.next(); await settle(250); }
+  await settle(1500);
+  const bad = globalThis.__reports.filter((x) => x.includes('lockscreen'));
+  if (bad.length) throw new Error(bad[0]);
+  if (!(globalThis.__pl.lockUpdates >= 1)) throw new Error('название в шторке так и не обновилось');
+  same(m, 'итог');
+});
+
+globalThis.__reports = [];
 await test('Шторка/экран блокировки: плеер регистрируется один раз, дальше только обновляется название', async () => {
   const m = await freshApp(); await m.player.play(LIST, 's0'); await settle(1500);
-  m.player.next(); await settle(600); m.player.next(); await settle(600);
+  m.player.next(); await settle(1200); m.player.next(); await settle(1200);
   const p = globalThis.__pl;
+  const bad = (globalThis.__reports || []).filter((x) => x.includes('lockscreen'));
+  if (bad.length) throw new Error('обновление шторки во время переключения (на телефоне это падение): ' + bad[0]);
   if (p.lockSets !== 1) throw new Error(`регистраций ${p.lockSets}, а должна быть одна`);
   if (!(p.lockUpdates >= 2)) throw new Error('название в шторке не обновлялось');
 });

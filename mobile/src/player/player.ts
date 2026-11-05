@@ -67,6 +67,7 @@ function engine() {
     }
   });
   pl.addListener('trackChanged', ({ currentIndex }) => {
+    touch();
     log(`trackChanged: ${currentIndex} (base ${base})`);
     /* Верим только настоящему переходу на соседний трек (сам доиграл, кнопки на экране блокировки/в наушниках).
        Отголоски от clear()/skipTo() приходят с опозданием и раньше откатывали экран на прошлый трек,
@@ -151,7 +152,7 @@ function onTrackStart() {
   /* Плеер на экране блокировки и в шторке регистрируем один раз, дальше только меняем название и обложку.
      Повторная регистрация пересоздаёт медиасессию Android: строка в шторке пропадала и кнопки «глючили». */
   if (lockActive) {
-    try { p.updateLockScreenMetadata(meta); } catch (e) { report(e, 'player.lockscreen.update'); }
+    scheduleMeta(meta);
     return;
   }
   lockActive = true;
@@ -164,6 +165,24 @@ function onTrackStart() {
   })();
 }
 let lockActive = false;
+/* Название в шторке меняем, только когда плеер телефона закончил переключение (полсекунды без изменений списка).
+   Если менять его одновременно с переходом, медиасессия Android видела «трек №2 при одном треке» и роняла приложение
+   (IllegalStateException: Invalid PlayerInfo update). */
+let lastMut = 0;
+const touch = () => { lastMut = Date.now(); };
+let metaT: ReturnType<typeof setTimeout> | null = null;
+let pendingMeta: { title: string; artist: string; artworkUrl?: string } | null = null;
+function scheduleMeta(meta: { title: string; artist: string; artworkUrl?: string }) {
+  pendingMeta = meta;
+  if (metaT) clearTimeout(metaT);
+  const run = () => {
+    const wait = 500 - (Date.now() - lastMut);
+    if (wait > 0) { metaT = setTimeout(run, wait + 20); return; }
+    metaT = null;
+    try { if (pl && lockActive && pendingMeta) pl.updateLockScreenMetadata(pendingMeta); } catch (e) { report(e, 'player.lockscreen.update'); }
+  };
+  metaT = setTimeout(run, 500);
+}
 
 function shuffled<T>(a: T[]) {
   a = a.slice();
@@ -215,7 +234,7 @@ let wantPlay = true;
 /* Пока готовим новый трек, старый не должен ожить ни от кнопки, ни с экрана блокировки — убираем его из плеера */
 function silence() {
   const p = engine();
-  p.pause(); p.clear(); nativeLen = 0;
+  p.pause(); p.clear(); nativeLen = 0; touch();
 }
 /* Переход внутри очереди: экран переключаем сразу, звук — когда сервер готов */
 async function jump(i: number, dir: 'next' | 'prev') {
@@ -232,7 +251,7 @@ function mount(i: number) {
   p.add(source(q[i]));
   nativeLen = 1;
   if (q[i + 1] && isPrimed(q[i + 1])) { p.add(source(q[i + 1])); nativeLen = 2; }
-  p.skipTo(0);
+  p.skipTo(0); touch();
   if (wantPlay) p.play();
   mountedAt = Date.now();
   loading = false;
@@ -257,12 +276,12 @@ function ensureNext() {
   const s = usePlayer.getState();
   const cur = s.index - base;
   const want = s.queue[s.index + 1];
-  for (let k = nativeLen - 1; k > cur; k--) pl.remove(k);
+  for (let k = nativeLen - 1; k > cur; k--) { pl.remove(k); touch(); }
   nativeLen = cur + 1;
   if (!want) return;
   /* в плеер телефона кладём только подготовленный трек: кнопка «следующий» в шторке и на экране блокировки
      переключает плеер напрямую, мимо приложения — неподготовленный трек там зависал */
-  if (isPrimed(want)) { pl.add(source(want)); nativeLen++; return; }
+  if (isPrimed(want)) { pl.add(source(want)); nativeLen++; touch(); return; }
   prime(want).then((ok) => { const st = usePlayer.getState(); if (ok && st.queue[st.index + 1]?.id === want.id) ensureNext(); });
 }
 
@@ -278,7 +297,7 @@ async function jumpInner(i: number, dir: 'next' | 'prev') {
   if (pl && !loading && k > 0 && k < nativeLen && isPrimed(t)) {
     log(`быстрый переход: ${k} «${t.title}»`);
     /* прошлые треки из плеера не удаляем: удаление во время перехода опустошало плеер и трек замирал */
-    pl.skipTo(k); pl.play();
+    pl.skipTo(k); pl.play(); touch();
     mountedAt = Date.now();
     ensureNext(); watchdog(); onTrackStart();
     return;
@@ -426,6 +445,7 @@ export const player = {
   expand(v: boolean) { usePlayer.setState({ expanded: v && !!currentTrack() }); },
   stop() {
     loadSeq++; loading = false; if (dogTimer) clearTimeout(dogTimer);
+    if (metaT) { clearTimeout(metaT); metaT = null; }
     if (pl) { pl.pause(); pl.clear(); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }
     lockActive = false;
     usePlayer.setState({ queue: [], index: -1, playing: false, expanded: false });
