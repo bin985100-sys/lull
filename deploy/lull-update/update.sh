@@ -34,11 +34,21 @@ echo "== 2. Звук: быстрый старт треков"
 if [ -f "$HERE/server.py" ]; then
   cp "$APP/server.py" "$APP/server.py.bak-$(date +%s)" 2>/dev/null || true
   cp "$HERE/server.py" "$APP/server.py"
+  # свежий yt-dlp: YouTube часто меняет защиту, старая версия получает звук медленнее или не получает вовсе
+  PY=$(grep -oP '^ExecStart=\K\S+' /etc/systemd/system/lull-relay.service 2>/dev/null || echo python3)
+  "$PY" -m pip install -q -U yt-dlp 2>/dev/null || "$PY" -m pip install -q -U --break-system-packages yt-dlp 2>/dev/null || true
+  echo "  yt-dlp: $("$PY" -c 'import yt_dlp;print(yt_dlp.version.__version__)' 2>/dev/null || echo '?')"
   [ -f "$DATA/yt-cookies.txt" ] && chown lull:lull "$DATA/yt-cookies.txt" && chmod 600 "$DATA/yt-cookies.txt" && echo "  аккаунт YouTube для звука: подключён (cookies)"
   systemctl restart lull-relay
   sleep 2
   systemctl is-active --quiet lull-relay && echo "  звук работает" || { echo "  !! relay не стартовал, возвращаю прошлую версию"; cp "$(ls -t $APP/server.py.bak-* | head -1)" "$APP/server.py"; systemctl restart lull-relay; }
 fi
+echo "  замер способов получить звук (до минуты):"
+curl -s -m 90 "http://127.0.0.1:8480/api/diag?vid=RgKAFK5djSk" | python3 -c 'import sys,json
+try:
+  d=json.load(sys.stdin)
+  for c,v in d["clients"].items(): print("   %-12s %s" % (c, ("%.1f с + проверка %.1f с %s" % (v["resolve"], v["verify"], "ok" if v["ok"] else "403")) if "resolve" in v else "ошибка: "+v["error"][:70]))
+except Exception as e: print("   замер не получился:", e)' || true
 echo "  проверка звука (до 30 с):"
 for id in kJQP7kiw5Fk JGwWNGJdvx8; do
   echo "   $id: $(curl -s -o /dev/null -m 40 -H 'Range: bytes=0-1' -w '%{http_code} за %{time_total}s' http://127.0.0.1:8480/api/stream/$id?q=aac 2>/dev/null || echo ошибка)"

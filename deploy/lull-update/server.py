@@ -203,6 +203,9 @@ def ydl_for(fmt: str, client: str = "") -> yt_dlp.YoutubeDL:
         yt_args = {"skip": ["hls", "dash", "translated_subs"]}
         if client:
             yt_args["player_client"] = [client]
+        # «быстрые» клиенты: без загрузки страницы ролика и конфигов — один запрос к API YouTube вместо трёх-четырёх
+        if client in FAST_CLIENTS:
+            yt_args["player_skip"] = ["webpage", "configs"]
         _ydl[k] = yt_dlp.YoutubeDL({
             "quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True,
             "format": FORMATS[fmt], "socket_timeout": 10, "cachedir": str(DATA / "yt-dlp-cache"),
@@ -235,7 +238,11 @@ def resolve_sync(vid: str, fmt: str, client: str = "") -> dict:
     return s
 
 
-FALLBACK_CLIENTS = ("", "tv", "web_safari", "mweb", "web_embedded")
+# Клиенты-приложения (VR-шлем, телевизор) отдают ссылку без разгадки JS-защиты плеера — это главная экономия.
+FAST_CLIENTS = ("android_vr", "tv")
+# Наперегонки: быстрые и обычный стартуют сразу, остальные подключаются, если все трое задумались
+FALLBACK_CLIENTS = ("android_vr", "tv", "", "web_safari", "mweb", "web_embedded")
+RACE_DELAY = {"android_vr": 0.0, "tv": 0.0, "": 0.0, "web_safari": 2.5, "mweb": 4.0, "web_embedded": 5.5}
 
 
 async def verify(s: dict) -> bool:
@@ -283,18 +290,20 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
         if done.is_set():
             return
         if await verify(s):
+            s["client"] = client
             result.setdefault("ok", s)
             done.set()
         else:
             log.warning("resolve %s %s: ссылка отдаёт 403", vid, client or "default")
             errors.append(f"{client or 'default'}: 403")
 
-    # запасной клиент стартует через 1.2 с, следующие — с шагом 1.5 с: «задумавшийся» основной больше не держит трек
-    tasks = [asyncio.ensure_future(one(c, 0 if i == 0 else 1.2 + (i - 1) * 1.5)) for i, c in enumerate(FALLBACK_CLIENTS)]
+    t0 = time.monotonic()
+    tasks = [asyncio.ensure_future(one(c, RACE_DELAY.get(c, 3.0))) for c in FALLBACK_CLIENTS]
     waiter = asyncio.ensure_future(done.wait())
     await asyncio.wait([waiter, asyncio.ensure_future(asyncio.gather(*tasks, return_exceptions=True))], return_when=asyncio.FIRST_COMPLETED)
     done.set()
     if "ok" in result:
+        log.info("race %s: победил %s за %.1fs", vid, result["ok"].get("client") or "default", time.monotonic() - t0)
         return result["ok"]
     if "fatal" in result and all((("unavailable" in x.lower() or "not available" in x.lower()) and "format" not in x.lower()) for x in errors):
         raise result["fatal"]
@@ -313,6 +322,26 @@ async def api_warm(request: web.Request) -> web.Response:
         asyncio.ensure_future(_warm(vid, fmt))
     r = web.json_response({"ok": True, "queued": len(ids)}, status=202)
     return cors(request, r)
+
+
+async def api_diag(request: web.Request) -> web.Response:
+    """Замер: сколько каждый клиент YouTube получает рабочую ссылку на звук с этого сервера (без кэша).
+    /api/diag?vid=…  — по очереди для всех клиентов; ограничено общим лимитом запросов."""
+    vid = request.query.get("vid", "kJQP7kiw5Fk")
+    if not (5 <= len(vid) <= 20):
+        return cors(request, web.json_response({"error": "bad vid"}, status=400))
+    loop = asyncio.get_running_loop()
+    out = {}
+    for c in FALLBACK_CLIENTS:
+        t0 = time.monotonic()
+        try:
+            s = await loop.run_in_executor(pool, resolve_sync, vid, "aac", c)
+            t1 = time.monotonic()
+            ok = await verify(s)
+            out[c or "default"] = {"resolve": round(t1 - t0, 2), "verify": round(time.monotonic() - t1, 2), "ok": ok, "mime": s.get("mime")}
+        except Exception as e:
+            out[c or "default"] = {"error": str(e).replace("ERROR: ", "")[:160], "t": round(time.monotonic() - t0, 2)}
+    return cors(request, web.json_response({"vid": vid, "yt_dlp": yt_dlp.version.__version__, "clients": out}))
 
 
 async def _warm(vid: str, fmt: str):
@@ -511,6 +540,7 @@ def main():
     app.router.add_get("/sc/file", sc_file)
     app.router.add_get("/api/stream/{vid}", api_stream)
     app.router.add_get("/api/warm", api_warm)
+    app.router.add_get("/api/diag", api_diag)
     app.router.add_route("*", "/api/{tail:.*}", api_proxy)
     app.on_startup.append(on_start)
     app.on_cleanup.append(on_stop)
