@@ -18,7 +18,7 @@
 :root{--ink:#000;--paper:#f4f4f2;--mute:#8d8f93;--ease:cubic-bezier(.22,.8,.2,1);--gut:clamp(18px,4vw,56px)}
 *{box-sizing:border-box}
 html{background:#000;color:var(--paper);-webkit-text-size-adjust:100%}
-body{margin:0;background:#000;font:400 17px/1.5 "Inter Tight",system-ui,sans-serif;overflow-x:hidden}
+body{margin:0;background:#000;color:var(--paper);font:400 17px/1.5 "Inter Tight",system-ui,sans-serif;overflow-x:hidden}
 img,video{display:block;max-width:100%}
 a{color:inherit}
 :focus-visible{outline:2px solid var(--paper);outline-offset:4px}
@@ -47,8 +47,14 @@ a{color:inherit}
 /* ---------- 2. музыка — наша жизнь ---------- */
 .life .in{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);align-items:center;gap:clamp(24px,5vw,90px);padding:clamp(90px,10vh,120px) var(--gut)}
 .life video{width:100%;max-height:82svh;aspect-ratio:4/5;object-fit:cover}
-.life h2{margin:0;font-weight:200;font-size:clamp(58px,11vw,210px);line-height:.9;letter-spacing:-.06em}
+.life h2{margin:0;font-weight:200;font-size:clamp(56px,8.6vw,170px);line-height:.9;letter-spacing:-.06em}
 .life h2 span{display:block}
+.life .txt{min-width:0}
+.life p{max-width:42ch;margin:clamp(24px,3vw,40px) 0 0;color:#c7c8ca;font-size:clamp(17px,1.35vw,20px);line-height:1.55}
+.life ul{list-style:none;margin:clamp(24px,3vw,36px) 0 0;padding:0;max-width:520px;border-top:1px solid rgba(244,244,242,.14)}
+.life li{display:flex;flex-direction:column;gap:2px;padding:14px 0;border-bottom:1px solid rgba(244,244,242,.14)}
+.life li b{font-weight:600;font-size:17px;letter-spacing:-.01em}
+.life li span{color:var(--mute);font-size:15px}
 
 /* ---------- 3. Music is here и обложки ---------- */
 .here{background:#000 url(/assets/gradient.webp) center/cover no-repeat}
@@ -104,7 +110,15 @@ a{color:inherit}
   <section class="s life" aria-labelledby="life">
     <div class="in">
       <video src="/assets/drive.mp4" poster="/assets/drive.jpg" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
-      <h2 id="life"><span>Music</span><span>is our</span><span>life.</span></h2>
+      <div class="txt">
+        <h2 id="life"><span>Music</span><span>is our</span><span>life.</span></h2>
+        <p>On the road, at night, at work. Lull is the player you take everywhere: tap any track and it builds a wave of music that sounds like it, then keeps learning what you love.</p>
+        <ul>
+          <li><b>Wave from any track</b><span>Similar sound, more of the artist, new names, calmer or louder.</span></li>
+          <li><b>Your month in music</b><span>Hours played, top artists and the songs you could not stop replaying.</span></li>
+          <li><b>Bring your YouTube Music</b><span>Likes and playlists move over in one tap.</span></li>
+        </ul>
+      </div>
     </div>
     <div class="shade"></div>
   </section>
