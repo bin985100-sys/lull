@@ -8,15 +8,16 @@ import { Innertube, type Types } from 'youtubei.js';
 import { yt } from '../electron/yt';
 import { mint, potState, resetMinter, warmMinter } from './potoken';
 
-type Way = { name: string; client: Types.InnerTubeClient; pot: boolean };
+type Way = { name: string; client: Types.InnerTubeClient; pot: '' | 'video' | 'visitor' };
+// pot: к чему привязан токен в ссылке на файл — к id видео (так сейчас делает сайт YouTube) или к сессии (как было раньше)
 const WAYS: Way[] = [
-  { name: 'MWEB+токен', client: 'MWEB', pot: true },
-  { name: 'WEB_EMBEDDED+токен', client: 'WEB_EMBEDDED', pot: true },
-  { name: 'TV+токен', client: 'TV', pot: true },
-  { name: 'WEB+токен', client: 'WEB', pot: true },
-  { name: 'TV', client: 'TV', pot: false },
-  { name: 'WEB_EMBEDDED', client: 'WEB_EMBEDDED', pot: false },
-  { name: 'MWEB', client: 'MWEB', pot: false }
+  { name: 'MWEB+токен', client: 'MWEB', pot: 'video' },
+  { name: 'WEB+токен', client: 'WEB', pot: 'video' },
+  { name: 'MWEB+токен(сессия)', client: 'MWEB', pot: 'visitor' },
+  { name: 'TV+токен', client: 'TV', pot: 'video' },
+  { name: 'WEB_EMBEDDED+токен', client: 'WEB_EMBEDDED', pot: 'video' },
+  { name: 'MWEB', client: 'MWEB', pot: '' },
+  { name: 'TV', client: 'TV', pot: '' }
 ];
 let best: string | null = null;
 
@@ -63,7 +64,7 @@ async function tryWay(id: string, w: Way) {
   const opts: any = { client: w.client };
   if (w.pot) {
     const visitor = c.session.context.client.visitorData ?? '';
-    [opts.po_token, gvs] = await timeout(Promise.all([mint(id), mint(visitor)]), 15000, 'токен');
+    [opts.po_token, gvs] = await timeout(Promise.all([mint(id), w.pot === 'video' ? mint(id) : mint(visitor)]), 15000, 'токен');
   }
   const info: any = await timeout(c.getBasicInfo(id, opts), 5000, w.client);
   const st = info.playability_status?.status;
