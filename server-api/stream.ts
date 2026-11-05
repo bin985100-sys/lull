@@ -1,18 +1,48 @@
-/* Быстрая ссылка на звук для сервера: youtubei.js, тот же вошедший в аккаунт клиент, что и у каталога.
-   Плеер YouTube загружается один раз и живёт в памяти — поэтому ~1 с против 4–5 с у yt-dlp, который каждый раз
-   заново разгадывает защиту. Клиенты-приложения (VR/Android) аккаунт не принимают, поэтому порядок другой, чем в десктопе.
-   Какой клиент сработал — запоминаем и дальше начинаем с него. */
-import type { Types } from 'youtubei.js';
+/* Быстрая ссылка на звук для сервера (youtubei.js). Плеер YouTube загружается один раз и живёт в памяти,
+   поэтому ~1 с против 4–5 с у yt-dlp.
+   С адреса сервера YouTube отдаёт файл целиком только с токеном прохождения проверки (PO token, см. potoken.ts):
+   без него — первые ~256 КБ, дальше 403. Поэтому основной путь — сессия без аккаунта + токен:
+   токен на id видео идёт в запрос плеера, токен на visitorData — в ссылку на файл (&pot=).
+   Запасной — сессия с аккаунтом, как раньше. Какой клиент сработал — запоминаем и начинаем с него. */
+import { Innertube, type Types } from 'youtubei.js';
 import { yt } from '../electron/yt';
+import { mint, potState, resetMinter, warmMinter } from './potoken';
 
-const ORDER: Types.InnerTubeClient[] = ['TV', 'WEB_EMBEDDED', 'TV_EMBEDDED', 'MWEB', 'WEB', 'ANDROID_VR'];
-let best: Types.InnerTubeClient | null = null;
+type Way = { name: string; client: Types.InnerTubeClient; pot: boolean };
+const WAYS: Way[] = [
+  { name: 'MWEB+токен', client: 'MWEB', pot: true },
+  { name: 'WEB_EMBEDDED+токен', client: 'WEB_EMBEDDED', pot: true },
+  { name: 'TV+токен', client: 'TV', pot: true },
+  { name: 'WEB+токен', client: 'WEB', pot: true },
+  { name: 'TV', client: 'TV', pot: false },
+  { name: 'WEB_EMBEDDED', client: 'WEB_EMBEDDED', pot: false },
+  { name: 'MWEB', client: 'MWEB', pot: false }
+];
+let best: string | null = null;
+
+let anonClient: Innertube | null = null;
+let anonMaking: Promise<Innertube> | null = null;
+let anonAt = 0;
+/** Сессия без аккаунта: токен привязывается к её visitorData. Пересоздаём раз в 6 часов. */
+async function anon(): Promise<Innertube> {
+  if (anonClient && Date.now() - anonAt < 6 * 3600_000) return anonClient;
+  if (!anonMaking)
+    anonMaking = Innertube.create({ retrieve_player: true, enable_session_cache: false, generate_session_locally: false, lang: 'ru' } as any)
+      .then((c) => { anonClient = c; anonAt = Date.now(); return c; })
+      .finally(() => (anonMaking = null));
+  return anonMaking;
+}
+
+export function warmStream() {
+  warmMinter();
+  anon().catch(() => {});
+}
 
 const timeout = <T>(p: Promise<T>, ms: number, what: string) =>
   Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${what}: нет ответа ${ms} мс`)), ms))]);
 
-/** Ссылка реально отдаёт звук так, как его будет брать звуковой сервер: первый кусок 256 КБ и следующий за ним
-    кусок в 2 МБ (без нужного токена YouTube отдаёт начало, а дальше 403). Возвращает ошибку или ''. */
+/** Ссылка реально отдаёт звук так, как его будет брать звуковой сервер: первый кусок 256 КБ, следующий
+    кусок в 2 МБ и кусок ближе к концу. Возвращает ошибку или ''. */
 async function probe(url: string, len: number): Promise<string> {
   const get = async (a: number, b: number) => {
     const r = await fetch(`${url}&range=${a}-${b}`);
@@ -27,50 +57,63 @@ async function probe(url: string, len: number): Promise<string> {
   return res.filter(Boolean).join(', ');
 }
 
-async function tryClient(c: any, id: string, client: Types.InnerTubeClient) {
-  const info: any = await timeout(c.getBasicInfo(id, { client } as any), 5000, client);
+async function tryWay(id: string, w: Way) {
+  const c = w.pot ? await timeout(anon(), 8000, 'сессия') : await yt();
+  let gvs = '';
+  const opts: any = { client: w.client };
+  if (w.pot) {
+    const visitor = c.session.context.client.visitorData ?? '';
+    [opts.po_token, gvs] = await timeout(Promise.all([mint(id), mint(visitor)]), 15000, 'токен');
+  }
+  const info: any = await timeout(c.getBasicInfo(id, opts), 5000, w.client);
   const st = info.playability_status?.status;
   if (st && st !== 'OK') throw new Error(info.playability_status?.reason || st);
   const audio = (info.streaming_data?.adaptive_formats ?? []).filter((f: any) => f.has_audio && !f.has_video);
   const f = audio.filter((x: any) => String(x.mime_type).includes('mp4a')).sort((a: any, b: any) => b.bitrate - a.bitrate)[0] ?? audio[0];
   if (!f) throw new Error('нет аудио');
-  const url: string = await f.decipher(c.session.player);
+  let url: string = await f.decipher(c.session.player);
+  if (gvs) {
+    const u = new URL(url);
+    u.searchParams.set('pot', gvs);
+    url = u.toString();
+  }
   const len = Number(f.content_length) || 0;
   if (!len) throw new Error('нет размера');
   const bad = await timeout(probe(url, len), 6000, 'проверка');
   if (bad) throw new Error(bad);
-  return { url, mime: String(f.mime_type).split(';')[0], size: len, duration: Math.round((f.approx_duration_ms || 0) / 1000), bitrate: f.bitrate, client };
+  return { url, mime: String(f.mime_type).split(';')[0], size: len, duration: Math.round((f.approx_duration_ms || 0) / 1000), bitrate: f.bitrate, client: w.name };
 }
 
-/** Замер для обновления сервера: каждый клиент отдельно, со временем и ошибкой */
+/** Замер для обновления сервера: каждый способ отдельно, со временем и ошибкой */
 export async function diagClients(id: string) {
-  const c = await yt();
   const out: Record<string, string> = {};
-  for (const client of ORDER) {
+  for (const w of WAYS) {
     const t0 = Date.now();
-    try { await tryClient(c, id, client); out[client] = `ok ${Date.now() - t0} мс`; } catch (e) { out[client] = `${(e as Error).message} (${Date.now() - t0} мс)`; }
+    try { await tryWay(id, w); out[w.name] = `ok ${Date.now() - t0} мс`; } catch (e) { out[w.name] = `${(e as Error).message} (${Date.now() - t0} мс)`; }
   }
-  return { best, clients: out };
+  return { best, token: potState(), clients: out };
 }
 
-/** Звуковой сервер сообщает, что ссылка этого клиента перестала отдавать файл — начнём с другого */
-export function markBad(client: string) { if (best === client) best = null; }
+/** Звуковой сервер сообщает, что ссылка этого способа перестала отдавать файл — начнём с другого */
+export function markBad(name: string) {
+  if (best === name) best = null;
+  if (name.includes('токен')) resetMinter();
+}
 
 export async function fastStream(id: string) {
-  const c = await yt();
-  const order = best ? [best, ...ORDER.filter((x) => x !== best)] : ORDER;
+  const order = best ? [WAYS.find((w) => w.name === best)!, ...WAYS.filter((w) => w.name !== best)] : WAYS;
   const errors: string[] = [];
   const started = Date.now();
-  for (const client of order) {
-    if (Date.now() - started > 12000) break; // дальше пусть работает yt-dlp — гонка на звуковом сервере уже идёт
+  for (const w of order) {
+    if (Date.now() - started > 14000) break; // дальше пусть работает yt-dlp — гонка на звуковом сервере уже идёт
     const t0 = Date.now();
     try {
-      const r = await tryClient(c, id, client);
-      best = client;
+      const r = await tryWay(id, w);
+      best = w.name;
       return { ...r, ms: Date.now() - started };
     } catch (e) {
-      if (best === client) best = null;
-      errors.push(`${client}: ${(e as Error).message} (${Date.now() - t0} мс)`);
+      if (best === w.name) best = null;
+      errors.push(`${w.name}: ${(e as Error).message} (${Date.now() - t0} мс)`);
     }
   }
   throw new Error(errors.join('; ') || 'нет ссылки');

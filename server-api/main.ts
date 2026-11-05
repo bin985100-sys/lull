@@ -11,7 +11,7 @@ import { storeGet, storeSet } from '../electron/store';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
 import { importStatus, startImport } from './importer';
-import { diagClients, fastStream, markBad } from './stream';
+import { diagClients, fastStream, markBad, warmStream } from './stream';
 import { authEnabled, deleteAccount, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink, syncGet, syncPut } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
@@ -154,4 +154,4 @@ http
       res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: (e as Error).message }));
     }
   })
-  .listen(PORT, '127.0.0.1', () => console.log(`[api] Lull API на 127.0.0.1:${PORT}`));
+  .listen(PORT, '127.0.0.1', () => { console.log(`[api] Lull API на 127.0.0.1:${PORT}`); warmStream(); });

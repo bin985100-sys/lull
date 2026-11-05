@@ -29,7 +29,7 @@ import time
 from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from aiohttp import ClientSession, ClientTimeout, TCPConnector, web
 import yt_dlp
@@ -671,7 +671,7 @@ async def stream_forbidden(s: dict):
         ladder.fail("innertube", "403")
         try:
             assert session is not None
-            async with session.get(f"{API_LOCAL}/internal/stream/x?bad={s.get('client') or ''}", timeout=ClientTimeout(total=3)):
+            async with session.get(f"{API_LOCAL}/internal/stream/x?bad={quote(s.get('client') or '')}", timeout=ClientTimeout(total=3)):
                 pass
         except Exception:
             pass
