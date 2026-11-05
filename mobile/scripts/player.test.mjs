@@ -19,9 +19,13 @@ globalThis.__makePlaylist = () => {
   const p = {
     sources: [], currentIndex: 0, playing: false, time: 0, loop: 'none', log: [],
     addListener(ev, f) { (L[ev] ||= []).push(f); return { remove() {} }; },
-    add(s) { p.sources.push(s); p.lastChange = Date.now(); },
-    remove(i) { p.sources.splice(i, 1); if (p.currentIndex > i) p.currentIndex--; if (p.currentIndex >= p.sources.length) p.currentIndex = Math.max(0, p.sources.length - 1); emit('trackChanged', { currentIndex: p.currentIndex }); },
-    clear() { p.sources = []; p.currentIndex = 0; p.playing = false; emit('trackChanged', { currentIndex: 0 }); },
+    get trackCount() { return p.sources.length; },
+    /* как Media3: номер текущего трека вне списка — медиасессия роняет приложение (Invalid PlayerInfo update) */
+    check(what) { if (p.sources.length && p.currentIndex >= p.sources.length) (globalThis.__reports ||= []).push(`ВЫЛЕТ Invalid PlayerInfo update после ${what}: трек ${p.currentIndex} при ${p.sources.length}`); },
+    add(s) { p.sources.push(s); p.lastChange = Date.now(); p.check('add'); },
+    remove(i) { if (i === p.currentIndex && p.playing) (globalThis.__reports ||= []).push(`удалён играющий трек ${i}`); p.sources.splice(i, 1); if (p.currentIndex > i) p.currentIndex--; if (p.currentIndex >= p.sources.length) p.currentIndex = Math.max(0, p.sources.length - 1); emit('trackChanged', { currentIndex: p.currentIndex }); },
+    /* как ExoPlayer: после очистки номер текущего трека не сбрасывается */
+    clear() { p.sources = []; p.playing = false; emit('trackChanged', { currentIndex: p.currentIndex }); },
     skipTo(i) { if (i < p.sources.length) { p.currentIndex = i; p.time = 0; p.lastChange = Date.now(); emit('trackChanged', { currentIndex: i }); } },
     next() { p.skipTo(p.currentIndex + 1); },
     previous() { p.skipTo(p.currentIndex - 1); },
@@ -80,7 +84,7 @@ function same(m, what) {
 async function settle(ms = 1800) { const end = Date.now() + ms; while (Date.now() < end) { globalThis.__pl?.tick(); await sleep(100); } }
 
 let pass = 0, fail = 0;
-async function test(name, f) { slow = new Set(); try { await f(); pass++; console.log(`✓ ${name}`); } catch (e) { fail++; console.log(`✗ ${name}\n    ${e.message}`); } }
+async function test(name, f) { slow = new Set(); globalThis.__reports = []; try { await f(); const crash = (globalThis.__reports || []).find((x) => x.includes('ВЫЛЕТ') || x.includes('удалён играющий')); if (crash) throw new Error(crash); pass++; console.log(`✓ ${name}`); } catch (e) { fail++; console.log(`✗ ${name}\n    ${e.message}`); } }
 
 await test('Включил трек — играет он, на экране он', async () => {
   const m = await freshApp(); await m.player.play(LIST, 's0'); await settle(600);
@@ -168,7 +172,6 @@ await test('Свайпы подряд: название в шторке не о�
   same(m, 'итог');
 });
 
-globalThis.__reports = [];
 await test('Шторка/экран блокировки: плеер регистрируется один раз, дальше только обновляется название', async () => {
   const m = await freshApp(); await m.player.play(LIST, 's0'); await settle(1500);
   m.player.next(); await settle(1200); m.player.next(); await settle(1200);
@@ -189,6 +192,16 @@ await test('«Дальше» из шторки, когда следующий т
   await settle(800);                               // s1 подготовился и лёг в плеер
   p.next(); await settle(800);
   if (same(m, 'после подготовки') !== 's1') throw new Error('должен играть s1');
+});
+
+await test('Быстрый переход, потом неподготовленный трек: плеер не остаётся на «треке №1 при одном треке» (падение Invalid PlayerInfo)', async () => {
+  const m = await freshApp(); await m.player.play(LIST, 's0'); await settle(1500);
+  m.player.next(); await settle(400);              // плеер телефона на треке №1
+  slow = new Set(['s5']);
+  m.player.skipTo(5); await settle(1500);          // очистка и новый трек
+  if (same(m, 'итог') !== 's5') throw new Error('должен играть s5');
+  m.player.next(); await settle(600); m.player.skipTo(2); await settle(1200);
+  same(m, 'итог 2');
 });
 
 console.log(`\n${pass} прошло, ${fail} упало`);

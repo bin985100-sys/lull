@@ -24,6 +24,22 @@ const CODE = `
       } catch (_: Throwable) {}
       lullPrev?.uncaughtException(t, e)
     }
+    // Lull: известный сбой медиасессии Media3 — «Invalid PlayerInfo update» при быстром переключении треков.
+    // Это рассинхрон уведомления с плеером, звук он не трогает: пропускаем такое обновление, а не роняем приложение.
+    android.os.Handler(android.os.Looper.getMainLooper()).post {
+      while (true) {
+        try {
+          android.os.Looper.loop()
+        } catch (e: Throwable) {
+          val m = e.message ?: ""
+          if (e is IllegalStateException && m.contains("Invalid PlayerInfo update")) {
+            android.util.Log.w("Lull", "пропускаю сбой медиасессии: " + m)
+            continue
+          }
+          throw e
+        }
+      }
+    }
 `;
 
 module.exports = function withCrashLog(config) {

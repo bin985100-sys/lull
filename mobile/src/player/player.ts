@@ -234,7 +234,14 @@ let wantPlay = true;
 /* Пока готовим новый трек, старый не должен ожить ни от кнопки, ни с экрана блокировки — убираем его из плеера */
 function silence() {
   const p = engine();
-  p.pause(); p.clear(); nativeLen = 0; touch();
+  p.pause(); wipe(p); nativeLen = 0; touch();
+}
+/* Очистить плеер телефона. ExoPlayer после clear() помнит номер прошлого трека: был №1 — после очистки и одного
+   добавленного трека медиасессия видит «трек №1 при одном треке» и роняет приложение (Invalid PlayerInfo update).
+   Поэтому сначала встаём на трек №0, потом очищаем. */
+function wipe(p: AudioPlaylist) {
+  try { if (p.trackCount > 0 && p.currentIndex !== 0) p.skipTo(0); } catch {}
+  p.clear();
 }
 /* Переход внутри очереди: экран переключаем сразу, звук — когда сервер готов */
 async function jump(i: number, dir: 'next' | 'prev') {
@@ -246,7 +253,7 @@ function mount(i: number) {
   log(`mount: ${i} «${q[i]?.title}» ${q[i]?.id}`);
   const p = engine();
   p.pause();
-  p.clear();
+  wipe(p);
   base = i;
   p.add(source(q[i]));
   nativeLen = 1;
@@ -274,15 +281,19 @@ function watchdog() {
 function ensureNext() {
   if (!pl || loading || !nativeLen) return; // пока трек готовится, окно соберёт mount()
   const s = usePlayer.getState();
-  const cur = s.index - base;
-  const want = s.queue[s.index + 1];
+  const cur0 = () => s.index - base;
+  /* играющий в телефоне трек не трогаем, даже если приложение ещё не узнало о переходе на него */
+  let nat = cur0();
+  try { nat = Math.max(nat, pl.currentIndex); } catch {}
+  const cur = nat;
+  const want = s.queue[base + cur + 1];
   for (let k = nativeLen - 1; k > cur; k--) { pl.remove(k); touch(); }
   nativeLen = cur + 1;
   if (!want) return;
   /* в плеер телефона кладём только подготовленный трек: кнопка «следующий» в шторке и на экране блокировки
      переключает плеер напрямую, мимо приложения — неподготовленный трек там зависал */
   if (isPrimed(want)) { pl.add(source(want)); nativeLen++; touch(); return; }
-  prime(want).then((ok) => { const st = usePlayer.getState(); if (ok && st.queue[st.index + 1]?.id === want.id) ensureNext(); });
+  prime(want).then((ok) => { const st = usePlayer.getState(); if (ok && st.queue[base + nativeLen]?.id === want.id) ensureNext(); });
 }
 
 async function jumpInner(i: number, dir: 'next' | 'prev') {
@@ -446,7 +457,7 @@ export const player = {
   stop() {
     loadSeq++; loading = false; if (dogTimer) clearTimeout(dogTimer);
     if (metaT) { clearTimeout(metaT); metaT = null; }
-    if (pl) { pl.pause(); pl.clear(); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }
+    if (pl) { pl.pause(); wipe(pl); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }
     lockActive = false;
     usePlayer.setState({ queue: [], index: -1, playing: false, expanded: false });
   },
