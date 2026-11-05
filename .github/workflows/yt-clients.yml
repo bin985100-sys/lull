@@ -1,0 +1,39 @@
+# Замер: сколько yt-dlp получает ссылку на звук при разных клиентах YouTube (без разгадки JS — быстрее)
+name: yt clients speed
+on: { workflow_dispatch: {} }
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -q -U yt-dlp
+      - run: |
+          cat > t.py <<'PY'
+          import time, yt_dlp, json
+          IDS = ["kJQP7kiw5Fk", "JGwWNGJdvx8", "RgKAFK5djSk", "e-ORhEE9VVg"]
+          CFG = {
+            "default": {},
+            "android_vr": {"player_client": ["android_vr"]},
+            "android_vr+skip": {"player_client": ["android_vr"], "player_skip": ["webpage", "configs"]},
+            "tv": {"player_client": ["tv"]},
+            "tv+skip": {"player_client": ["tv"], "player_skip": ["webpage", "configs"]},
+            "web_safari": {"player_client": ["web_safari"]},
+          }
+          print("yt-dlp", yt_dlp.version.__version__)
+          for name, ex in CFG.items():
+            y = yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True, "format": "ba[ext=m4a]/ba/18/b",
+                                  "extractor_args": {"youtube": {**ex, "skip": ["hls", "dash", "translated_subs"]}}})
+            res = []
+            for i, vid in enumerate(IDS):
+              t0 = time.monotonic()
+              try:
+                j = y.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)
+                f = (j.get("requested_formats") or [j])[0]
+                ok = "n=" in f["url"] and "ok" or "ok"
+                res.append(f"{time.monotonic()-t0:.1f}s")
+              except Exception as e:
+                res.append(f"ERR({str(e)[:60]})")
+            print(f"::warning title={name}::{' | '.join(res)}")
+          PY
+          python t.py
