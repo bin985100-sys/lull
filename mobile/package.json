@@ -47,7 +47,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test:sync": "node scripts/sync.test.mjs"
+    "test:sync": "node scripts/sync.test.mjs",
+    "test:player": "node scripts/player.test.mjs",
+    "test": "node scripts/sync.test.mjs && node scripts/player.test.mjs"
   },
   "private": true
 }

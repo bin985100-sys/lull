@@ -96,6 +96,18 @@ export function me(token: string) {
   return pub(u);
 }
 export function logout(token: string) { delete db.sessions[token]; save(); return { ok: true }; }
+/* Удаление аккаунта по просьбе пользователя: профиль, все входы, библиотека на сервере и доступ к YouTube */
+export function deleteAccount(token: string) {
+  const s = db.sessions[token];
+  const u = s && db.users[s.userId];
+  if (!u) throw Object.assign(new Error('Войди в Lull заново'), { status: 401 });
+  if (u.ytRefresh) fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(u.ytRefresh)}`, { method: 'POST' }).catch(() => {});
+  for (const [t, x] of Object.entries(db.sessions)) if (x.userId === u.id) delete db.sessions[t];
+  delete db.users[u.id];
+  try { fs.rmSync(syncFile(u.id), { force: true }); } catch { /* библиотеки могло не быть */ }
+  save();
+  return { ok: true };
+}
 
 /* ---------- страница «вернись в приложение» (relay не пробрасывает Location, поэтому без 302) ---------- */
 export function page(title: string, text: string, nonce?: string, redirect?: string) {
@@ -112,8 +124,10 @@ h1{font-size:26px;margin:0 0 10px}p{color:#9ba0a7;margin:0 0 26px}a{display:bloc
 export function googleGo(nonce: string) {
   const p = pending.get(nonce);
   if (!p) return page('Ссылка устарела', 'Вернись в Lull и нажми кнопку ещё раз.');
-  /* вход через Google сразу просит и доступ к YouTube Music (только чтение): лайки и плейлисты подключаются сами */
-  const yt = p.provider === 'yt' || p.provider === 'google';
+  /* Вход через Google — только имя и почта: для них Google не показывает «приложение не проверено».
+     Доступ к YouTube Music — «чувствительное» разрешение, его просим отдельно (Настройки → Подключить YouTube Music),
+     пока Google не проверит Lull. После проверки можно вернуть всё в один шаг: LULL_G_YT_ON_LOGIN=1. */
+  const yt = p.provider === 'yt' || (p.provider === 'google' && process.env.LULL_G_YT_ON_LOGIN === '1');
   const q = new URLSearchParams({
     client_id: G_ID, redirect_uri: `${PUBLIC}/api/auth/google/callback`, response_type: 'code', state: nonce,
     scope: yt ? 'openid email profile https://www.googleapis.com/auth/youtube.readonly' : 'openid email profile',

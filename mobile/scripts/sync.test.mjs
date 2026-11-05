@@ -168,6 +168,21 @@ await test('Одновременный вход из двух мест (ссыл
   eq(globalThis.__routes.length, 1, 'переходов');
 });
 
+await test('Удаление аккаунта: на сервере не остаётся ни профиля, ни библиотеки, вход по старому токену не работает', async () => {
+  const m = await freshPhone(); signIn(m, 'tB', 'uB'); await m.session.finishLogin();
+  m.sync.startSync(); await sleep(50);
+  m.useLibrary.getState().setFavArtists([art('b1')]); m.useLibrary.getState().setOnboarded(true); await sleep(20); await m.sync.push();
+  eq((await server('tB')).data.lib.favArtists[0].id, 'b1', 'до удаления библиотека на сервере');
+  const r = await realFetch(`${API}/api/auth/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'tB' }) });
+  eq(r.status, 200, 'ответ на удаление');
+  m.sync.forgetAccount();
+  eq(m.useLibrary.getState().favArtists.length, 0, 'телефон очищен');
+  const after = await realFetch(`${API}/api/auth/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'tB', op: 'get' }) });
+  ok(after.status >= 400, `после удаления sync должен отвечать ошибкой, а ответил ${after.status}`);
+  const me = await realFetch(`${API}/api/auth/me`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'tB' }) });
+  ok(me.status >= 400 || !(await me.json()).user, 'профиль удалён');
+});
+
 srv.kill();
 console.log(`\n${pass} прошло, ${fail} упало`);
 process.exit(fail ? 1 : 0);

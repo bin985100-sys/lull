@@ -100,3 +100,9 @@ export async function logoutServer() {
   const token = useLibrary.getState().account.token;
   if (token) post('logout', { token }).catch(() => {});
 }
+
+/* Удалить аккаунт на сервере: профиль, библиотеку и доступ к YouTube Music */
+export async function deleteAccountServer() {
+  const token = useLibrary.getState().account.token;
+  if (token) await post('delete', { token });
+}

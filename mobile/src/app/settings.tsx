@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import { resetTo } from '@/nav';
-import { Pressable, Switch, View } from 'react-native';
+import { Linking, Pressable, Switch, View } from 'react-native';
 
-import { logoutServer } from '@/api/auth';
-import { signOutSync } from '@/api/sync';
+import { deleteAccountServer, logoutServer } from '@/api/auth';
+import { forgetAccount, signOutSync } from '@/api/sync';
 import { linkYouTube } from '@/api/youtube';
 import { askBattery, canMix, openAppSettings } from '@/player/background';
 import { player } from '@/player/player';
@@ -70,7 +70,16 @@ export default function Settings() {
         <Row icon="eraser" label="Очистить историю" onPress={() => confirm({ icon: 'eraser', title: 'Очистить историю?', text: 'Любимые треки и плейлисты останутся.', safe: 'Отмена', danger: 'Очистить историю', onDanger: () => { lib.clearHistory(); toast('История очищена', 'check'); } })} />
         <Row icon="logout" label="Выйти" onPress={() => confirm({ icon: 'logout', title: 'Выйти из аккаунта?', text: 'Любимое, плейлисты и статистика сохранены в аккаунте и вернутся, когда войдёшь снова.', safe: 'Остаться', danger: 'Выйти', onDanger: async () => { player.stop(); await signOutSync(); logoutServer(); lib.setAccount({ provider: null, token: undefined, userId: undefined, youtube: null }); resetTo('/welcome'); } })} />
       </Group>
+      {lib.account.token ? (
+        <Group title="Аккаунт">
+          <Row icon="trash" label="Удалить аккаунт" sub="Профиль, любимое, плейлисты и статистика будут удалены навсегда" onPress={() => confirm({ icon: 'trash', title: 'Удалить аккаунт навсегда?', text: 'Любимые треки, плейлисты, исполнители и статистика удалятся с сервера Lull. Отменить это нельзя.', safe: 'Оставить', danger: 'Удалить', onDanger: async () => {
+            try { await deleteAccountServer(); } catch (e) { return toast((e as Error).message || 'Не получилось удалить. Проверь интернет', 'info'); }
+            player.stop(); forgetAccount(); lib.setAccount({ provider: null, name: '', avatar: undefined, token: undefined, userId: undefined, youtube: null }); toast('Аккаунт удалён', 'check'); resetTo('/welcome');
+          } })} />
+        </Group>
+      ) : null}
       <Group title="О приложении">
+        <Row icon="doc" label="Политика конфиденциальности" onPress={() => Linking.openURL('https://lull.website/privacy.html')} />
         <Row icon="info" label="Музыка — каталог Lull и Audius" />
         <Row icon="doc" label="Версия 0.1 · ранняя сборка" />
         <Row icon="doc" label="Журнал — отправить разработчику" onPress={() => router.push('/log')} />

@@ -154,3 +154,10 @@ export async function signOutSync() {
 /* для тестов */
 export const _syncState = () => ({ changedAt, owner, confirmed });
 export function _resetForTests() { changedAt = 0; owner = undefined; confirmed = false; metaLoaded = false; started = false; loginFlight = null; if (pushT) clearTimeout(pushT); pushT = null; }
+
+/* Аккаунт удалён: на сервер больше ничего не шлём, телефон очищаем */
+export function forgetAccount() {
+  if (pushT) { clearTimeout(pushT); pushT = null; }
+  resetLocal();
+  owner = undefined; confirmed = false; saveMeta();
+}

@@ -8,7 +8,7 @@ import { album, artist, charts, home, homeChips, playlist, search, suggest, sugg
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
 import { importStatus, startImport } from './importer';
-import { authEnabled, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink, syncGet, syncPut } from './auth';
+import { authEnabled, deleteAccount, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink, syncGet, syncPut } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
 const cache = new Map<string, { t: number; body: string }>();
@@ -52,6 +52,7 @@ async function auth(rest: string[], q: URLSearchParams, body: string, res: http.
     case 'poll': return json(res, poll(q.get('nonce') ?? ''));
     case 'me': return json(res, me(b.token ?? ''));
     case 'logout': return json(res, logout(b.token ?? ''));
+    case 'delete': return json(res, deleteAccount(b.token ?? ''));
     case 'back': return html(res, page('Готово', 'Ты вошёл в Lull. Возвращаемся в приложение…', q.get('nonce') ?? undefined));
     case 'sync': return json(res, b.op === 'put' ? syncPut(b.token ?? '', Number(b.at) || 0, b.data) : syncGet(b.token ?? ''));
     case 'yt': {

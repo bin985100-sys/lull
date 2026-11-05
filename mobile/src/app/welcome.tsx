@@ -56,6 +56,7 @@ export default function Welcome() {
             </View>
           </View>
           {session.error ? <Btn label="Повторить" icon="refresh" onPress={() => finishLogin()} /> : null}
+          {session.error ? <Pressable onPress={() => { useSession.setState({ error: false }); useLibrary.getState().setAccount({ provider: null, token: undefined, userId: undefined, youtube: null }); }} accessibilityRole="button" style={{ alignSelf: 'center', padding: 12 }}><T v="sub">Войти в другой аккаунт</T></Pressable> : null}
         </View>
       ) : wait ? (
         <Animated.View entering={FadeIn.duration(250)} style={{ gap: 12 }} accessibilityLiveRegion="polite">
