@@ -1,6 +1,10 @@
 # Замер: сколько yt-dlp получает ссылку на звук при разных клиентах YouTube (без разгадки JS — быстрее)
 name: yt clients speed
-on: { workflow_dispatch: {} }
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [mobile]
+    paths: ['.github/workflows/yt-clients.yml']
 jobs:
   t:
     runs-on: ubuntu-latest
