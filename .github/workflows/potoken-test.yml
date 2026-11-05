@@ -1,0 +1,21 @@
+# Проверка генератора токена YouTube (PO token): собираем сервер каталога из исходников и запускаем замер
+name: Lull potoken test
+on:
+  workflow_dispatch:
+  push:
+    branches: [mobile]
+    paths: ['.github/workflows/potoken-test.yml', 'server-api/potoken.ts', 'server-api/stream.ts']
+jobs:
+  potoken:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci --ignore-scripts && node server-api/build.mjs
+      - run: |
+          mkdir -p /tmp/api && (LULL_API_DATA=/tmp/api node dist-server/lull-api.mjs > /tmp/log.txt 2>&1 &)
+          sleep 25
+          echo "::warning title=diag::$(curl -s -m 150 'http://127.0.0.1:8787/internal/stream/RgKAFK5djSk?diag=1' | head -c 2500)"
+          grep -a "PO token" /tmp/log.txt | head -5 | while read l; do echo "::warning title=log::$l"; done
+          grep -a -i "error" /tmp/log.txt | head -8 | while read l; do echo "::warning title=err::${l:0:300}"; done
