@@ -53,7 +53,7 @@ function engine() {
     try { meter(st.playing, st.currentTime || 0); } catch (e) { report(e, 'meter'); }
     const s = usePlayer.getState();
     if (s.playing !== st.playing || s.buffering !== st.isBuffering) log(`статус: playing=${st.playing} buffering=${st.isBuffering} i=${st.currentIndex}/${st.trackCount}`);
-    if (s.playing !== st.playing || s.buffering !== st.isBuffering) usePlayer.setState({ playing: st.playing, buffering: st.isBuffering });
+    if (!loading && (s.playing !== st.playing || s.buffering !== st.isBuffering)) usePlayer.setState({ playing: st.playing, buffering: st.isBuffering });
     /* «трек закончился» верим, только если играл именно текущий трек, он реально дошёл до конца
        и с переключения прошло больше пары секунд: после clear() плеер присылает такой сигнал от прошлого трека */
     const real = st.didJustFinish && base + st.currentIndex === s.index && Date.now() - mountedAt > 2500
@@ -132,7 +132,7 @@ function onTrackStart() {
   /* радио дозаполняем чуть позже, когда трек уже стартовал, и не больше 10 треков за раз */
   setTimeout(() => extendRadio().catch((e) => report(e, 'radio')), 4000);
   try { useLibrary.getState().pushHistory(t); } catch (e) { report(e, 'history'); }
-  { const s = usePlayer.getState(); warm(s.queue.slice(s.index + 2, s.index + 5)); setTimeout(() => prime(usePlayer.getState().queue[usePlayer.getState().index + 1]), 1500); }
+  setTimeout(primeAhead, 600);
   useProgress.setState({ time: 0, duration: t.duration });
   const meta = { title: t.title, artist: t.artist, artworkUrl: t.artworkLarge || t.artwork };
   const p = pl;
@@ -154,17 +154,43 @@ function shuffled<T>(a: T[]) {
 /* Холодный трек сервер готовит до ~10 с, а плеер Android ждёт первый байт только 8 с и замирает на 0:00.
    Поэтому сначала сами дожидаемся, пока сервер подготовит поток (крутится индикатор), и только потом отдаём трек плееру. */
 const primed = new Map<string, number>();
-async function prime(t: Track | undefined) {
-  if (!t || t.source !== 'yt' || Date.now() - (primed.get(t.id) || 0) < 20 * 60e3) return;
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), 30000);
-  try {
-    const r = await fetch(streamUrlYt(t.id), { headers: { Range: 'bytes=0-1' }, signal: ac.signal });
-    if (r.ok) primed.set(t.id, Date.now());
-  } catch {} finally { clearTimeout(timer); }
+const isPrimed = (t: Track | undefined) => !!t && (t.source !== 'yt' || Date.now() - (primed.get(t.id) || 0) < 20 * 60e3);
+const priming = new Map<string, Promise<boolean>>();
+function prime(t: Track | undefined): Promise<boolean> {
+  if (!t || isPrimed(t)) return Promise.resolve(true);
+  const had = priming.get(t.id);
+  if (had) return had; // один запрос на трек, даже если его просят несколько раз
+  const run = (async () => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 25000);
+      try {
+        const r = await fetch(streamUrlYt(t.id), { headers: { Range: 'bytes=0-1' }, signal: ac.signal });
+        if (r.ok) { primed.set(t.id, Date.now()); return true; }
+      } catch {} finally { clearTimeout(timer); }
+    }
+    return false;
+  })().finally(() => priming.delete(t.id));
+  priming.set(t.id, run);
+  return run;
+}
+/* Пока играет трек, готовим следующие: два ближайших целиком, ещё три — на сервере */
+function primeAhead() {
+  const s = usePlayer.getState();
+  const next = s.queue.slice(s.index + 1, s.index + 3);
+  (async () => { for (const t of next) await prime(t); })().catch(() => {});
+  warm(s.queue.slice(s.index + 3, s.index + 6));
 }
 
 let loadSeq = 0;
+/* loading — новый трек ещё готовится; wantPlay — что выбрал пользователь (играть/пауза) */
+let loading = false;
+let wantPlay = true;
+/* Пока готовим новый трек, старый не должен ожить ни от кнопки, ни с экрана блокировки — убираем его из плеера */
+function silence() {
+  const p = engine();
+  p.pause(); p.clear(); nativeLen = 0;
+}
 /* Переход внутри очереди: экран переключаем сразу, звук — когда сервер готов */
 async function jump(i: number, dir: 'next' | 'prev') {
   try { await jumpInner(i, dir); } catch (e) { report(e, 'player.jump'); }
@@ -181,13 +207,27 @@ function mount(i: number) {
   nativeLen = 1;
   if (q[i + 1]) { p.add(source(q[i + 1])); nativeLen = 2; }
   p.skipTo(0);
-  p.play();
+  if (wantPlay) p.play();
   mountedAt = Date.now();
-  usePlayer.setState({ playing: true });
+  loading = false;
+  usePlayer.setState({ playing: wantPlay, buffering: wantPlay });
+  watchdog();
+}
+/* Трек не пошёл за 15 секунд — не зависаем на 0:00, а идём дальше */
+let dogTimer: ReturnType<typeof setTimeout> | null = null;
+function watchdog() {
+  if (dogTimer) clearTimeout(dogTimer);
+  const seq = loadSeq, idx = usePlayer.getState().index;
+  dogTimer = setTimeout(() => {
+    const s = usePlayer.getState();
+    if (seq !== loadSeq || s.index !== idx || !wantPlay || useProgress.getState().time > 0.3) return;
+    log(`трек не загрузился за 15 с, пропускаю: ${currentTrack(s)?.title}`);
+    if (s.index < s.queue.length - 1) jump(s.index + 1, 'next');
+  }, 15000);
 }
 /* Следующий трек очереди должен лежать в плеере сразу за текущим (после добавлений, волны, перемешивания) */
 function ensureNext() {
-  if (!pl) return;
+  if (!pl || loading || !nativeLen) return; // пока трек готовится, окно соберёт mount()
   const s = usePlayer.getState();
   const cur = s.index - base;
   const want = s.queue[s.index + 1];
@@ -200,10 +240,23 @@ async function jumpInner(i: number, dir: 'next' | 'prev') {
   const seq = ++loadSeq;
   const t = usePlayer.getState().queue[i];
   if (!t) return;
+  wantPlay = true;
   usePlayer.setState({ index: i, lastDir: dir, playing: true });
   useProgress.setState({ time: 0, duration: t.duration || 0 });
-  if (t.source === 'yt' && Date.now() - (primed.get(t.id) || 0) > 20 * 60e3) {
-    engine().pause(); usePlayer.setState({ buffering: true });
+  /* следующий трек уже лежит в плеере и готов — просто переходим на него, без перезагрузки */
+  const k = i - base;
+  if (pl && !loading && k > 0 && k < nativeLen && isPrimed(t)) {
+    log(`быстрый переход: ${k} «${t.title}»`);
+    pl.skipTo(k); pl.play();
+    mountedAt = Date.now();
+    for (let j = 0; j < k; j++) { pl.remove(0); nativeLen--; }
+    base = i;
+    ensureNext(); watchdog(); onTrackStart();
+    return;
+  }
+  if (!isPrimed(t)) {
+    loading = true;
+    silence(); usePlayer.setState({ buffering: true });
     await prime(t);
     if (seq !== loadSeq) return;
   }
@@ -212,8 +265,8 @@ async function jumpInner(i: number, dir: 'next' | 'prev') {
 }
 async function load(queue: Track[], index: number) {
   const seq = ++loadSeq;
-  const p = engine();
-  p.pause();
+  loading = true; wantPlay = true;
+  silence();
   usePlayer.setState({ queue, index, lastDir: 'next', error: null, playing: true, buffering: true });
   useProgress.setState({ time: 0, duration: queue[index]?.duration || 0 });
   const t0 = Date.now();
@@ -249,8 +302,10 @@ export const player = {
   toggle() {
     const p = engine();
     if (!currentTrack()) return;
-    if (usePlayer.getState().playing) { p.pause(); usePlayer.setState({ playing: false }); }
-    else { p.play(); usePlayer.setState({ playing: true }); }
+    wantPlay = !usePlayer.getState().playing;
+    usePlayer.setState({ playing: wantPlay });
+    if (loading) return; // трек ещё готовится — включится сам, если не нажали паузу
+    if (wantPlay) p.play(); else p.pause();
   },
   next() {
     const s = usePlayer.getState();
@@ -334,6 +389,7 @@ export const player = {
   },
   expand(v: boolean) { usePlayer.setState({ expanded: v && !!currentTrack() }); },
   stop() {
+    loadSeq++; loading = false; if (dogTimer) clearTimeout(dogTimer);
     if (pl) { pl.pause(); pl.clear(); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }
     usePlayer.setState({ queue: [], index: -1, playing: false, expanded: false });
   },
