@@ -140,6 +140,9 @@ async function prime(t: Track | undefined) {
 let loadSeq = 0;
 /* Переход внутри очереди: экран переключаем сразу, звук — когда сервер готов */
 async function jump(i: number, dir: 'next' | 'prev') {
+  try { await jumpInner(i, dir); } catch (e) { report(e, 'player.jump'); }
+}
+async function jumpInner(i: number, dir: 'next' | 'prev') {
   const seq = ++loadSeq;
   const t = usePlayer.getState().queue[i];
   usePlayer.setState({ index: i, lastDir: dir });
@@ -188,7 +191,7 @@ export const player = {
       start = 0;
     }
     if (opts.shuffle !== undefined) usePlayer.setState({ shuffle: opts.shuffle });
-    await load(q, start);
+    try { await load(q, start); } catch (e) { report(e, 'player.play'); usePlayer.setState({ playing: false, buffering: false }); }
   },
   toggle() {
     const p = engine();

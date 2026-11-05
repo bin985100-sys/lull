@@ -72,6 +72,7 @@ async function auth(rest: string[], q: URLSearchParams, body: string, res: http.
 }
 
 runBot();
+const crashes: { at: string; device: string; text: string }[] = [];
 
 http
   .createServer(async (req, res) => {
@@ -84,6 +85,11 @@ http
       let body = '';
       for await (const c of req) body += c;
       if (name === 'auth') return void (await auth(rest, url.searchParams, body, res));
+      if (name === 'crash') {
+        /* отчёты о вылетах приложения: без личных данных, только текст ошибки и модель телефона */
+        if (req.method === 'POST') { try { const b = JSON.parse(body); crashes.unshift({ at: new Date().toISOString(), device: String(b.device || '').slice(0, 120), text: String(b.text || '').slice(0, 9000) }); crashes.length = Math.min(crashes.length, 30); } catch {} return json(res, { ok: true }); }
+        return json(res, crashes.slice(0, Number(url.searchParams.get('n')) || 5));
+      }
       if (name === 'import') return json(res, rest[0] ? importStatus(rest[0]) : startImport((body ? JSON.parse(body).url : url.searchParams.get('url')) ?? ''));
       const key = `${url.pathname}?${url.searchParams}#${body}`;
       const ttl = (TTL[name] ?? 0) * 60_000;

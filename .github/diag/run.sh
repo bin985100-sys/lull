@@ -5,7 +5,9 @@ set -u
 PKG=website.lull.app
 APK=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -1)
 note() { local t="$1" body; body=$(cat | head -c 3800 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g'); echo "::warning title=$t::${body:-пусто}"; }
-applog() { local pid; pid=$(adb shell pidof $PKG | tr -d '\r'); echo "alive: ${pid:-НЕТ — приложение упало}"; adb logcat -d -v time | grep -E "ReactNativeJS|AndroidRuntime|FATAL|libc|DEBUG|ExoPlayer|ExpoAudio|expo|lull|SIGSEGV|Exception" | grep -v -E "GmsStrictMode|PeoplePU|CorpusConfig|SemanticLocation|Phenotype|Conscrypt|ModernMediaScanner|AppOps" | tail -45; }
+applog() { local pid; pid=$(adb shell pidof $PKG | tr -d '\r'); echo "alive: ${pid:-НЕТ — приложение упало}";
+  adb logcat -d -v brief -b crash | tail -40
+  [ -n "$pid" ] && adb logcat -d -v brief --pid="$pid" | grep -v -E "^[VD]/|Choreographer|OpenGLRenderer|EGL_emulation|HWUI" | tail -40; }
 tapdesc() { # нажать на элемент по началу описания (accessibilityLabel)
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
   python3 - "$1" <<'P'
@@ -19,7 +21,6 @@ else: print('не нашёл',sys.argv[1]); print('\n'.join(sorted(set(re.findal
 P
 }
 adb install -r "$APK" >/dev/null && echo installed
-adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS 2>/dev/null
 
 adb logcat -c
 adb shell am start -W -a android.intent.action.VIEW -d "lull://debug?play=kJQP7kiw5Fk" $PKG >/dev/null

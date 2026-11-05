@@ -81,9 +81,10 @@ export async function start(provider: string) {
 export function poll(nonce: string) {
   const p = pending.get(nonce);
   if (!p) return { status: 'expired' };
-  if (p.provider === 'yt') { if (!p.done) return { status: 'pending' }; pending.delete(nonce); return { status: 'ok', user: pub(db.users[p.userId!]) }; }
+  if (p.provider === 'yt') { if (!p.done) return { status: 'pending' }; return { status: 'ok', user: pub(db.users[p.userId!]) }; }
   if (!p.token) return { status: 'pending' };
-  pending.delete(nonce);
+  /* не удаляем сразу: приложение может спросить несколько раз (таймер, возврат по ссылке, перезапуск) */
+  p.at = Math.min(p.at, Date.now() - 5 * 60e3);
   const s = db.sessions[p.token];
   return { status: 'ok', token: p.token, user: pub(db.users[s.userId]) };
 }

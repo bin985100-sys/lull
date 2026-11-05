@@ -2,7 +2,7 @@
    Последняя ошибка сохраняется и видна в настройках — её можно скопировать и прислать. */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Component, type ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { create } from 'zustand';
 
 const KEY = 'lull.lastError';
@@ -13,8 +13,32 @@ export function report(e: unknown, where: string) {
   const text = `${where}: ${err?.message ?? String(e)}\n${(err?.stack ?? '').split('\n').slice(0, 8).join('\n')}`;
   useCrash.setState({ error: text });
   AsyncStorage.setItem(KEY, `${new Date().toISOString()}\n${text}`).catch(() => {});
+  if (where === 'fatal' || where.startsWith('player')) sendCrash(text);
 }
 export const lastError = () => AsyncStorage.getItem(KEY);
+
+/* Нативный вылет прошлого запуска (его записывает Android-часть приложения): показываем и отправляем на сервер */
+const device = () => {
+  const c = (Platform as any).constants || {};
+  return `${Platform.OS} ${Platform.Version} ${c.Manufacturer ?? ''} ${c.Model ?? ''}`.trim();
+};
+export async function sendCrash(text: string) {
+  try {
+    const { LULL_API } = await import('@/api/lull');
+    await fetch(`${LULL_API}/api/crash`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, device: device(), at: Date.now() }) });
+  } catch {}
+}
+(async () => {
+  try {
+    const native = await AsyncStorage.getItem('lull.nativeCrash');
+    if (!native) return;
+    await AsyncStorage.removeItem('lull.nativeCrash');
+    const text = `Прошлый запуск закрылся с ошибкой (${device()}):\n${native}`;
+    useCrash.setState({ error: text.slice(0, 3000) });
+    AsyncStorage.setItem(KEY, text).catch(() => {});
+    sendCrash(native);
+  } catch {}
+})();
 
 /* Фатальные JS-ошибки больше не закрывают приложение */
 const EU = (globalThis as any).ErrorUtils;
