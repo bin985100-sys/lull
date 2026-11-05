@@ -1,0 +1,34 @@
+/* Выход в YouTube через Cloudflare WARP (локальный SOCKS5-прокси на сервере, LULL_YT_PROXY=socks5://127.0.0.1:40000).
+   Адрес самого сервера (дата-центр) YouTube режет: файлы обрываются после 256 КБ, «подтвердите, что не бот».
+   Через прокси идут только запросы к YouTube/Google; Telegram, тексты песен и локальные адреса — напрямую.
+   Модуль должен импортироваться первым: он подменяет диспетчер у встроенного fetch. */
+import type { Dispatcher as D } from 'undici';
+
+const VIA = /(^|\.)(youtube\.com|googlevideo\.com|youtube-nocookie\.com|googleapis\.com|google\.com|ytimg\.com|ggpht\.com)$/i;
+export const ytProxy = process.env.LULL_YT_PROXY || '';
+
+if (ytProxy) {
+  try {
+    // загружаем только когда прокси включён: новая версия undici требует свежий Node
+    const { Agent, Dispatcher, fetch: ufetch, setGlobalDispatcher } = await import('undici');
+    const { socksDispatcher } = await import('fetch-socks');
+    class Split extends Dispatcher {
+      constructor(private direct: D, private proxied: D) { super(); }
+      dispatch(opts: D.DispatchOptions, handler: D.DispatchHandler) {
+        let host = '';
+        try { host = new URL(String(opts.origin)).hostname; } catch {}
+        return (VIA.test(host) ? this.proxied : this.direct).dispatch(opts, handler);
+      }
+      async close() { await Promise.all([this.direct.close(), this.proxied.close()]); }
+      async destroy() { await Promise.all([this.direct.destroy(), this.proxied.destroy()]); }
+    }
+    const u = new URL(ytProxy);
+    const socks = socksDispatcher({ type: 5, host: u.hostname, port: Number(u.port) || 1080 }, { connect: { timeout: 10_000 } } as any);
+    setGlobalDispatcher(new Split(new Agent(), socks as any) as any);
+    // встроенный fetch Node может быть другой версии undici, чем диспетчер — берём fetch той же версии
+    (globalThis as any).fetch = ufetch;
+    console.log(`[api] YouTube через прокси ${u.host}`);
+  } catch (e) {
+    console.log('[api] прокси для YouTube не подключился:', (e as Error).message);
+  }
+}

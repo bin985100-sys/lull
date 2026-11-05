@@ -8,6 +8,42 @@ DATA=/var/lib/lull-relay
 ENVF=$DATA/auth.env
 UNIT=/etc/systemd/system/lull-api.service
 
+echo "== 0. Выход в YouTube через Cloudflare WARP"
+# Адрес сервера (дата-центр) YouTube режет: файлы обрываются после 256 КБ. WARP работает только как
+# локальный прокси 127.0.0.1:40000 — маршруты сервера, SSH и сайт не трогает. Через него ходят лишь запросы к YouTube.
+WARP_PORT=40000
+WARP_OK=0
+if ! command -v warp-cli >/dev/null 2>&1; then
+  . /etc/os-release
+  curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+  echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ ${VERSION_CODENAME} main" > /etc/apt/sources.list.d/cloudflare-client.list
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq cloudflare-warp >/dev/null || echo "  !! не удалось поставить cloudflare-warp"
+fi
+if command -v warp-cli >/dev/null 2>&1; then
+  systemctl enable --now warp-svc >/dev/null 2>&1 || true
+  sleep 2
+  W="warp-cli --accept-tos"
+  $W registration show >/dev/null 2>&1 || $W registration new >/dev/null 2>&1 || true
+  # сначала режим прокси, потом подключение — иначе WARP заберёт весь трафик сервера
+  $W mode proxy >/dev/null 2>&1 || true
+  $W proxy port $WARP_PORT >/dev/null 2>&1 || true
+  $W connect >/dev/null 2>&1 || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    curl -s -m 5 -x socks5h://127.0.0.1:$WARP_PORT https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | grep -q "warp=on" && { WARP_OK=1; break; }
+    sleep 2
+  done
+fi
+for svc in lull-api lull-relay; do
+  D=/etc/systemd/system/$svc.service.d
+  if [ "$WARP_OK" = 1 ]; then
+    mkdir -p "$D" && printf "[Service]\nEnvironment=LULL_YT_PROXY=socks5://127.0.0.1:$WARP_PORT\n" > "$D/warp.conf"
+  else
+    rm -f "$D/warp.conf"
+  fi
+done
+systemctl daemon-reload
+if [ "$WARP_OK" = 1 ]; then echo "  WARP работает: YouTube через $(curl -s -m 5 -x socks5h://127.0.0.1:$WARP_PORT https://www.cloudflare.com/cdn-cgi/trace | grep -oP '^ip=\K.*')"; else echo "  !! WARP не поднялся — YouTube напрямую, как раньше"; fi
+
 echo "== 1. Каталог и вход"
 cp "$HERE/lull-api.mjs" "$APP/lull-api.mjs"
 if [ ! -f "$ENVF" ]; then
@@ -30,6 +66,7 @@ systemctl daemon-reload
 systemctl restart lull-api
 sleep 2
 curl -fsS http://127.0.0.1:8787/api/health >/dev/null && echo "  каталог работает"
+journalctl -u lull-api -n 30 --no-pager 2>/dev/null | grep -o "YouTube через прокси.*\|прокси для YouTube не подключился.*" | tail -1 | sed "s/^/  /" || true
 journalctl -u lull-api -n 30 --no-pager 2>/dev/null | grep -o "аккаунт YouTube подключён.*\|cookies YouTube не подключились.*" | tail -1 | sed "s/^/  /" || true
 echo "  вход: $(curl -fsS http://127.0.0.1:8787/api/auth/config)"
 
@@ -39,7 +76,7 @@ if [ -f "$HERE/server.py" ]; then
   cp "$HERE/server.py" "$APP/server.py"
   # свежий yt-dlp: YouTube часто меняет защиту, старая версия получает звук медленнее или не получает вовсе
   PY=$(grep -oP '^ExecStart=\K\S+' /etc/systemd/system/lull-relay.service 2>/dev/null || echo python3)
-  "$PY" -m pip install -q -U yt-dlp 2>/dev/null || "$PY" -m pip install -q -U --break-system-packages yt-dlp 2>/dev/null || true
+  "$PY" -m pip install -q -U yt-dlp aiohttp-socks 2>/dev/null || "$PY" -m pip install -q -U --break-system-packages yt-dlp aiohttp-socks 2>/dev/null || true
   echo "  yt-dlp: $("$PY" -c 'import yt_dlp;print(yt_dlp.version.__version__)' 2>/dev/null || echo '?')"
   [ -f "$DATA/yt-cookies.txt" ] && chown lull:lull "$DATA/yt-cookies.txt" && chmod 600 "$DATA/yt-cookies.txt" && echo "  аккаунт YouTube для звука: подключён (cookies)"
   systemctl restart lull-relay

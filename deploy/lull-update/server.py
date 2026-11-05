@@ -210,6 +210,7 @@ def ydl_for(fmt: str, client: str = "") -> yt_dlp.YoutubeDL:
             "quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True,
             "format": FORMATS[fmt], "socket_timeout": 10, "cachedir": str(DATA / "yt-dlp-cache"),
             "source_address": "0.0.0.0", "extractor_args": {"youtube": yt_args},
+            **({"proxy": YT_PROXY} if YT_PROXY else {}),
             "js_runtimes": {"node": {}},
             # Аккаунт YouTube для треков с ограничениями (18+, «войдите, чтобы подтвердить…»):
             # файл cookies в формате Netscape кладёт владелец сервера, в репозиторий он не попадает.
@@ -286,6 +287,10 @@ class Ladder:
 
 ladder = Ladder()
 API_LOCAL = os.environ.get("LULL_API_LOCAL", "http://127.0.0.1:8787")
+# Выход в YouTube через Cloudflare WARP (socks5://127.0.0.1:40000): адрес сервера-датацентра YouTube режет.
+# Через прокси — и получение ссылки (yt-dlp), и сам файл: ссылка привязана к адресу, с которого её получили.
+YT_PROXY = os.environ.get("LULL_YT_PROXY", "")
+yt_session: "ClientSession | None" = None
 
 
 async def resolve_innertube(vid: str) -> dict:
@@ -305,9 +310,9 @@ async def resolve_innertube(vid: str) -> dict:
 async def verify(s: dict) -> bool:
     """Ссылка реально отдаёт звук так, как его берёт раздача: первые байты (заодно узнаём размер)
     и следующий кусок в 2 МБ — без нужного токена YouTube отдаёт начало, а дальше 403."""
-    assert session is not None
+    assert yt_session is not None
     try:
-        async with session.get(s["url"], headers={**s["headers"], "Range": "bytes=0-1"}) as r:
+        async with yt_session.get(s["url"], headers={**s["headers"], "Range": "bytes=0-1"}) as r:
             if r.status not in (200, 206):
                 return False
             total = r.headers.get("Content-Range", "").rpartition("/")[2]
@@ -531,11 +536,21 @@ async def health(_: web.Request) -> web.Response:
 
 
 async def on_start(app: web.Application):
-    global session
+    global session, yt_session
     session = ClientSession(timeout=ClientTimeout(total=None, sock_connect=10, sock_read=60), connector=TCPConnector(limit=0, ttl_dns_cache=300, family=socket.AF_INET), auto_decompress=False)
+    yt_session = session
+    if YT_PROXY:
+        try:
+            from aiohttp_socks import ProxyConnector
+            yt_session = ClientSession(timeout=ClientTimeout(total=None, sock_connect=10, sock_read=60), connector=ProxyConnector.from_url(YT_PROXY, rdns=True, limit=0), auto_decompress=False)
+            log.info("YouTube через прокси %s", YT_PROXY)
+        except Exception as e:
+            log.warning("прокси для YouTube не подключился: %s", e)
 
 
 async def on_stop(app: web.Application):
+    if yt_session and yt_session is not session:
+        await yt_session.close()
     if session:
         await session.close()
 
@@ -551,12 +566,12 @@ CHUNK = 2 * 1024 * 1024       # дальше по 2 МБ: YouTube тормози
 
 async def fetch_range(s: dict, a: int, b: int) -> bytes:
     """Кусок файла a..b с YouTube; 3 попытки. 403/410 — ссылка протухла, пусть решает вызывающий."""
-    assert session is not None
+    assert yt_session is not None
     last = None
     for _ in range(3):
         try:
             sep = "&" if "?" in s["url"] else "?"
-            async with session.get(f"{s['url']}{sep}range={a}-{b}", headers=s["headers"], timeout=ClientTimeout(total=20, sock_read=10)) as r:
+            async with yt_session.get(f"{s['url']}{sep}range={a}-{b}", headers=s["headers"], timeout=ClientTimeout(total=20, sock_read=10)) as r:
                 if r.status in (403, 410):
                     raise PermissionError(f"{r.status}")
                 if r.status not in (200, 206):

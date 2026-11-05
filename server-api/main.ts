@@ -3,6 +3,7 @@
  * Тот же код, что и в десктопном приложении (electron/yt.ts, lyrics.ts), без Electron.
  * Слушает 127.0.0.1:8787; наружу его отдаёт Python-часть Lull Relay по /api/*.
  */
+import './proxy';
 import dns from 'node:dns';
 import http from 'node:http';
 import fs from 'node:fs';
