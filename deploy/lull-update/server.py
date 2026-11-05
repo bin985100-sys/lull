@@ -240,10 +240,51 @@ def resolve_sync(vid: str, fmt: str, client: str = "") -> dict:
 
 # Клиенты-приложения (VR-шлем, телевизор) отдают ссылку без разгадки JS-защиты плеера — это главная экономия.
 FAST_CLIENTS = ("android_vr", "tv")
-# Наперегонки. Первым — «innertube»: каталог Lull (Node, youtubei.js) получает ссылку одним запросом к API YouTube
-# от имени клиента для VR/TV, как десктопная версия (~1 с). yt-dlp подключается, только если тот задумался.
-FALLBACK_CLIENTS = ("innertube", "android_vr", "tv", "", "web_safari", "mweb", "web_embedded")
-RACE_DELAY = {"innertube": 0.0, "android_vr": 0.6, "tv": 0.6, "": 1.2, "web_safari": 3.0, "mweb": 4.5, "web_embedded": 6.0}
+# Способы получить звук. Какой из них сейчас работает с этого сервера, YouTube решает сам и часто меняет
+# (то «вы бот» для одних клиентов, то 403 для других), поэтому порядок не зашит, а подстраивается — см. Ladder.
+FALLBACK_CLIENTS = ("web_embedded", "innertube", "", "mweb", "web_safari", "tv", "android_vr")
+STEP = 1.0          # следующий способ подключается, если предыдущий молчит дольше секунды
+BOT_COOLDOWN = 1800  # «вы бот» — этот способ не трогаем полчаса, чтобы не злить YouTube лишними запросами
+
+
+class Ladder:
+    """Рейтинг способов: последний успешный — первым, «бот»/403 — вниз или на паузу."""
+
+    def __init__(self):
+        self.last_ok: dict[str, float] = {}
+        self.avg: dict[str, float] = {}
+        self.fails: dict[str, int] = {}
+        self.blocked_until: dict[str, float] = {}
+
+    def order(self) -> list[str]:
+        now = time.time()
+        live = [c for c in FALLBACK_CLIENTS if self.blocked_until.get(c, 0) < now]
+        base = {c: i for i, c in enumerate(FALLBACK_CLIENTS)}
+        # успевший недавно (10 мин) — вперёд, потом по скорости; у кого подряд ошибки — назад
+        def key(c: str):
+            fresh = now - self.last_ok.get(c, 0) < 600
+            return (0 if fresh else 1, self.fails.get(c, 0), self.avg.get(c, 9.0) if fresh else base[c])
+        return sorted(live, key=key) or list(FALLBACK_CLIENTS)
+
+    def ok(self, c: str, secs: float):
+        self.last_ok[c] = time.time()
+        self.fails[c] = 0
+        self.avg[c] = secs if c not in self.avg else self.avg[c] * 0.7 + secs * 0.3
+
+    def fail(self, c: str, msg: str):
+        self.fails[c] = self.fails.get(c, 0) + 1
+        low = msg.lower()
+        if "not a bot" in low or "не бот" in low or "sign in to confirm" in low:
+            self.blocked_until[c] = time.time() + BOT_COOLDOWN
+            log.warning("способ %s: YouTube просит подтвердить, что не бот — пауза %d мин", c or "default", BOT_COOLDOWN // 60)
+
+    def state(self) -> dict:
+        now = time.time()
+        return {c or "default": {"ok_ago": round(now - self.last_ok[c]) if c in self.last_ok else None, "avg": round(self.avg.get(c, 0), 2),
+                                 "fails": self.fails.get(c, 0), "paused": max(0, round(self.blocked_until.get(c, 0) - now))} for c in FALLBACK_CLIENTS}
+
+
+ladder = Ladder()
 API_LOCAL = os.environ.get("LULL_API_LOCAL", "http://127.0.0.1:8787")
 
 
@@ -284,6 +325,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
     result: dict = {}
 
     async def one(client: str, delay: float):
+        started = 0.0
         if delay:
             try:
                 await asyncio.wait_for(done.wait(), timeout=delay)
@@ -292,6 +334,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 pass
         if done.is_set():
             return
+        started = time.monotonic()
         try:
             if client == "innertube":
                 if fmt != "aac":
@@ -306,19 +349,26 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             if ("unavailable" in low or "not available" in low) and "format" not in low:
                 result.setdefault("fatal", e)
             errors.append(f"{client or 'default'}: {msg}")
-            return
-        if done.is_set():
+            if "unavailable" not in low and "not available" not in low:
+                ladder.fail(client, msg)
             return
         if s.get("checked") or await verify(s):
+            ladder.ok(client, time.monotonic() - started)
+            if done.is_set():
+                return
             s["client"] = client
             result.setdefault("ok", s)
             done.set()
         else:
             log.warning("resolve %s %s: ссылка отдаёт 403", vid, client or "default")
+            ladder.fail(client, "403")
             errors.append(f"{client or 'default'}: 403")
 
     t0 = time.monotonic()
-    tasks = [asyncio.ensure_future(one(c, RACE_DELAY.get(c, 3.0))) for c in FALLBACK_CLIENTS]
+    order = ladder.order()
+    if fmt != "aac" and "innertube" in order:
+        order.remove("innertube")
+    tasks = [asyncio.ensure_future(one(c, i * STEP)) for i, c in enumerate(order)]
     waiter = asyncio.ensure_future(done.wait())
     await asyncio.wait([waiter, asyncio.ensure_future(asyncio.gather(*tasks, return_exceptions=True))], return_when=asyncio.FIRST_COMPLETED)
     done.set()
@@ -352,7 +402,11 @@ async def api_diag(request: web.Request) -> web.Response:
         return cors(request, web.json_response({"error": "bad vid"}, status=400))
     loop = asyncio.get_running_loop()
     out = {}
-    for c in FALLBACK_CLIENTS:
+    # state=1 — только рейтинг, без запросов к YouTube; all=1 — все способы; по умолчанию три первых в рейтинге
+    if request.query.get("state"):
+        return cors(request, web.json_response({"order": [c or "default" for c in ladder.order()], "ladder": ladder.state()}))
+    probe_list = list(FALLBACK_CLIENTS) if request.query.get("all") else ladder.order()[:3]
+    for c in probe_list:
         t0 = time.monotonic()
         try:
             s = await resolve_innertube(vid) if c == "innertube" else await loop.run_in_executor(pool, resolve_sync, vid, "aac", c)
@@ -361,7 +415,7 @@ async def api_diag(request: web.Request) -> web.Response:
             out[c or "default"] = {"resolve": round(t1 - t0, 2), "verify": round(time.monotonic() - t1, 2), "ok": ok, "mime": s.get("mime")}
         except Exception as e:
             out[c or "default"] = {"error": str(e).replace("ERROR: ", "")[:160], "t": round(time.monotonic() - t0, 2)}
-    return cors(request, web.json_response({"vid": vid, "yt_dlp": yt_dlp.version.__version__, "clients": out}))
+    return cors(request, web.json_response({"vid": vid, "yt_dlp": yt_dlp.version.__version__, "order": [c or "default" for c in ladder.order()], "ladder": ladder.state(), "clients": out}))
 
 
 async def _warm(vid: str, fmt: str):
