@@ -23,11 +23,14 @@ LULL_APP_URL=https://app.lull.website
 ENV
 fi
 chown lull:lull "$ENVF" && chmod 600 "$ENVF"
+# аккаунт YouTube сервера (cookies): читают и каталог, и звук — права до перезапуска служб
+[ -f "$DATA/yt-cookies.txt" ] && chown lull:lull "$DATA/yt-cookies.txt" && chmod 600 "$DATA/yt-cookies.txt"
 grep -q "EnvironmentFile=-$ENVF" "$UNIT" || sed -i "s#^ExecStart=#EnvironmentFile=-$ENVF\nExecStart=#" "$UNIT"
 systemctl daemon-reload
 systemctl restart lull-api
 sleep 2
 curl -fsS http://127.0.0.1:8787/api/health >/dev/null && echo "  каталог работает"
+journalctl -u lull-api -n 30 --no-pager 2>/dev/null | grep -o "аккаунт YouTube подключён.*\|cookies YouTube не подключились.*" | tail -1 | sed "s/^/  /" || true
 echo "  вход: $(curl -fsS http://127.0.0.1:8787/api/auth/config)"
 
 echo "== 2. Звук: быстрый старт треков"
