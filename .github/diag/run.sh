@@ -1,20 +1,45 @@
 #!/usr/bin/env bash
-# Автопроверка APK в эмуляторе: старт трека и страница артиста, всё важное из logcat — в аннотации сборки.
+# Автопроверка APK в эмуляторе: старт трека по ссылке, страница артиста, нажатия как у человека.
+# Лог только процесса Lull — в аннотации сборки.
 set -u
+PKG=website.lull.app
 APK=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -1)
-note() { # $1 заголовок, stdin — текст; режем на куски, чтобы влезло в аннотации
-  local t="$1" body; body=$(cat | head -c 3500 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
-  echo "::warning title=$t::${body:-пусто}"
+note() { local t="$1" body; body=$(cat | head -c 3800 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g'); echo "::warning title=$t::${body:-пусто}"; }
+applog() { local pid; pid=$(adb shell pidof $PKG | tr -d '\r'); echo "alive: ${pid:-НЕТ — приложение упало}"; adb logcat -d -v time | grep -E "ReactNativeJS|AndroidRuntime|FATAL|libc|DEBUG|ExoPlayer|ExpoAudio|expo|lull|SIGSEGV|Exception" | grep -v -E "GmsStrictMode|PeoplePU|CorpusConfig|SemanticLocation|Phenotype|Conscrypt|ModernMediaScanner|AppOps" | tail -45; }
+tapdesc() { # нажать на элемент по началу описания (accessibilityLabel)
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+  python3 - "$1" <<'P'
+import re,sys,subprocess
+x=open('/tmp/ui.xml',encoding='utf8').read()
+for m in re.finditer(r'<node [^>]*?content-desc="([^"]*)"[^>]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',x):
+    d,a,b,c,e=m.group(1),*map(int,m.groups()[1:])
+    if d.startswith(sys.argv[1]):
+        subprocess.run(['adb','shell','input','tap',str((a+c)//2),str((b+e)//2)]); print('tap',d); break
+else: print('не нашёл',sys.argv[1]); print('\n'.join(sorted(set(re.findall(r'content-desc="([^"]+)"',x)))[:40]))
+P
 }
 adb install -r "$APK" >/dev/null && echo installed
+adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS 2>/dev/null
+
 adb logcat -c
-adb shell am start -W -a android.intent.action.VIEW -d "lull://debug?play=dQw4w9WgXcQ" website.lull.app | tail -3
+adb shell am start -W -a android.intent.action.VIEW -d "lull://debug?play=kJQP7kiw5Fk" $PKG >/dev/null
+sleep 35
+applog | note "1. старт трека по ссылке (холодный)"
+
+adb logcat -c
+adb shell am start -W -a android.intent.action.VIEW -d "lull://debug?artist=UC0076UMUgEng8HORUw_MYHA" $PKG >/dev/null
+sleep 15
+tapdesc "Слушать" | note "2a. кнопка Слушать на странице артиста"
 sleep 30
-adb shell pidof website.lull.app >/dev/null && echo "alive after play" || echo "DEAD after play"
-( echo "alive: $(adb shell pidof website.lull.app || echo НЕТ)"; adb logcat -d | grep -E "FATAL|AndroidRuntime|ReactNativeJS|ExoPlayer|expo-audio|AudioPlaylist|Error|Exception|SIGSEGV|libc|CRASH" | grep -v -E "chatty|GoogleApiManager|Finsky|gms" | tail -60 ) | note "после старта трека"
+applog | note "2b. после Слушать"
+
 adb logcat -c
-adb shell am start -W -a android.intent.action.VIEW -d "lull://debug?artist=UC0076UMUgEng8HORUw_MYHA" website.lull.app | tail -3
-sleep 20
-( echo "alive: $(adb shell pidof website.lull.app || echo НЕТ)"; adb logcat -d | grep -E "FATAL|AndroidRuntime|ReactNativeJS|Error|Exception|SIGSEGV|libc|CRASH" | grep -v -E "chatty|GoogleApiManager|Finsky|gms" | tail -60 ) | note "страница артиста"
-adb logcat -d -b crash | tail -80 | note "буфер crash"
+adb shell input swipe 540 1600 540 900 300; sleep 2
+adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+ROW=$(python3 -c "import re;x=open('/tmp/ui.xml',encoding='utf8').read();r=[d for d in re.findall(r'content-desc=\"([^\"]+, [^\"]+)\"',x)];print(r[1] if len(r)>1 else (r[0] if r else ''))")
+tapdesc "$ROW" | note "3a. нажатие на строку трека: $ROW"
+sleep 30
+applog | note "3b. после нажатия на трек"
+adb shell screencap -p /sdcard/s.png; adb pull /sdcard/s.png diag-screen.png >/dev/null
+adb logcat -d -b crash | tail -60 | note "буфер crash"
 true

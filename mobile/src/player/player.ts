@@ -39,7 +39,9 @@ let ready: Promise<void> | null = null;
 function engine() {
   if (pl) return pl;
   pl = createAudioPlaylist({ sources: [], updateInterval: 250, loop: 'none' });
+  let said = false;
   pl.addListener('playlistStatusUpdate', (st) => {
+    if (!said && (st.currentTime || 0) > 0.5) { said = true; console.log(`[lull] playing ${currentTrack()?.id} t=${st.currentTime}`); setTimeout(() => { said = false; }, 30000); }
     useProgress.setState({ time: st.currentTime || 0, duration: st.duration || currentTrack()?.duration || 0 });
     try { meter(st.playing, st.currentTime || 0); } catch (e) { report(e, 'meter'); }
     const s = usePlayer.getState();
@@ -108,7 +110,7 @@ function onTrackStart() {
   /* радио дозаполняем чуть позже, когда трек уже стартовал, и не больше 10 треков за раз */
   setTimeout(() => extendRadio().catch((e) => report(e, 'radio')), 4000);
   try { useLibrary.getState().pushHistory(t); } catch (e) { report(e, 'history'); }
-  { const s = usePlayer.getState(); warm(s.queue.slice(s.index + 1, s.index + 4)); }
+  { const s = usePlayer.getState(); warm(s.queue.slice(s.index + 2, s.index + 5)); setTimeout(() => prime(usePlayer.getState().queue[usePlayer.getState().index + 1]), 1500); }
   useProgress.setState({ time: 0, duration: t.duration });
   const meta = { title: t.title, artist: t.artist, artworkUrl: t.artworkLarge || t.artwork };
   try {
@@ -122,11 +124,47 @@ function shuffled<T>(a: T[]) {
   return a;
 }
 
-function load(queue: Track[], index: number) {
+/* Холодный трек сервер готовит до ~10 с, а плеер Android ждёт первый байт только 8 с и замирает на 0:00.
+   Поэтому сначала сами дожидаемся, пока сервер подготовит поток (крутится индикатор), и только потом отдаём трек плееру. */
+const primed = new Map<string, number>();
+async function prime(t: Track | undefined) {
+  if (!t || t.source !== 'yt' || Date.now() - (primed.get(t.id) || 0) < 20 * 60e3) return;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 30000);
+  try {
+    const r = await fetch(streamUrlYt(t.id), { headers: { Range: 'bytes=0-1' }, signal: ac.signal });
+    if (r.ok) primed.set(t.id, Date.now());
+  } catch {} finally { clearTimeout(timer); }
+}
+
+let loadSeq = 0;
+/* Переход внутри очереди: экран переключаем сразу, звук — когда сервер готов */
+async function jump(i: number, dir: 'next' | 'prev') {
+  const seq = ++loadSeq;
+  const t = usePlayer.getState().queue[i];
+  usePlayer.setState({ index: i, lastDir: dir });
+  useProgress.setState({ time: 0, duration: t?.duration || 0 });
+  if (t && t.source === 'yt' && Date.now() - (primed.get(t.id) || 0) > 20 * 60e3) {
+    engine().pause(); usePlayer.setState({ buffering: true });
+    await prime(t);
+    if (seq !== loadSeq) return;
+  }
+  engine().skipTo(i);
+  engine().play();
+  onTrackStart();
+}
+async function load(queue: Track[], index: number) {
+  const seq = ++loadSeq;
   const p = engine();
+  p.pause();
+  usePlayer.setState({ queue, index, lastDir: 'next', error: null, playing: true, buffering: true });
+  useProgress.setState({ time: 0, duration: queue[index]?.duration || 0 });
+  const t0 = Date.now();
+  await prime(queue[index]);
+  console.log(`[lull] prime ${queue[index]?.id} ${Date.now() - t0}ms`);
+  if (seq !== loadSeq) return; // пока ждали, выбрали другой трек
   p.clear();
   queue.forEach((t) => p.add(source(t)));
-  usePlayer.setState({ queue, index, lastDir: 'next', error: null, playing: true });
   p.skipTo(index);
   p.play();
   onTrackStart();
@@ -150,7 +188,7 @@ export const player = {
       start = 0;
     }
     if (opts.shuffle !== undefined) usePlayer.setState({ shuffle: opts.shuffle });
-    load(q, start);
+    await load(q, start);
   },
   toggle() {
     const p = engine();
@@ -162,27 +200,22 @@ export const player = {
     const s = usePlayer.getState();
     if (!currentTrack(s)) return;
     noteSkip();
-    const p = engine();
-    if (s.index < s.queue.length - 1) { usePlayer.setState({ index: s.index + 1, lastDir: 'next' }); p.next(); onTrackStart(); }
-    else if (s.repeat === 'all' && s.queue.length) { usePlayer.setState({ index: 0, lastDir: 'next' }); p.skipTo(0); onTrackStart(); }
+    if (s.index < s.queue.length - 1) jump(s.index + 1, 'next');
+    else if (s.repeat === 'all' && s.queue.length) jump(0, 'next');
   },
   prev() {
     const s = usePlayer.getState();
     const p = engine();
     if (!currentTrack(s)) return;
     if (useProgress.getState().time > 3 || s.index === 0) { p.seekTo(0); useProgress.setState({ time: 0 }); return; }
-    usePlayer.setState({ index: s.index - 1, lastDir: 'prev' });
-    p.previous();
-    onTrackStart();
+    jump(s.index - 1, 'prev');
   },
   seek(sec: number) { engine().seekTo(sec); useProgress.setState({ time: sec }); },
   skipTo(i: number) {
     const s = usePlayer.getState();
     if (i < 0 || i >= s.queue.length) return;
     if (i > s.index) noteSkip();
-    usePlayer.setState({ index: i, lastDir: i < s.index ? 'prev' : 'next' });
-    engine().skipTo(i); engine().play();
-    onTrackStart();
+    jump(i, i < s.index ? 'prev' : 'next');
   },
   playNext(t: Track) {
     const s = usePlayer.getState();
