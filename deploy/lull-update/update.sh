@@ -56,6 +56,10 @@ echo "  проверка звука (до 30 с):"
 for id in kJQP7kiw5Fk JGwWNGJdvx8; do
   echo "   $id: $(curl -s -o /dev/null -m 40 -H 'Range: bytes=0-1' -w '%{http_code} за %{time_total}s' http://127.0.0.1:8480/api/stream/$id?q=aac 2>/dev/null || echo ошибка)"
 done
+echo "  трек целиком (первый звук / весь файл):"
+for id in kJQP7kiw5Fk JGwWNGJdvx8; do
+  echo "   $id: $(curl -s -o /dev/null -m 60 -w '%{http_code}, первый байт %{time_starttransfer}s, весь %{size_download} байт за %{time_total}s' http://127.0.0.1:8480/api/stream/$id?q=aac 2>/dev/null || echo ошибка)"
+done
 journalctl -u lull-relay --since "-2 min" --no-pager -o cat 2>/dev/null | grep -E "resolve|ERROR|error|WARN" | tail -12 | sed 's/^/    /' 
 
 echo "== 3. Веб-приложение"

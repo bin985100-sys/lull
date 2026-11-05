@@ -540,45 +540,112 @@ async def on_stop(app: web.Application):
 NODE_API = os.environ.get("LULL_NODE_API", "http://127.0.0.1:8787")
 
 
+FIRST_CHUNK = 256 * 1024      # первый кусок маленький — звук начинается сразу
+CHUNK = 2 * 1024 * 1024       # дальше по 2 МБ: YouTube тормозит и обрывает длинные запросы веб-клиентов
+
+
+async def fetch_range(s: dict, a: int, b: int) -> bytes:
+    """Кусок файла a..b с YouTube; 3 попытки. 403/410 — ссылка протухла, пусть решает вызывающий."""
+    assert session is not None
+    last = None
+    for _ in range(3):
+        try:
+            sep = "&" if "?" in s["url"] else "?"
+            async with session.get(f"{s['url']}{sep}range={a}-{b}", headers=s["headers"], timeout=ClientTimeout(total=20, sock_read=10)) as r:
+                if r.status in (403, 410):
+                    raise PermissionError(f"{r.status}")
+                if r.status not in (200, 206):
+                    raise RuntimeError(f"upstream {r.status}")
+                data = await r.read()
+                if len(data) != b - a + 1:
+                    raise RuntimeError(f"короткий ответ {len(data)} из {b - a + 1}")
+                return data
+        except PermissionError:
+            raise
+        except Exception as e:
+            last = e
+            await asyncio.sleep(0.3)
+    raise RuntimeError(f"кусок {a}-{b}: {last}")
+
+
 async def api_stream(request: web.Request) -> web.StreamResponse:
-    """Звук трека с поддержкой перемотки (Range). Браузер не может открыть ссылку YouTube сам:
-    она привязана к адресу сервера и закрыта CORS, поэтому отдаём её отсюда."""
+    """Звук трека с перемоткой (Range). Браузер и телефон не могут открыть ссылку YouTube сами
+    (она привязана к адресу сервера), поэтому отдаём её отсюда — кусками, с подкачкой следующего."""
     vid = request.match_info["vid"]
     fmt = request.query.get("q", "aac")
-    assert session is not None
-    for attempt in range(2):
+    try:
+        s = await get_stream(vid, fmt)
+        if not s.get("contentLength"):
+            await verify(s)
+        if not s.get("contentLength"):
+            s = await get_stream(vid, fmt, fresh=True)
+            await verify(s)
+    except Exception as e:
+        return cors(request, stream_error(e))
+    total = int(s.get("contentLength") or 0)
+    if not total:
+        return cors(request, web.json_response({"error": "нет размера файла"}, status=502))
+    a, b, partial = 0, total - 1, False
+    rng = request.headers.get("Range", "")
+    if rng.startswith("bytes="):
+        lo, _, hi = rng[6:].split(",")[0].partition("-")
         try:
-            s = await get_stream(vid, fmt, fresh=attempt > 0)
-        except Exception as e:
-            return stream_error(e)
-        headers = dict(s["headers"])
-        rng = request.headers.get("Range")
-        if rng:
-            headers["Range"] = rng
-        try:
-            up = await session.get(s["url"], headers=headers)
-        except Exception as e:
-            return web.json_response({"error": f"upstream: {e}"}, status=502)
-        if up.status in (403, 410) and attempt == 0:
-            up.release()
-            continue
-        resp = web.StreamResponse(status=up.status)
-        for k in ("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"):
-            if k in up.headers:
-                resp.headers[k] = up.headers[k]
-        resp.headers["Content-Type"] = s.get("mime") or up.headers.get("Content-Type", "audio/mp4")
-        resp.headers["Cache-Control"] = "no-store"
-        cors(request, resp)
-        await resp.prepare(request)
-        try:
-            async for chunk in up.content.iter_chunked(64 * 1024):
-                await resp.write(chunk)
-        except (ConnectionResetError, asyncio.CancelledError):
+            if lo:
+                a, b = int(lo), (min(int(hi), total - 1) if hi else total - 1)
+            elif hi:
+                a, b = max(0, total - int(hi)), total - 1
+            partial = True
+        except ValueError:
             pass
-        finally:
-            up.release()
-        return resp
-    return web.json_response({"error": "stream forbidden"}, status=502)
+    if a >= total or a > b:
+        r = web.Response(status=416, headers={"Content-Range": f"bytes */{total}"})
+        return cors(request, r)
+    resp = web.StreamResponse(status=206 if partial else 200)
+    resp.headers["Content-Type"] = s.get("mime") or "audio/mp4"
+    resp.headers["Content-Length"] = str(b - a + 1)
+    resp.headers["Accept-Ranges"] = "bytes"
+    if partial:
+        resp.headers["Content-Range"] = f"bytes {a}-{b}/{total}"
+    resp.headers["Cache-Control"] = "no-store"
+    cors(request, resp)
+
+    spans = []
+    pos, size = a, FIRST_CHUNK
+    while pos <= b:
+        end = min(pos + size - 1, b)
+        spans.append((pos, end))
+        pos, size = end + 1, CHUNK
+    state = {"s": s, "refreshed": False}
+
+    async def get(span):
+        try:
+            return await fetch_range(state["s"], *span)
+        except PermissionError:
+            if state["refreshed"]:
+                raise
+            state["refreshed"] = True
+            state["s"] = await get_stream(vid, fmt, fresh=True)
+            return await fetch_range(state["s"], *span)
+
+    tasks: list[asyncio.Task] = []
+    try:
+        await resp.prepare(request)
+        # подкачиваем на 2 куска вперёд, пока отдаём текущий
+        for k, span in enumerate(spans):
+            while len(tasks) < k + 3 and len(tasks) < len(spans):
+                tasks.append(asyncio.ensure_future(get(spans[len(tasks)])))
+            data = await tasks[k]
+            await resp.write(data)
+            tasks[k] = None  # type: ignore[assignment]
+    except (ConnectionResetError, asyncio.CancelledError):
+        pass
+    except Exception as e:
+        log.warning("stream %s оборвался на %s: %s", vid, a, e)
+    finally:
+        for t in tasks:
+            if t and not t.done():
+                t.cancel()
+    return resp
 
 
 async def api_proxy(request: web.Request) -> web.StreamResponse:
