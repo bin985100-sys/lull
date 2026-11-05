@@ -298,11 +298,13 @@ async def resolve_innertube(vid: str) -> dict:
     mime = (j.get("mime") or "audio/mp4").split(";")[0]
     log.info("resolve %s innertube %.1fs", vid, (j.get("ms") or 0) / 1000)
     return {"url": j["url"], "headers": {}, "mime": mime, "bitrate": j.get("bitrate") or 128000,
-            "contentLength": j.get("size") or 0, "durationSec": j.get("duration") or 0, "formatId": "", "checked": True}
+            "contentLength": j.get("size") or 0, "durationSec": j.get("duration") or 0, "formatId": "", "checked": True,
+            "via": "innertube", "client": j.get("client") or ""}
 
 
 async def verify(s: dict) -> bool:
-    """Проверяем, что ссылка реально отдаёт звук отсюда (первые байты), и узнаём размер файла."""
+    """Ссылка реально отдаёт звук так, как его берёт раздача: первые байты (заодно узнаём размер)
+    и следующий кусок в 2 МБ — без нужного токена YouTube отдаёт начало, а дальше 403."""
     assert session is not None
     try:
         async with session.get(s["url"], headers={**s["headers"], "Range": "bytes=0-1"}) as r:
@@ -311,7 +313,10 @@ async def verify(s: dict) -> bool:
             total = r.headers.get("Content-Range", "").rpartition("/")[2]
             if total.isdigit():
                 s["contentLength"] = int(total)
-            return True
+        n = int(s.get("contentLength") or 0)
+        if n > FIRST_CHUNK + 1:
+            await fetch_range(s, FIRST_CHUNK, min(n - 1, FIRST_CHUNK + CHUNK - 1))
+        return True
     except Exception:
         return False
 
@@ -615,17 +620,23 @@ async def api_stream(request: web.Request) -> web.StreamResponse:
         end = min(pos + size - 1, b)
         spans.append((pos, end))
         pos, size = end + 1, CHUNK
-    state = {"s": s, "refreshed": False}
+    state = {"s": s, "refreshes": 0}
+    lock = asyncio.Lock()
 
     async def get(span):
-        try:
-            return await fetch_range(state["s"], *span)
-        except PermissionError:
-            if state["refreshed"]:
-                raise
-            state["refreshed"] = True
-            state["s"] = await get_stream(vid, fmt, fresh=True)
-            return await fetch_range(state["s"], *span)
+        for _ in range(3):
+            cur = state["s"]
+            try:
+                return await fetch_range(cur, *span)
+            except PermissionError:
+                async with lock:  # новую ссылку берёт один кусок, остальные ждут и повторяют с ней
+                    if state["s"] is cur:
+                        if state["refreshes"] >= 2:
+                            raise
+                        state["refreshes"] += 1
+                        await stream_forbidden(cur)
+                        state["s"] = await get_stream(vid, fmt, fresh=True)
+        raise RuntimeError("ссылка не отдаёт файл")
 
     tasks: list[asyncio.Task] = []
     try:
@@ -641,11 +652,31 @@ async def api_stream(request: web.Request) -> web.StreamResponse:
         pass
     except Exception as e:
         log.warning("stream %s оборвался на %s: %s", vid, a, e)
+        if request.transport:
+            request.transport.close()  # иначе плеер ждёт недостающие байты до таймаута
     finally:
         for t in tasks:
-            if t and not t.done():
-                t.cancel()
+            if t:
+                if not t.done():
+                    t.cancel()
+                t.add_done_callback(lambda x: x.cancelled() or x.exception())
     return resp
+
+
+async def stream_forbidden(s: dict):
+    """Ссылка перестала отдавать файл (403): этот способ опускаем в рейтинге, а быстрому — говорим сменить клиент."""
+    via = s.get("via") or ""
+    log.warning("403 в середине файла: %s %s", via or "yt-dlp", s.get("client") or "")
+    if via == "innertube":
+        ladder.fail("innertube", "403")
+        try:
+            assert session is not None
+            async with session.get(f"{API_LOCAL}/internal/stream/x?bad={s.get('client') or ''}", timeout=ClientTimeout(total=3)):
+                pass
+        except Exception:
+            pass
+    for k in [k for k, v in cache.items() if v[1] is s]:
+        cache.pop(k, None)
 
 
 async def api_proxy(request: web.Request) -> web.StreamResponse:

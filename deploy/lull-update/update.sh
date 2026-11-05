@@ -52,6 +52,13 @@ try:
   d=json.load(sys.stdin)
   for c,v in d["clients"].items(): print("   %-12s %s" % (c, ("%.1f с + проверка %.1f с %s" % (v["resolve"], v["verify"], "ok" if v["ok"] else "403")) if "resolve" in v else "ошибка: "+v["error"][:400]))
 except Exception as e: print("   замер не получился:", e)' || true
+echo "  быстрый способ, каждый клиент YouTube (полная проверка файла):"
+curl -s -m 90 "http://127.0.0.1:8787/internal/stream/RgKAFK5djSk?diag=1" | python3 -c 'import sys,json
+try:
+  d=json.load(sys.stdin)
+  for c,v in d.get("clients",{}).items(): print("   %-13s %s" % (c, v[:300]))
+  if d.get("error"): print("   ошибка:", d["error"][:300])
+except Exception as e: print("   замер не получился:", e)' || true
 echo "  проверка звука (до 30 с):"
 for id in kJQP7kiw5Fk JGwWNGJdvx8; do
   echo "   $id: $(curl -s -o /dev/null -m 40 -H 'Range: bytes=0-1' -w '%{http_code} за %{time_total}s' http://127.0.0.1:8480/api/stream/$id?q=aac 2>/dev/null || echo ошибка)"

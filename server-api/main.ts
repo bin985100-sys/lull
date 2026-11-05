@@ -11,7 +11,7 @@ import { storeGet, storeSet } from '../electron/store';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
 import { importStatus, startImport } from './importer';
-import { fastStream } from './stream';
+import { diagClients, fastStream, markBad } from './stream';
 import { authEnabled, deleteAccount, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink, syncGet, syncPut } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
@@ -113,7 +113,10 @@ http
     if (api === 'internal' && name === 'stream') {
       const t0 = Date.now();
       try {
-        return json(res, await fastStream(String(rest[0] || '').slice(0, 20)));
+        const vid = String(rest[0] || '').slice(0, 20);
+        if (url.searchParams.get('diag')) return json(res, await diagClients(vid));
+        if (url.searchParams.get('bad')) { markBad(url.searchParams.get('bad')!); return json(res, { ok: true }); }
+        return json(res, await fastStream(vid));
       } catch (e) {
         return json(res, { error: (e as Error).message, ms: Date.now() - t0 }, 502);
       }
