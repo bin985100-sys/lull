@@ -14,7 +14,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: |
-          cd .ci && (node lull-api.mjs > log.txt 2>&1 &)
+          cd .ci && (LULL_API_DATA=$PWD/data node lull-api.mjs > log.txt 2>&1 &)
           sleep 25
           echo "::warning title=diag::$(curl -s -m 120 'http://127.0.0.1:8787/internal/stream/RgKAFK5djSk?diag=1' | head -c 2500)"
           grep -a "PO token" log.txt | head -5 | while read l; do echo "::warning title=log::$l"; done
