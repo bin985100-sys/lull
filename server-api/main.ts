@@ -12,7 +12,7 @@ import { storeGet, storeSet } from '../electron/store';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
 import { importStatus, startImport } from './importer';
-import { diagClients, fastStream, markBad, warmStream } from './stream';
+import { diagClients, fastStream, markBad, warmStream, streamState } from './stream';
 import { authEnabled, deleteAccount, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink, syncGet, syncPut } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
@@ -114,6 +114,7 @@ http
     if (api === 'internal' && name === 'stream') {
       const t0 = Date.now();
       try {
+        if (url.searchParams.has('state')) return json(res, streamState());
         const vid = String(rest[0] || '').slice(0, 20);
         if (url.searchParams.get('diag')) return json(res, await diagClients(vid));
         if (url.searchParams.get('bad')) { markBad(url.searchParams.get('bad')!); return json(res, { ok: true }); }

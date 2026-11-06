@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -46,6 +46,7 @@ globalThis.__makePlaylist = () => {
 };
 
 const STUBS = {
+  '@/player/audio-cache': `export const localAudio=id=>globalThis.__localAudio?.get(id); export const pinAudio=()=>{}; export const prefetchAudio=()=>{};`,
   'expo-audio': `export const createAudioPlaylist=()=>globalThis.__makePlaylist(); export const setAudioModeAsync=async()=>{};`,
   '@react-native-async-storage/async-storage': `const m=new Map(); export default { getItem:async k=>m.get(k)??null, setItem:async (k,v)=>{m.set(k,v)}, removeItem:async k=>{m.delete(k)} };`,
   'react-native': `export const Platform={OS:'android'}; export const AppState={addEventListener(){return {remove(){}}}};`,
@@ -68,7 +69,7 @@ globalThis.fetch = async (url) => { const id = String(url).replace('yt:', ''); a
 async function freshApp() {
   const out = path.join(tmp, `p-${Math.random().toString(36).slice(2)}.mjs`);
   await esbuild.build({ stdin: { contents: `export * from '@/player/player';`, resolveDir: mobile, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, plugins: [plugin], logLevel: 'silent' });
-  return import(out);
+  return import(pathToFileURL(out).href);
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const T = (id) => ({ id, title: 'Трек ' + id, artist: 'X', artwork: '', duration: 200, streamable: true, source: 'yt' });
@@ -84,7 +85,20 @@ function same(m, what) {
 async function settle(ms = 1800) { const end = Date.now() + ms; while (Date.now() < end) { globalThis.__pl?.tick(); await sleep(100); } }
 
 let pass = 0, fail = 0;
-async function test(name, f) { slow = new Set(); globalThis.__reports = []; try { await f(); const crash = (globalThis.__reports || []).find((x) => x.includes('ВЫЛЕТ') || x.includes('удалён играющий')); if (crash) throw new Error(crash); pass++; console.log(`✓ ${name}`); } catch (e) { fail++; console.log(`✗ ${name}\n    ${e.message}`); } }
+async function test(name, f) { slow = new Set(); globalThis.__reports = []; globalThis.__localAudio = new Map(); try { await f(); const crash = (globalThis.__reports || []).find((x) => x.includes('ВЫЛЕТ') || x.includes('удалён играющий')); if (crash) throw new Error(crash); pass++; console.log(`✓ ${name}`); } catch (e) { fail++; console.log(`✗ ${name}\n    ${e.message}`); } }
+
+await test('Готовый локальный трек играет без сетевой проверки prime', async () => {
+  const m = await freshApp();
+  globalThis.__localAudio.set('s0', 'file:s0');
+  const fetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = async (...args) => { requests++; return fetch(...args); };
+  try {
+    await m.player.play([LIST[0]], 's0');
+    if (requests) throw new Error('локальный старт сделал сетевой запрос');
+    if (globalThis.__pl.current !== 'file:s0') throw new Error('плеер не получил локальный файл');
+  } finally { globalThis.fetch = fetch; }
+});
 
 await test('Включил трек — играет он, на экране он', async () => {
   const m = await freshApp(); await m.player.play(LIST, 's0'); await settle(600);

@@ -1,7 +1,8 @@
 // Сборка Lull API в один файл: node server-api/build.mjs → dist-server/lull-api.mjs
 import { build } from 'esbuild';
 import path from 'node:path';
-const here = path.dirname(new URL(import.meta.url).pathname);
+import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url));
 const shim = (name) => path.join(here, 'shims', `${name}.ts`);
 await build({
   entryPoints: [path.join(here, 'main.ts')],

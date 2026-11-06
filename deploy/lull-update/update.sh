@@ -3,6 +3,9 @@
 # Запуск на сервере:  sudo bash update.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+if [ "${1:-}" = "--audio-only" ]; then
+  exec bash "$HERE/audio-update.sh"
+fi
 APP=/opt/lull-relay
 DATA=/var/lib/lull-relay
 ENVF=$DATA/auth.env

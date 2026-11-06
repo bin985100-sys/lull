@@ -9,6 +9,7 @@ import { lull, streamUrlYt, warm } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 import { useTaste } from '@/store/taste';
 import { log, logNow, report } from '@/ui/Crash';
+import { localAudio, pinAudio, prefetchAudio } from '@/player/audio-cache';
 
 export type Repeat = 'off' | 'all' | 'one';
 type Dir = 'next' | 'prev';
@@ -40,6 +41,7 @@ let ready: Promise<void> | null = null;
 let base = 0;
 let nativeLen = 0;
 let mountedAt = 0;
+let startup: { id: string; at: number } | null = null;
 
 function engine() {
   if (pl) return pl;
@@ -48,6 +50,10 @@ function engine() {
   log('engine: плеер создан');
   let said = false;
   pl.addListener('playlistStatusUpdate', (st) => {
+    if (startup && !loading && startup.id === currentTrack()?.id && (st.currentTime || 0) > 0) {
+      log(`старт ${startup.id}: первый прогресс через ${Date.now() - startup.at} мс, local=${!!localAudio(startup.id)}`);
+      startup = null;
+    }
     if (!said && (st.currentTime || 0) > 0.5) { said = true; log(`звук пошёл: ${currentTrack()?.title} t=${(st.currentTime || 0).toFixed(1)}`); console.log(`[lull] playing ${currentTrack()?.id} t=${st.currentTime}`); setTimeout(() => { said = false; }, 30000); }
     useProgress.setState({ time: st.currentTime || 0, duration: st.duration || currentTrack()?.duration || 0 });
     try { meter(st.playing, st.currentTime || 0); } catch (e) { report(e, 'meter'); }
@@ -103,7 +109,7 @@ async function init() {
   await ready;
 }
 
-const source = (t: Track) => ({ uri: t.source === 'yt' ? streamUrlYt(t.id) : streamUrl(t.id), name: t.title });
+const source = (t: Track) => ({ uri: t.source === 'yt' ? localAudio(t.id) || streamUrlYt(t.id) : streamUrl(t.id), name: t.title });
 
 /* ---------- учёт прослушивания: время, засчитанные прослушивания, пропуски ---------- */
 let lastTs = 0, buf = 0, bufTrack: Track | undefined, counted = false;
@@ -197,7 +203,7 @@ function shuffled<T>(a: T[]) {
 /* Холодный трек сервер готовит до ~10 с, а плеер Android ждёт первый байт только 8 с и замирает на 0:00.
    Поэтому сначала сами дожидаемся, пока сервер подготовит поток (крутится индикатор), и только потом отдаём трек плееру. */
 const primed = new Map<string, number>();
-const isPrimed = (t: Track | undefined) => !!t && (t.source !== 'yt' || Date.now() - (primed.get(t.id) || 0) < 20 * 60e3);
+const isPrimed = (t: Track | undefined) => !!t && (t.source !== 'yt' || !!localAudio(t.id) || Date.now() - (primed.get(t.id) || 0) < 20 * 60e3);
 const priming = new Map<string, Promise<boolean>>();
 function prime(t: Track | undefined): Promise<boolean> {
   if (!t || isPrimed(t)) return Promise.resolve(true);
@@ -221,6 +227,7 @@ function prime(t: Track | undefined): Promise<boolean> {
 function primeAhead() {
   const s = usePlayer.getState();
   const next = s.queue.slice(s.index + 1, s.index + 3);
+  next.forEach((t) => { if (t.source === 'yt') prefetchAudio(t.id, streamUrlYt(t.id)); });
   (async () => {
     for (const [k, t] of next.entries()) {
       const ok = await prime(t);
@@ -254,6 +261,7 @@ async function jump(i: number, dir: 'next' | 'prev') {
 /* Поставить в плеер трек i очереди и следующий за ним, и сразу играть */
 function mount(i: number) {
   const q = usePlayer.getState().queue;
+  pinAudio(q.slice(i, i + 2).map((t) => t.id));
   log(`mount: ${i} «${q[i]?.title}» ${q[i]?.id}`);
   const p = engine();
   p.pause();
@@ -285,6 +293,7 @@ function watchdog() {
 function ensureNext() {
   if (!pl || loading || !nativeLen) return; // пока трек готовится, окно соберёт mount()
   const s = usePlayer.getState();
+  pinAudio(s.queue.slice(base, base + nativeLen + 1).map((t) => t.id));
   const cur0 = () => s.index - base;
   /* играющий в телефоне трек не трогаем, даже если приложение ещё не узнало о переходе на него */
   let nat = cur0();
@@ -328,12 +337,13 @@ async function jumpInner(i: number, dir: 'next' | 'prev') {
 }
 async function load(queue: Track[], index: number) {
   const seq = ++loadSeq;
+  startup = { id: queue[index].id, at: Date.now() };
   loading = true; wantPlay = true;
   silence();
   usePlayer.setState({ queue, index, lastDir: 'next', error: null, playing: true, buffering: true });
   useProgress.setState({ time: 0, duration: queue[index]?.duration || 0 });
   const t0 = Date.now();
-  await logNow(`play: «${queue[index]?.title}» ${queue[index]?.id}, в очереди ${queue.length}`);
+  log(`play: «${queue[index]?.title}» ${queue[index]?.id}, в очереди ${queue.length}, local=${!!localAudio(queue[index]?.id || '')}`);
   await prime(queue[index]);
   log(`prime: ${Date.now() - t0} мс`);
   console.log(`[lull] prime ${queue[index]?.id} ${Date.now() - t0}ms`);

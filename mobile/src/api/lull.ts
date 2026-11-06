@@ -1,6 +1,7 @@
 /* Каталог Lull: популярные артисты, альбомы, чарты и звук с сервера Lull (api.lull.website).
    Сервер достаёт данные из YouTube Music (youtubei.js) и отдаёт поток в AAC — он играет и на iPhone. */
 import { ApiError, type Artist, type Playlist, type Track } from './audius';
+import { prefetchAudio } from '@/player/audio-cache';
 
 export const LULL_API = process.env.EXPO_PUBLIC_LULL_API || 'https://api.lull.website';
 
@@ -58,12 +59,15 @@ export const streamUrlYt = (id: string) => `${LULL_API}/api/stream/${enc(id)}?q=
 const warmed = new Map<string, number>();
 /* full — сервер скачивает трек целиком (нажали на трек, следующие в очереди); без него — только ссылку (показанные списки) */
 export function warm(tracks: (Track | undefined)[], full = false) {
+  tracks.slice(0, 3).forEach((t) => { if (t?.source === 'yt') prefetchAudio(t.id, streamUrlYt(t.id)); });
   const now = Date.now();
   const key = (id: string) => (full ? 'f:' : 'l:') + id;
   const ids = tracks.filter((t): t is Track => !!t && t.source === 'yt' && now - (warmed.get(key(t.id)) || 0) > 30 * 60e3).map((t) => t.id).slice(0, 6);
   if (!ids.length) return;
   ids.forEach((id) => warmed.set(key(id), now));
-  fetch(`${LULL_API}/api/warm?q=aac${full ? '&full=1' : ''}&ids=${ids.map(enc).join(',')}`).catch(() => {});
+  fetch(`${LULL_API}/api/warm?q=aac${full ? '&full=1' : ''}&ids=${ids.map(enc).join(',')}`)
+    .then((r) => { if (!r.ok) ids.forEach((id) => warmed.delete(key(id))); })
+    .catch(() => { ids.forEach((id) => warmed.delete(key(id))); });
 }
 
 /* Прогрев «на показе»: первые треки каждого открытого списка сервер готовит заранее —

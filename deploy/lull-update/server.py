@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import ssl
@@ -177,7 +178,9 @@ async def forward(request: web.Request) -> web.StreamResponse:
 
 
 # ---------- yt-dlp: прогретый экземпляр и кэш ссылок ----------
-pool = ThreadPoolExecutor(max_workers=int(os.environ.get("LULL_WORKERS", "12")))
+WORKERS = max(1, int(os.environ.get("LULL_WORKERS", "8")))
+pool = ThreadPoolExecutor(max_workers=WORKERS)
+resolve_slots = asyncio.Semaphore(WORKERS)
 cache: "OrderedDict[str, tuple[float, dict]]" = OrderedDict()
 inflight: dict[str, asyncio.Future] = {}
 
@@ -205,7 +208,7 @@ def ydl_for(fmt: str, client: str = "") -> yt_dlp.YoutubeDL:
         if client:
             yt_args["player_client"] = [client]
         # «быстрые» клиенты: без загрузки страницы ролика и конфигов — один запрос к API YouTube вместо трёх-четырёх
-        if client in FAST_CLIENTS:
+        if client == "android_vr":
             yt_args["player_skip"] = ["webpage", "configs"]
         _ydl[k] = yt_dlp.YoutubeDL({
             "quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True,
@@ -215,7 +218,7 @@ def ydl_for(fmt: str, client: str = "") -> yt_dlp.YoutubeDL:
             "js_runtimes": {"node": {}},
             # Аккаунт YouTube для треков с ограничениями (18+, «войдите, чтобы подтвердить…»):
             # файл cookies в формате Netscape кладёт владелец сервера, в репозиторий он не попадает.
-            **({"cookiefile": str(COOKIES)} if COOKIES.is_file() else {}),
+            **({"cookiefile": str(COOKIES)} if os.environ.get("LULL_YT_USE_COOKIES") == "1" and COOKIES.is_file() else {}),
         })
     return _ydl[k]
 
@@ -244,9 +247,11 @@ def resolve_sync(vid: str, fmt: str, client: str = "") -> dict:
 FAST_CLIENTS = ("android_vr", "tv")
 # Способы получить звук. Какой из них сейчас работает с этого сервера, YouTube решает сам и часто меняет
 # (то «вы бот» для одних клиентов, то 403 для других), поэтому порядок не зашит, а подстраивается — см. Ladder.
-FALLBACK_CLIENTS = ("web_embedded", "innertube", "", "mweb", "web_safari", "tv", "android_vr")
-STEP = 1.0          # следующий способ подключается, если предыдущий молчит дольше секунды
-BOT_COOLDOWN = 1800  # «вы бот» — этот способ не трогаем полчаса, чтобы не злить YouTube лишними запросами
+FALLBACK_CLIENTS = ("innertube", "", "mweb", "web_embedded", "web_safari", "tv", "android_vr")
+STEP = max(0.05, float(os.environ.get("LULL_RACE_STEP", "0.35")))
+RACE_WIDTH = max(1, int(os.environ.get("LULL_RACE_WIDTH", "2")))
+RESOLVE_TIMEOUT = max(1, float(os.environ.get("LULL_RESOLVE_TIMEOUT", "18")))
+BOT_COOLDOWN = 120
 
 
 class Ladder:
@@ -276,6 +281,8 @@ class Ladder:
     def fail(self, c: str, msg: str):
         self.fails[c] = self.fails.get(c, 0) + 1
         low = msg.lower()
+        if "403" in low or self.fails[c] >= 3:
+            self.blocked_until[c] = time.time() + min(120, 10 * self.fails[c])
         if "not a bot" in low or "не бот" in low or "sign in to confirm" in low:
             self.blocked_until[c] = time.time() + BOT_COOLDOWN
             log.warning("способ %s: YouTube просит подтвердить, что не бот — пауза %d мин", c or "default", BOT_COOLDOWN // 60)
@@ -327,24 +334,27 @@ async def verify(s: dict) -> bool:
         return False
 
 
-async def resolve_checked(vid: str, fmt: str) -> dict:
-    """Клиенты YouTube наперегонки: основной стартует сразу, запасные — с шагом 2.5 с, если первый задумался.
-    Берём первую ссылку, которая реально отдаёт звук отсюда. Раньше перебирали по очереди — до 20+ секунд."""
-    loop = asyncio.get_running_loop()
-    errors: list[str] = []
-    done = asyncio.Event()
-    result: dict = {}
+async def resolve_worker(vid: str, fmt: str, client: str) -> dict:
+    # Cancelling asyncio cannot stop a running Python thread. Keep its slot occupied
+    # until extraction really finishes, and never enqueue unlimited executor work.
+    await resolve_slots.acquire()
+    try:
+        fut = asyncio.get_running_loop().run_in_executor(pool, resolve_sync, vid, fmt, client)
+    except BaseException:
+        resolve_slots.release()
+        raise
+    def finished(f):
+        resolve_slots.release()
+        if not f.cancelled():
+            f.exception()
+    fut.add_done_callback(finished)
+    return await asyncio.shield(fut)
 
-    async def one(client: str, delay: float):
-        started = 0.0
-        if delay:
-            try:
-                await asyncio.wait_for(done.wait(), timeout=delay)
-                return
-            except asyncio.TimeoutError:
-                pass
-        if done.is_set():
-            return
+
+async def resolve_checked(vid: str, fmt: str) -> dict:
+    """Bounded hedged race: advance on failure, cancel losers, cap total latency."""
+    errors: list[str] = []
+    async def one(client: str):
         started = time.monotonic()
         try:
             if client == "innertube":
@@ -352,51 +362,63 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                     return
                 s = await resolve_innertube(vid)
             else:
-                s = await loop.run_in_executor(pool, resolve_sync, vid, fmt, client)
+                s = await resolve_worker(vid, fmt, client)
+            if not s.get("checked") and not await verify(s):
+                raise RuntimeError("403 or incomplete audio probe")
         except Exception as e:
             msg = str(e).replace("ERROR: ", "")
             # «недоступно» запасной клиент (tv и др.) пишет и про нормальные видео — решает только итог по всем
-            low = msg.lower()
-            if ("unavailable" in low or "not available" in low) and "format" not in low:
-                result.setdefault("fatal", e)
             errors.append(f"{client or 'default'}: {msg}")
-            if "unavailable" not in low and "not available" not in low:
+            low = msg.lower()
+            if "unavailable" not in low and "not available" not in low and "claimed content" not in low:
                 ladder.fail(client, msg)
             return
-        if s.get("checked") or await verify(s):
-            ladder.ok(client, time.monotonic() - started)
-            if done.is_set():
-                return
+        ladder.ok(client, time.monotonic() - started)
+        s["method"] = client
+        if client != "innertube":
             s["client"] = client
-            result.setdefault("ok", s)
-            done.set()
-        else:
-            log.warning("resolve %s %s: ссылка отдаёт 403", vid, client or "default")
-            ladder.fail(client, "403")
-            errors.append(f"{client or 'default'}: 403")
+        return s
 
     t0 = time.monotonic()
     order = ladder.order()
     if fmt != "aac" and "innertube" in order:
         order.remove("innertube")
-    tasks = [asyncio.ensure_future(one(c, i * STEP)) for i, c in enumerate(order)]
-    waiter = asyncio.ensure_future(done.wait())
-    await asyncio.wait([waiter, asyncio.ensure_future(asyncio.gather(*tasks, return_exceptions=True))], return_when=asyncio.FIRST_COMPLETED)
-    done.set()
-    if "ok" in result:
-        log.info("race %s: победил %s за %.1fs", vid, result["ok"].get("client") or "default", time.monotonic() - t0)
-        return result["ok"]
-    if "fatal" in result and all((("unavailable" in x.lower() or "not available" in x.lower()) and "format" not in x.lower()) for x in errors):
-        raise result["fatal"]
-    raise RuntimeError("; ".join(errors) or "no stream")
+    pending = set()
+    try:
+        while order or pending:
+            remaining = RESOLVE_TIMEOUT - (time.monotonic() - t0)
+            if remaining <= 0:
+                errors.append("resolve deadline exceeded")
+                break
+            if not pending and order:
+                pending.add(asyncio.create_task(one(order.pop(0))))
+            hedge = max(STEP, min(1.0, ladder.avg.get("innertube", 0) * 2))
+            completed, _ = await asyncio.wait(pending, timeout=min(hedge, remaining), return_when=asyncio.FIRST_COMPLETED)
+            for task in completed:
+                pending.remove(task)
+                s = task.result()
+                if s:
+                    log.info("race %s: %s %.2fs", vid, s.get("method") or "default", time.monotonic() - t0)
+                    return s
+            # A failure advances immediately; a slow attempt gets a bounded hedge.
+            if order and len(pending) < RACE_WIDTH:
+                pending.add(asyncio.create_task(one(order.pop(0))))
+        raise RuntimeError("; ".join(errors) or "no stream")
+    finally:
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
 
 async def api_warm(request: web.Request) -> web.Response:
     """Готовим ссылки на звук заранее (следующие треки очереди): потом трек стартует сразу."""
     fmt = request.query.get("q", "aac")
     fmt = fmt if fmt in FORMATS else "auto"
-    full = request.query.get("full") == "1"  # 1 — скачать трек целиком (нажали, следующий в очереди); иначе только ссылка
-    ids = [x for x in request.query.get("ids", "").split(",") if 5 <= len(x) <= 20][:6]
+    # Existing APKs already warm visible lists: make these requests useful before
+    # the tap, without requiring an APK update. full=0 remains link-only.
+    full = request.query.get("full", "1") != "0"
+    ids = list(dict.fromkeys(x for x in request.query.get("ids", "").split(",") if valid_vid(x)))[:6]
+    queued = 0
     for vid in ids:
         if prep_find(vid, fmt) or f"{fmt}:{vid}" in prep_inflight:
             continue
@@ -404,8 +426,14 @@ async def api_warm(request: web.Request) -> web.Response:
             hit = cache.get(f"{fmt}:{vid}")
             if (hit and hit[0] > time.time()) or f"{fmt}:{vid}" in inflight:
                 continue
-        asyncio.ensure_future(_warm(vid, fmt, full))
-    r = web.json_response({"ok": True, "queued": len(ids)}, status=202)
+        key = f"{fmt}:{vid}"
+        if key not in warm_queue and len(warm_queue) >= 32:
+            continue
+        old = warm_queue.get(key)
+        warm_queue[key] = (vid, fmt, full or bool(old and old[2]))
+        warm_event.set()
+        queued += 1
+    r = web.json_response({"ok": True, "queued": queued}, status=202)
     return cors(request, r)
 
 
@@ -440,6 +468,24 @@ async def _warm(vid: str, fmt: str, full: bool = True):
         log.info("warm %s: %s", vid, e)
 
 
+def valid_vid(vid: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{11}", vid))
+
+
+warm_queue = OrderedDict()
+warm_event = asyncio.Event()
+
+
+async def warm_worker():
+    # One background preparation leaves two preparation slots for user taps.
+    while True:
+        await warm_event.wait()
+        while warm_queue:
+            _, args = warm_queue.popitem(last=False)
+            await _warm(*args)
+        warm_event.clear()
+
+
 async def get_stream(vid: str, fmt: str, fresh: bool = False) -> dict:
     """Ссылка на звук из кэша или свежая (проверенная). Бросает исключение, если трека нет."""
     fmt = fmt if fmt in FORMATS else "auto"
@@ -450,11 +496,14 @@ async def get_stream(vid: str, fmt: str, fresh: bool = False) -> dict:
     if hit and hit[0] > time.time():
         return hit[1]
     if key not in inflight:
-        inflight[key] = asyncio.ensure_future(resolve_checked(vid, fmt))
-    try:
-        s = await inflight[key]
-    finally:
-        inflight.pop(key, None)
+        fut = inflight[key] = asyncio.create_task(resolve_checked(vid, fmt))
+        def finished(f):
+            if inflight.get(key) is f:
+                inflight.pop(key, None)
+            if not f.cancelled():
+                f.exception()
+        fut.add_done_callback(finished)
+    s = await asyncio.shield(inflight[key])
     try:
         expire = int(dict(p.split("=", 1) for p in s["url"].split("?", 1)[1].split("&") if "=" in p).get("expire", "0"))
     except Exception:
@@ -542,6 +591,7 @@ async def health(_: web.Request) -> web.Response:
 
 async def on_start(app: web.Application):
     global session, yt_session
+    app["warm_worker"] = asyncio.create_task(warm_worker())
     session = ClientSession(timeout=ClientTimeout(total=None, sock_connect=10, sock_read=60), connector=TCPConnector(limit=0, ttl_dns_cache=300, family=socket.AF_INET), auto_decompress=False)
     yt_session = session
     if YT_PROXY:
@@ -554,6 +604,10 @@ async def on_start(app: web.Application):
 
 
 async def on_stop(app: web.Application):
+    worker = app.get("warm_worker")
+    if worker:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
     if yt_session and yt_session is not session:
         await yt_session.close()
     if session:
@@ -627,15 +681,16 @@ prep_sem = asyncio.Semaphore(3)
 
 
 def prep_find(vid: str, fmt: str) -> "Path | None":
-    for p in PREP.glob(f"{fmt}-{vid}.*"):
-        if p.suffix in (".m4a", ".webm", ".mp4"):
+    for ext in (".m4a", ".webm", ".mp4"):
+        p = PREP / f"{fmt}-{vid}{ext}"
+        if p.is_file() and p.stat().st_size > 0:
             return p
     return None
 
 
 def prep_cleanup():
     try:
-        files = sorted((p for p in PREP.iterdir() if p.is_file()), key=lambda p: p.stat().st_mtime)
+        files = sorted((p for p in PREP.iterdir() if p.is_file() and p.suffix in (".m4a", ".webm", ".mp4") and ".part." not in p.name), key=lambda p: p.stat().st_mtime)
         total = sum(p.stat().st_size for p in files)
         for p in files:
             if total <= PREP_MAX:
@@ -691,6 +746,9 @@ async def _prepare(vid: str, fmt: str) -> Path:
 
 async def prepared(vid: str, fmt: str) -> Path:
     """Готовый файл трека: с диска, а если нет — качаем (один раз на трек, сколько бы запросов ни пришло)."""
+    if not valid_vid(vid):
+        raise ValueError("bad video id")
+    fmt = fmt if fmt in FORMATS else "auto"
     p = prep_find(vid, fmt)
     if p:
         try:
@@ -710,12 +768,18 @@ async def api_stream(request: web.Request) -> web.StreamResponse:
     """Звук трека с перемоткой (Range). Браузер и телефон не могут открыть ссылку YouTube сами
     (она привязана к адресу сервера), поэтому отдаём её отсюда — кусками, с подкачкой следующего."""
     vid = request.match_info["vid"]
+    if not valid_vid(vid):
+        return cors(request, web.json_response({"error": "bad video id"}, status=400))
     fmt = request.query.get("q", "aac")
     fmt = fmt if fmt in FORMATS else "auto"
     try:
+        started = time.monotonic()
+        cached = prep_find(vid, fmt) is not None
         path = await asyncio.wait_for(prepared(vid, fmt), timeout=25)
         r = web.FileResponse(path, headers={"Content-Type": "audio/webm" if path.suffix == ".webm" else "audio/mp4",
-                                            "Cache-Control": "no-store"})
+                                            "Cache-Control": "no-store",
+                                            "X-Lull-Cache": "hit" if cached else "miss",
+                                            "Server-Timing": f"prepare;dur={(time.monotonic() - started) * 1000:.1f}"})
         return cors(request, r)
     except Exception as e:
         log.warning("готовый файл %s не получился (%s) — отдаю потоком", vid, str(e)[:200])
@@ -800,6 +864,8 @@ async def stream_forbidden(s: dict):
                 pass
         except Exception:
             pass
+    else:
+        ladder.fail(s.get("method", s.get("client", "")), "403")
     for k in [k for k, v in cache.items() if v[1] is s]:
         cache.pop(k, None)
 

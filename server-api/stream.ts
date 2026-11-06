@@ -7,11 +7,13 @@
 import { Innertube, type Types } from 'youtubei.js';
 import { yt } from '../electron/yt';
 import { mint, potState, resetMinter, warmMinter } from './potoken';
+import { streamFetch } from './stream-client';
 
-type Way = { name: string; client: Types.InnerTubeClient; pot: '' | 'video' | 'visitor'; playerPot?: boolean };
+type Way = { name: string; client: Types.InnerTubeClient; pot: '' | 'video' | 'visitor'; playerPot?: boolean; anonymous?: boolean };
 // pot — токен в ссылке на файл: привязан к id видео (так сейчас делает сайт YouTube) или к сессии (как раньше).
 // playerPot — токен ещё и в запросе плеера; с ним YouTube иногда не отдаёт обычных ссылок («No valid URL»).
 const WAYS: Way[] = [
+  { name: 'TV-SAMSUNG', client: 'TV', pot: '', anonymous: true },
   { name: 'MWEB+токен в ссылке', client: 'MWEB', pot: 'video' },
   { name: 'MWEB+токен в ссылке(сессия)', client: 'MWEB', pot: 'visitor' },
   { name: 'MWEB+токен', client: 'MWEB', pot: 'video', playerPot: true },
@@ -28,25 +30,29 @@ let anonAt = 0;
 async function anon(): Promise<Innertube> {
   if (anonClient && Date.now() - anonAt < 6 * 3600_000) return anonClient;
   if (!anonMaking)
-    anonMaking = Innertube.create({ retrieve_player: true, enable_session_cache: false, generate_session_locally: false, lang: 'ru' } as any)
+    anonMaking = Innertube.create({ fetch: streamFetch(fetch), retrieve_player: true, enable_session_cache: false, generate_session_locally: false, lang: 'ru' } as any)
       .then((c) => { anonClient = c; anonAt = Date.now(); return c; })
       .finally(() => (anonMaking = null));
   return anonMaking;
 }
 
 export function warmStream() {
-  warmMinter();
   anon().catch(() => {});
 }
+export const streamState = () => ({ ready: !!anonClient && Date.now() - anonAt < 6 * 3600_000, best });
 
-const timeout = <T>(p: Promise<T>, ms: number, what: string) =>
-  Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${what}: нет ответа ${ms} мс`)), ms))]);
+async function timeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([p, new Promise<T>((_, rej) => { timer = setTimeout(() => rej(new Error(`${what}: нет ответа ${ms} мс`)), ms); })]);
+  } finally { clearTimeout(timer); }
+}
 
 /** Ссылка реально отдаёт звук так, как его будет брать звуковой сервер: первый кусок 256 КБ, следующий
     кусок в 2 МБ и кусок ближе к концу. Возвращает ошибку или ''. */
 async function probe(url: string, len: number): Promise<string> {
   const get = async (a: number, b: number) => {
-    const r = await fetch(`${url}&range=${a}-${b}`);
+    const r = await fetch(`${url}&range=${a}-${b}`, { signal: AbortSignal.timeout(5000) });
     const buf = await r.arrayBuffer().catch(() => new ArrayBuffer(0));
     if (!r.ok) return `${r.status} на ${a}`;
     if (buf.byteLength !== b - a + 1) return `короткий ответ на ${a}`;
@@ -59,7 +65,7 @@ async function probe(url: string, len: number): Promise<string> {
 }
 
 async function tryWay(id: string, w: Way) {
-  const c = w.pot ? await timeout(anon(), 8000, 'сессия') : await yt();
+  const c = w.pot || w.anonymous ? await timeout(anon(), 8000, 'сессия') : await yt();
   let gvs = '';
   const opts: any = { client: w.client };
   if (w.pot) {
@@ -75,6 +81,12 @@ async function tryWay(id: string, w: Way) {
   const f = audio.filter((x: any) => String(x.mime_type).includes('mp4a')).sort((a: any, b: any) => b.bitrate - a.bitrate)[0] ?? audio[0];
   if (!f) throw new Error('нет аудио');
   let url: string = await f.decipher(c.session.player);
+  if (w.name === 'TV-SAMSUNG') {
+    const u = new URL(url);
+    // decipher() adds the library's generic TV cver, which differs from our request.
+    u.searchParams.delete('cver');
+    url = u.toString();
+  }
   // youtubei.js при ошибке разгадки пишет в n «enhanced_except_…» и всё равно отдаёт ссылку — она обрывается после 256 КБ
   const n = new URL(url).searchParams.get('n') || '';
   if (n.startsWith('enhanced_except_')) throw new Error('n не разгадан');
