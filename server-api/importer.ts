@@ -110,10 +110,20 @@ function score(q: SourceTrack, t: Track) {
   const dur = q.durationSec && t.durationSec ? Math.max(0, 1 - Math.abs(q.durationSec - t.durationSec) / 20) : 0.6;
   return title * 0.55 + artist * 0.3 + dur * 0.15;
 }
-async function find(q: SourceTrack): Promise<Track | null> {
+async function find(q: SourceTrack, requireArtist = false): Promise<Track | null> {
   const r = await search(`${q.artist} ${q.title}`.trim(), 'songs');
   let best: Track | null = null, bs = 0;
-  for (const t of r.tracks.slice(0, 6)) { const s = score(q, t); if (s > bs) [best, bs] = [t, s]; }
+  for (const t of r.tracks.slice(0, 6)) {
+    if (requireArtist) {
+      const artistMatch = Math.max(0, ...t.artists.map(a => similar(q.artist, a.name)), similar(q.artist, t.artists.map(a=>a.name).join(' ')));
+      if (artistMatch < 0.6 || similar(q.title, t.title) < 0.7) continue;
+      const version = /\b(live|remix|cover|karaoke|instrumental|acoustic)\b|кавер|караоке/gi;
+      const tags = (title: string) => (title.toLowerCase().match(version) || []).sort().join('|');
+      if (tags(q.title) !== tags(t.title)) continue;
+    }
+    const confidence = score(q, t);
+    if (confidence > bs) [best, bs] = [t, confidence];
+  }
   return bs >= 0.45 ? best : null;
 }
 
@@ -181,7 +191,7 @@ export async function matchFile(items: SourceTrack[]) {
   fileBatches++;
   try {
     const tracks = [];
-    for (let i=0;i<items.length;i+=3) tracks.push(...await Promise.all(items.slice(i,i+3).map(t=>find(t))));
+    for (let i=0;i<items.length;i+=3) tracks.push(...await Promise.all(items.slice(i,i+3).map(t=>find(t,true))));
     return {tracks};
   } finally {fileBatches--;}
 }
