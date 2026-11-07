@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { resetTo } from '@/nav';
 import { useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Platform, Pressable, TextInput, View } from 'react-native';
 
 import { openArtist, openPlaylist } from '@/components/Cards';
 import { CoverArt } from '@/components/ListPage';
@@ -22,13 +22,15 @@ export default function Collection() {
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10, marginBottom: 18 }}>
       <T v="h1" accessibilityRole="header">Коллекция</T>
       <View style={{ flexDirection: 'row', gap: 10 }}>
+
         <IconBtn name="download" label="Перенести музыку из другого сервиса" onPress={() => router.push('/import')} />
         <IconBtn name="plus" label="Новый плейлист" onPress={() => router.push('/new-playlist')} />
       </View>
     </View>
   );
+  const offline = Platform.OS !== 'web' && <Btn label="Скачанная музыка" icon="download" kind="dark" onPress={() => router.push('/downloads')}/>;
   if (empty) return (
-    <Screen>{head}
+    <Screen>{head}{offline}
       <Empty icon="stack" title="Здесь пока пусто" text="Сохраняй треки, плейлисты и исполнителей — они появятся здесь.">
         <Btn label="Открыть музыку" icon="arrow" onPress={() => resetTo('/discover')} />
         <Btn label="Перенести музыку" icon="download" kind="dark" onPress={() => router.push('/import')} />
@@ -47,7 +49,7 @@ export default function Collection() {
     </View>
   );
   return (
-    <Screen>{head}
+    <Screen>{head}{offline}
       <View style={s.field}>
         <Icon name="search" size={22} color={C.tx2} />
         <TextInput value={q} onChangeText={setQ} placeholder="Найти в коллекции" placeholderTextColor={C.tx3} style={s.input} accessibilityLabel="Найти в коллекции" />

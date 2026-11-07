@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { memo, useEffect } from 'react';
-import { Pressable, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import type { Track } from '@/api/audius';
@@ -8,6 +8,8 @@ import { warm, warmSoon } from '@/api/lull';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { useLibrary } from '@/store/library';
 import { artistKey, useTaste } from '@/store/taste';
+import { downloaded, removeDownload } from '@/player/downloads';
+import { saveTracks } from './MusicActions';
 import { openWave } from './Wave';
 import { C, F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
@@ -88,7 +90,10 @@ function TrackActions({ t, playlistId }: { t: Track; playlistId?: string }) {
       <Item icon={liked ? 'heartF' : 'heart'} label={liked ? 'Убрать из любимых' : 'В любимые'} onPress={() => { closeSheet(); likeWithUndo(t); }} />
       <Item icon="waves" label="Волна по треку" onPress={() => openWave(t)} />
       <Item icon="plAdd" label="Добавить в плейлист" onPress={() => openSelectPlaylist(t)} />
-      <Item icon="playNext" label="Играть следующим" onPress={() => { closeSheet(); player.playNext(t); toast('Заиграет следующим', 'playNext'); }} />
+      {Platform.OS !== 'web' && <Item icon="download" label={downloaded(t) ? 'Удалить загрузку' : 'Скачать для офлайна'} onPress={() => {
+        closeSheet(); if (downloaded(t)) { removeDownload(t); toast('Загрузка удалена','check'); } else void saveTracks([t]);
+      }}/>}
+      <Item icon="playNext" label="Поставить следующим" onPress={() => { closeSheet(); const undo = player.playNext(t); toast(undo ? 'Заиграет следующим' : 'Воспроизведение началось', 'playNext', undo ? {label:'Отменить',fn:undo} : undefined); }} />
       <Item icon="queue" label="Добавить в очередь" onPress={() => { closeSheet(); player.addToQueue(t); toast('Добавлено в очередь', 'queue'); }} />
       {playlistId ? (
         <Item icon="minus" label="Убрать из плейлиста" onPress={() => {

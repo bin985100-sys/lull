@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { resetTo } from '@/nav';
 import { Linking, Pressable, Switch, View } from 'react-native';
 
+import { transferPlayback } from '@/api/playback';
 import { deleteAccountServer, logoutServer } from '@/api/auth';
 import { forgetAccount, signOutSync } from '@/api/sync';
 import { linkYouTube } from '@/api/youtube';
@@ -51,6 +52,10 @@ export default function Settings() {
         <Row icon="chart" label="Итоги месяца" onPress={() => router.push('/month')} />
         <Row icon="heart" label={`Любимые исполнители · ${lib.favArtists.length}`} onPress={() => router.push('/onboarding')} />
         <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={lib.settings.saveHistory ? '#000' : '#8a8f96'} accessibilityLabel="Сохранять историю" />} />
+      </Group>
+      <Group title="Продолжить на другом устройстве">
+        <Row icon="queue" label="Передать очередь" sub="Сохранить трек и позицию в аккаунте Lull" onPress={() => transferPlayback(true).then(() => toast('Очередь передана','check')).catch(e => toast(e.message,'info'))}/>
+        <Row icon="playNext" label="Продолжить здесь" onPress={() => transferPlayback(false).catch(e => toast(e.message,'info'))}/>
       </Group>
       <Group title="Воспроизведение">
         <Row icon="stack" label="Играть поверх других приложений" sub={canMix ? 'Lull не останавливает другие приложения, а приглушает их. Если другое приложение само забирает звук, Android поставит Lull на паузу' : 'Недоступно на iPhone: iOS сама останавливает звук сайта'}

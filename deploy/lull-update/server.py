@@ -312,7 +312,7 @@ async def resolve_innertube(vid: str) -> dict:
     log.info("resolve %s innertube %.1fs", vid, (j.get("ms") or 0) / 1000)
     return {"url": j["url"], "headers": {}, "mime": mime, "bitrate": j.get("bitrate") or 128000,
             "contentLength": j.get("size") or 0, "durationSec": j.get("duration") or 0, "formatId": "", "checked": True,
-            "via": "innertube", "client": j.get("client") or ""}
+            "via": "innertube", "mediaId": j.get("mediaId") or vid, "client": j.get("client") or ""}
 
 
 async def verify(s: dict) -> bool:
@@ -664,7 +664,12 @@ def range_getter(vid: str, fmt: str, s: dict):
                             raise
                         state["refreshes"] += 1
                         await stream_forbidden(cur)
-                        state["s"] = await get_stream(vid, fmt, fresh=True)
+                        renewed = await get_stream(vid, fmt, fresh=True)
+                        if (renewed.get("mediaId", vid) != cur.get("mediaId", vid) or
+                                renewed.get("contentLength") != cur.get("contentLength") or
+                                renewed.get("formatId") != cur.get("formatId")):
+                            raise RuntimeError("Версия файла изменилась при обновлении ссылки")
+                        state["s"] = renewed
         raise RuntimeError("ссылка не отдаёт файл")
     return get
 
@@ -782,7 +787,12 @@ async def api_stream(request: web.Request) -> web.StreamResponse:
                                             "Server-Timing": f"prepare;dur={(time.monotonic() - started) * 1000:.1f}"})
         return cors(request, r)
     except Exception as e:
-        log.warning("готовый файл %s не получился (%s) — отдаю потоком", vid, str(e)[:200])
+        log.warning("prepare failed %s: %s", vid, str(e)[:200])
+        # If there is no playable URL, rerunning the same full race here doubles
+        # latency and consumes workers needed for the next tap.
+        hit = cache.get(f"{fmt}:{vid}")
+        if not hit or hit[0] <= time.time():
+            return cors(request, stream_error(e))
     try:
         s = await get_stream(vid, fmt)
         if not s.get("contentLength"):

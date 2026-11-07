@@ -1,9 +1,10 @@
+import { FileImport } from '@/components/FileImport';
 /* Перенос музыки из Spotify, Apple Music, SoundCloud, Яндекс Музыки, Deezer и YouTube Music по ссылке. */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Switch, TextInput, View } from 'react-native';
 
-import { runImport, SERVICES, type ImportState } from '@/api/importer';
+import { runImport, type ImportState } from '@/api/importer';
 import { linkYouTube } from '@/api/youtube';
 import { TrackRow } from '@/components/TrackRow';
 import { useLibrary } from '@/store/library';
@@ -70,10 +71,8 @@ export default function Import() {
 
       {!st ? (
         <View style={{ gap: 18, marginTop: 14 }}>
-          <T v="body">Вставь ссылку на плейлист или альбом. Lull прочитает список и найдёт эти треки у себя — со всей музыкой можно работать как с обычным плейлистом.</T>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {SERVICES.map((n) => <View key={n} style={{ paddingHorizontal: 14, height: 34, borderRadius: 99, backgroundColor: C.s1, justifyContent: 'center' }}><T v="small" style={{ color: C.tx, fontFamily: F.semi }}>{n}</T></View>)}
-          </View>
+          <FileImport google={() => ytLinked ? router.push('/youtube') : !signedIn ? toast('Сначала войди в Lull','info') : void linkYouTube(() => router.push('/youtube')).catch(e=>toast(e.message,'info'))}/>
+          <T v="sub">Или перенести по публичной ссылке</T>
           <View style={ks.field}>
             <Icon name="search" size={22} color={C.tx2} />
             <TextInput value={url} onChangeText={setUrl} onSubmitEditing={() => start()} placeholder="https://open.spotify.com/playlist/…" placeholderTextColor={C.tx3}
@@ -82,21 +81,7 @@ export default function Import() {
           {err ? <T v="sub" style={{ color: C.danger }}>{err}</T> : null}
           <Btn label="Перенести" icon="download" disabled={!url.trim()} onPress={() => start()} />
 
-          <View style={{ gap: 8, padding: 18, borderRadius: 24, backgroundColor: C.s1, marginTop: 6 }}>
-            <T style={{ fontFamily: F.bold }}>Где взять ссылку</T>
-            <T v="small">В приложении сервиса открой плейлист или альбом → «Поделиться» → «Скопировать ссылку». Плейлист должен быть открыт для всех.</T>
-            <T v="small">Любимые треки Spotify и Apple Music по ссылке не открываются: на компьютере выдели их все (Ctrl+A), добавь в новый плейлист и вставь ссылку на него.</T>
-          </View>
 
-          <Pressable onPress={() => (ytLinked ? router.push('/youtube') : !signedIn ? toast('Сначала войди в Lull', 'info') : linkYouTube(() => router.push('/youtube')).catch((e) => toast(e.message, 'info')))}
-            accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: 24, backgroundColor: C.s1 }}>
-            <Icon name="google" size={28} />
-            <View style={{ flex: 1 }}>
-              <T style={{ fontFamily: F.bold }}>Вся библиотека YouTube Music</T>
-              <T v="small">Лайки и все плейлисты разом — через аккаунт Google</T>
-            </View>
-            <Icon name="chev" size={22} />
-          </Pressable>
         </View>
       ) : busy ? (
         <View style={{ gap: 18, marginTop: 40, alignItems: 'flex-start' }}>

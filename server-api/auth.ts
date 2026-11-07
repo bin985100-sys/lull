@@ -104,6 +104,7 @@ export function deleteAccount(token: string) {
   if (u.ytRefresh) fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(u.ytRefresh)}`, { method: 'POST' }).catch(() => {});
   for (const [t, x] of Object.entries(db.sessions)) if (x.userId === u.id) delete db.sessions[t];
   delete db.users[u.id];
+  fs.rmSync(syncFile(u.id) + '.playback', { force: true });
   try { fs.rmSync(syncFile(u.id), { force: true }); } catch { /* библиотеки могло не быть */ }
   save();
   return { ok: true };
@@ -319,6 +320,21 @@ export async function ytPlaylist(token: string, id: string) {
 const SYNC_DIR = path.join(DATA, 'sync');
 const syncFile = (id: string) => path.join(SYNC_DIR, `${id.replace(/[^\w-]/g, '')}.json`);
 
+export function playback(token: string, data?: any) {
+  const file = syncFile(userOf(token).id) + '.playback';
+  if (data === undefined) {
+    if (!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file,'utf8'));
+  }
+  if (!Array.isArray(data.queue) || !data.queue.length || data.queue.length > 2000 ||
+      !Number.isInteger(data.index) || !data.queue[data.index] || !Number.isFinite(data.position) || data.position < 0 ||
+      !data.queue.every((t:any) => t && typeof t.id === 'string' && /^[\w-]+$/.test(t.id) && typeof t.title === 'string')) throw Object.assign(new Error('Некорректная очередь'),{status:400});
+  const raw = JSON.stringify({queue:data.queue,index:data.index,position:data.position,at:Date.now()});
+  if (Buffer.byteLength(raw) > 1500000) throw Object.assign(new Error('Слишком длинная очередь'),{status:413});
+  fs.mkdirSync(SYNC_DIR,{recursive:true});
+  fs.writeFileSync(file+'.tmp',raw,{mode:0o600}); fs.renameSync(file+'.tmp',file);
+  return {ok:true};
+}
 export function syncGet(token: string) {
   const u = userOf(token);
   try { return JSON.parse(fs.readFileSync(syncFile(u.id), 'utf8')) as { at: number; data: unknown }; } catch { return { at: 0, data: null }; }

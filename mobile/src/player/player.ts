@@ -9,6 +9,7 @@ import { lull, streamUrlYt, warm } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 import { useTaste } from '@/store/taste';
 import { log, logNow, report } from '@/ui/Crash';
+import { downloaded } from '@/player/downloads';
 import { localAudio, pinAudio, prefetchAudio } from '@/player/audio-cache';
 
 export type Repeat = 'off' | 'all' | 'one';
@@ -41,6 +42,37 @@ let ready: Promise<void> | null = null;
 let base = 0;
 let nativeLen = 0;
 let mountedAt = 0;
+export const useSleep = create<{ deadline: number; endTrack: boolean }>(() => ({ deadline: 0, endTrack: false }));
+let sleepTask: ReturnType<typeof setInterval> | undefined;
+let sleepVolume = 1;
+function finishSleep() {
+  if (sleepTask) clearInterval(sleepTask);
+  sleepTask = undefined;
+  wantPlay = false;
+  pl?.pause();
+  if (pl) pl.volume = sleepVolume;
+  useSleep.setState({ deadline: 0, endTrack: false });
+  if (pl) pl.loop = usePlayer.getState().repeat === 'one' ? 'single' : 'none';
+  usePlayer.setState({ playing: false, buffering: false });
+}
+export function setSleep(minutes: number | 'track' | null) {
+  if (sleepTask) clearInterval(sleepTask);
+  if (useSleep.getState().deadline || useSleep.getState().endTrack) { if (pl) pl.volume = sleepVolume; }
+  sleepTask = undefined;
+  sleepVolume = pl?.volume ?? 1;
+  const deadline = typeof minutes === 'number' ? Date.now() + minutes * 60000 : 0;
+  useSleep.setState({ deadline, endTrack: minutes === 'track' });
+  if (pl) pl.loop = minutes === 'track' ? 'none' : usePlayer.getState().repeat === 'one' ? 'single' : 'none';
+  ensureNext();
+  if (minutes === null) return;
+  const tick = () => {
+    const {time,duration} = useProgress.getState();
+    const remaining = deadline ? deadline - Date.now() : duration > 0 ? (duration-time)*1000 : Infinity;
+    if (remaining <= 0) finishSleep();
+    else if (pl) pl.volume = sleepVolume * Math.min(1, remaining / 5000);
+  };
+  sleepTask = setInterval(tick, 250);
+}
 let startup: { id: string; at: number } | null = null;
 
 function engine() {
@@ -65,6 +97,8 @@ function engine() {
     const real = st.didJustFinish && base + st.currentIndex === s.index && Date.now() - mountedAt > 2500
       && (st.duration || 0) > 5 && (st.currentTime || 0) >= (st.duration || 0) - 2;
     if (st.didJustFinish && !real) log(`пропускаю ложный конец трека: i=${st.currentIndex} t=${st.currentTime}/${st.duration}`);
+    if (real && !wantPlay) return;
+    if (real && useSleep.getState().endTrack) { finishSleep(); return; }
     if (real && st.currentIndex >= st.trackCount - 1) {
       /* дошли до конца окна: дальше по очереди или по кругу */
       if (s.index < s.queue.length - 1) jump(s.index + 1, 'next');
@@ -82,6 +116,7 @@ function engine() {
     const s = usePlayer.getState();
     const cur = s.index - base;
     if (currentIndex === cur) return;
+    if (useSleep.getState().endTrack && currentIndex > cur) { finishSleep(); }
     if (Math.abs(currentIndex - cur) !== 1) { log(`пропускаю странный trackChanged: ${currentIndex}, жду ${cur}±1`); return; }
     const idx = base + currentIndex;
     if (idx < 0 || idx >= s.queue.length) return;
@@ -109,7 +144,7 @@ async function init() {
   await ready;
 }
 
-const source = (t: Track) => ({ uri: t.source === 'yt' ? localAudio(t.id) || streamUrlYt(t.id) : streamUrl(t.id), name: t.title });
+const source = (t: Track) => ({ uri: downloaded(t) || (t.source === 'yt' ? localAudio(t.id) || streamUrlYt(t.id) : streamUrl(t.id)), name: t.title });
 
 /* ---------- учёт прослушивания: время, засчитанные прослушивания, пропуски ---------- */
 let lastTs = 0, buf = 0, bufTrack: Track | undefined, counted = false;
@@ -203,16 +238,16 @@ function shuffled<T>(a: T[]) {
 /* Холодный трек сервер готовит до ~10 с, а плеер Android ждёт первый байт только 8 с и замирает на 0:00.
    Поэтому сначала сами дожидаемся, пока сервер подготовит поток (крутится индикатор), и только потом отдаём трек плееру. */
 const primed = new Map<string, number>();
-const isPrimed = (t: Track | undefined) => !!t && (t.source !== 'yt' || !!localAudio(t.id) || Date.now() - (primed.get(t.id) || 0) < 20 * 60e3);
+const isPrimed = (t: Track | undefined) => !!t && (!!downloaded(t) || t.source !== 'yt' || !!localAudio(t.id) || Date.now() - (primed.get(t.id) || 0) < 20 * 60e3);
 const priming = new Map<string, Promise<boolean>>();
 function prime(t: Track | undefined): Promise<boolean> {
   if (!t || isPrimed(t)) return Promise.resolve(true);
   const had = priming.get(t.id);
   if (had) return had; // один запрос на трек, даже если его просят несколько раз
   const run = (async () => {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    {
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 25000);
+      const timer = setTimeout(() => ac.abort(), 20000);
       try {
         const r = await fetch(streamUrlYt(t.id), { headers: { Range: 'bytes=0-1' }, signal: ac.signal });
         if (r.ok) { primed.set(t.id, Date.now()); return true; }
@@ -269,7 +304,7 @@ function mount(i: number) {
   base = i;
   p.add(source(q[i]));
   nativeLen = 1;
-  if (q[i + 1] && isPrimed(q[i + 1])) { p.add(source(q[i + 1])); nativeLen = 2; }
+  if (!useSleep.getState().endTrack && q[i + 1] && isPrimed(q[i + 1])) { p.add(source(q[i + 1])); nativeLen = 2; }
   p.skipTo(0); touch();
   if (wantPlay) p.play();
   mountedAt = Date.now();
@@ -302,7 +337,7 @@ function ensureNext() {
   const want = s.queue[base + cur + 1];
   for (let k = nativeLen - 1; k > cur; k--) { pl.remove(k); touch(); }
   nativeLen = cur + 1;
-  if (!want) return;
+  if (!want || useSleep.getState().endTrack) return;
   /* в плеер телефона кладём только подготовленный трек: кнопка «следующий» в шторке и на экране блокировки
      переключает плеер напрямую, мимо приложения — неподготовленный трек там зависал */
   if (isPrimed(want)) { pl.add(source(want)); nativeLen++; touch(); return; }
@@ -329,8 +364,9 @@ async function jumpInner(i: number, dir: 'next' | 'prev') {
   if (!isPrimed(t)) {
     loading = true;
     silence(); usePlayer.setState({ buffering: true });
-    await prime(t);
+    const ok = await prime(t);
     if (seq !== loadSeq) return;
+    if (!ok) { loading = false; wantPlay = false; usePlayer.setState({playing:false,buffering:false,error:'Не удалось загрузить трек'}); return; }
   }
   mount(i);
   onTrackStart();
@@ -344,7 +380,8 @@ async function load(queue: Track[], index: number) {
   useProgress.setState({ time: 0, duration: queue[index]?.duration || 0 });
   const t0 = Date.now();
   log(`play: «${queue[index]?.title}» ${queue[index]?.id}, в очереди ${queue.length}, local=${!!localAudio(queue[index]?.id || '')}`);
-  await prime(queue[index]);
+  const ok = await prime(queue[index]);
+  if (seq === loadSeq && !ok) { loading = false; wantPlay = false; usePlayer.setState({playing:false,buffering:false,error:'Не удалось загрузить трек'}); return; }
   log(`prime: ${Date.now() - t0} мс`);
   console.log(`[lull] prime ${queue[index]?.id} ${Date.now() - t0}ms`);
   if (seq !== loadSeq) return; // пока ждали, выбрали другой трек
@@ -360,7 +397,7 @@ export const player = {
     await init();
     const s = usePlayer.getState();
     const cur = currentTrack(s);
-    if (startId && cur?.id === startId) return player.toggle();
+    if (startId && cur?.id === startId && !s.error) return player.toggle();
     let start = Math.max(0, ok.findIndex((t) => t.id === startId));
     let q = ok;
     const shuf = opts.shuffle ?? s.shuffle;
@@ -375,6 +412,8 @@ export const player = {
   toggle() {
     const p = engine();
     if (!currentTrack()) return;
+    const state = usePlayer.getState();
+    if (state.error) { void load(state.queue,state.index).catch(e=>report(e,"player.retry")); return; }
     wantPlay = !usePlayer.getState().playing;
     usePlayer.setState({ playing: wantPlay });
     if (loading) return; // трек ещё готовится — включится сам, если не нажали паузу
@@ -394,6 +433,13 @@ export const player = {
     if (useProgress.getState().time > 3 || s.index === 0) { p.seekTo(0); useProgress.setState({ time: 0 }); return; }
     jump(s.index - 1, 'prev');
   },
+  async resume(queue: Track[], index: number, position: number) {
+    if (!queue[index]) return;
+    await init();
+    const seq = loadSeq + 1;
+    await load(queue, index);
+    if (seq === loadSeq) player.seek(Math.max(0, Math.min(position, queue[index].duration || position)));
+  },
   seek(sec: number) { engine().seekTo(sec); useProgress.setState({ time: sec }); },
   skipTo(i: number) {
     const s = usePlayer.getState();
@@ -403,10 +449,16 @@ export const player = {
   },
   playNext(t: Track) {
     const s = usePlayer.getState();
-    if (!currentTrack(s)) return player.play([t], t.id);
-    const q = s.queue.slice(); q.splice(s.index + 1, 0, t);
+    if (!currentTrack(s)) { void player.play([t], t.id); return; }
+    const entry = { ...t };
+    const q = s.queue.slice(); q.splice(s.index + 1, 0, entry);
     usePlayer.setState({ queue: q });
     ensureNext();
+    return () => {
+      const state = usePlayer.getState();
+      const pos = state.queue.indexOf(entry);
+      if (pos > state.index) player.removeAt(pos);
+    };
   },
   addToQueue(t: Track) {
     const s = usePlayer.getState();
@@ -469,6 +521,7 @@ export const player = {
   },
   expand(v: boolean) { usePlayer.setState({ expanded: v && !!currentTrack() }); },
   stop() {
+    setSleep(null);
     loadSeq++; loading = false; if (dogTimer) clearTimeout(dogTimer);
     if (metaT) { clearTimeout(metaT); metaT = null; }
     if (pl) { pl.pause(); wipe(pl); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }

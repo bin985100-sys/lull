@@ -46,6 +46,7 @@ globalThis.__makePlaylist = () => {
 };
 
 const STUBS = {
+  '@/player/downloads': `export const downloaded=()=>undefined;`,
   '@/player/audio-cache': `export const localAudio=id=>globalThis.__localAudio?.get(id); export const pinAudio=()=>{}; export const prefetchAudio=()=>{};`,
   'expo-audio': `export const createAudioPlaylist=()=>globalThis.__makePlaylist(); export const setAudioModeAsync=async()=>{};`,
   '@react-native-async-storage/async-storage': `const m=new Map(); export default { getItem:async k=>m.get(k)??null, setItem:async (k,v)=>{m.set(k,v)}, removeItem:async k=>{m.delete(k)} };`,

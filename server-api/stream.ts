@@ -7,6 +7,7 @@
 import { Innertube, type Types } from 'youtubei.js';
 import { yt } from '../electron/yt';
 import { mint, potState, resetMinter, warmMinter } from './potoken';
+import { alternatives } from './alternative';
 import { streamFetch } from './stream-client';
 
 type Way = { name: string; client: Types.InnerTubeClient; pot: '' | 'video' | 'visitor'; playerPot?: boolean; anonymous?: boolean };
@@ -132,6 +133,16 @@ export async function fastStream(id: string) {
     } catch (e) {
       if (best === w.name) best = null;
       errors.push(`${w.name}: ${(e as Error).message} (${Date.now() - t0} мс)`);
+      if (w === order[0]) {
+        const candidates = await timeout(alternatives(id), 3000, 'поиск версии').catch(() => []);
+        for (const candidate of candidates.slice(0,3)) {
+          try {
+            const alt = await timeout(tryWay(candidate,WAYS[0]), 4000,'аудио версии');
+            console.log('[stream] alternate', id, candidate);
+            return {...alt, mediaId:candidate, ms:Date.now()-started};
+          } catch {}
+        }
+      }
     }
   }
   throw new Error(errors.join('; ') || 'нет ссылки');

@@ -174,6 +174,17 @@ async function run(job: Job, url: string) {
   finish(job, list.name, tracks, items.filter((_, i) => !found[i]).map((t) => [t.artist, t.title].filter(Boolean).join(' — ')));
 }
 
+let fileBatches = 0;
+export async function matchFile(items: SourceTrack[]) {
+  if (!Array.isArray(items) || !items.length || items.length > 12 || !items.every(t => typeof t?.title === 'string' && t.title.length <= 400 && typeof t.artist === 'string' && t.artist.length <= 400)) throw Object.assign(Error('Некорректный список треков'),{status:400});
+  if (fileBatches >= 4) throw Object.assign(Error('Сервис занят, повтори перенос'),{status:429});
+  fileBatches++;
+  try {
+    const tracks = [];
+    for (let i=0;i<items.length;i+=3) tracks.push(...await Promise.all(items.slice(i,i+3).map(t=>find(t))));
+    return {tracks};
+  } finally {fileBatches--;}
+}
 function finish(job: Job, name: string, tracks: Track[], missing: string[]) {
   /* исполнители, которых в списке больше всего, — их предложим добавить в любимые */
   const count = new Map<string, { id: string; name: string; count: number }>();

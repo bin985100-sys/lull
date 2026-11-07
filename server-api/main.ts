@@ -4,6 +4,7 @@
  * Слушает 127.0.0.1:8787; наружу его отдаёт Python-часть Lull Relay по /api/*.
  */
 import './proxy';
+import { alternatives, rememberTracks } from './alternative';
 import dns from 'node:dns';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -11,9 +12,9 @@ import { album, artist, charts, home, homeChips, playlist, search, setAuth, sugg
 import { storeGet, storeSet } from '../electron/store';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
-import { importStatus, startImport } from './importer';
+import { matchFile, importStatus, startImport } from './importer';
 import { diagClients, fastStream, markBad, warmStream, streamState } from './stream';
-import { authEnabled, deleteAccount, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink, syncGet, syncPut } from './auth';
+import { playback, authEnabled, deleteAccount, googleCallback, googleGo, logout, me, page, poll, runBot, start, tgPhoto, ytLibrary, ytLinkStart, ytPlaylist, ytUnlink, syncGet, syncPut } from './auth';
 
 const PORT = Number(process.env.LULL_API_PORT || 8787);
 /* Ссылка на звук YouTube привязана к адресу, с которого её получили; звук сервер качает по IPv4 — значит и просим по IPv4 */
@@ -83,6 +84,7 @@ async function auth(rest: string[], q: URLSearchParams, body: string, res: http.
     case 'logout': return json(res, logout(b.token ?? ''));
     case 'delete': return json(res, deleteAccount(b.token ?? ''));
     case 'back': return html(res, page('Готово', 'Ты вошёл в Lull. Возвращаемся в приложение…', q.get('nonce') ?? undefined));
+    case 'playback': return json(res, playback(b.token || '', b.op === 'put' ? b.data : undefined));
     case 'sync': return json(res, b.op === 'put' ? syncPut(b.token ?? '', Number(b.at) || 0, b.data) : syncGet(b.token ?? ''));
     case 'yt': {
       const tok = b.token ?? '';
@@ -114,6 +116,7 @@ http
     if (api === 'internal' && name === 'stream') {
       const t0 = Date.now();
       try {
+        if (url.searchParams.has('alternatives')) return json(res,{ ids: await alternatives(String(rest[0])) });
         if (url.searchParams.has('state')) return json(res, streamState());
         const vid = String(rest[0] || '').slice(0, 20);
         if (url.searchParams.get('diag')) return json(res, await diagClients(vid));
@@ -135,6 +138,7 @@ http
         if (req.method === 'POST') { try { const b = JSON.parse(body); crashes.unshift({ at: new Date().toISOString(), device: String(b.device || '').slice(0, 120), text: String(b.text || '').slice(0, 9000) }); crashes.length = Math.min(crashes.length, 30); } catch {} return json(res, { ok: true }); }
         return json(res, crashes.slice(0, Number(url.searchParams.get('n')) || 5));
       }
+      if (name === 'import' && rest[0] === 'file' && req.method === 'POST') return json(res,await matchFile(JSON.parse(body).tracks));
       if (name === 'import') return json(res, rest[0] ? importStatus(rest[0]) : startImport((body ? JSON.parse(body).url : url.searchParams.get('url')) ?? ''));
       const key = `${url.pathname}?${url.searchParams}#${body}`;
       const ttl = (TTL[name] ?? 0) * 60_000;
@@ -142,7 +146,9 @@ http
       let out: string;
       if (hit && Date.now() - hit.t < ttl) out = hit.body;
       else {
-        out = JSON.stringify(await route(name, decodeURIComponent(rest.join('/')), url.searchParams, body));
+        const result = await route(name, decodeURIComponent(rest.join('/')), url.searchParams, body);
+        rememberTracks(result);
+        out = JSON.stringify(result);
         if (ttl) {
           cache.set(key, { t: Date.now(), body: out });
           if (cache.size > 5000) cache.delete(cache.keys().next().value as string);

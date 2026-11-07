@@ -21,6 +21,7 @@ import { resetTo } from '@/nav';
 import { closeLyrics, LyricsCard, LyricsFull, useLyricsUi } from './Lyrics';
 import { TintLayer } from './TintLayer';
 import { likeWithUndo, openSelectPlaylist } from './TrackRow';
+import { SleepButton } from './MusicActions';
 import { openWave } from './Wave';
 
 const ease = Easing.bezier(...EASE);
@@ -175,6 +176,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
           <Icon name={liked ? 'heartF' : 'heart'} size={28} />
         </Pressable>
       </Animated.View>
+      {s.error && <Pressable accessibilityRole="button" onPress={() => player.toggle()}><T v="sub">{s.error} · Повторить</T></Pressable>}
       <Seek active={active} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
         <Pressable onPress={() => { haptic(); player.toggleShuffle(); }} accessibilityRole="button" accessibilityLabel="Перемешивать" accessibilityState={{ selected: s.shuffle }} style={st.ctl}><Icon name="shuffle" size={28} color={s.shuffle ? C.tx : C.tx3} /></Pressable>
@@ -187,6 +189,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 18 }}>
         <Pressable onPress={() => openWave(t)} accessibilityRole="button" style={st.extra}><Icon name="waves" size={28} /><T style={{ fontSize: 16 }}>Волна</T></Pressable>
+        <SleepButton />
         <Pressable onPress={() => { close(); router.push('/queue'); }} accessibilityRole="button" style={st.extra}><Icon name="queue" size={28} /><T style={{ fontSize: 16 }}>Очередь</T></Pressable>
       </View>
       {/* подсказка: ниже — текст песни */}

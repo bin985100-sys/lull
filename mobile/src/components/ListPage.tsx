@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import { type ReactNode, useEffect } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import type { Track } from '@/api/audius';
 import { warm } from '@/api/lull';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { C } from '@/theme/tokens';
 import { Btn, IconBtn, ListSkeleton, Offline, Screen, Skeleton, T, TopBar } from '@/ui/kit';
+import { saveTracks } from './MusicActions';
 import { TrackRow } from './TrackRow';
 import { Icon } from '@/ui/Icon';
 
@@ -70,6 +71,7 @@ export function ListPage(p: Props) {
         <IconBtn name="shuffle" label="Перемешать" size={58} iconSize={26} onPress={() => !disabled && player.play(tracks, undefined, { shuffle: true })} style={{ opacity: disabled ? 0.32 : 1 }} />
         {p.extraBtn}
       </View>
+      {Platform.OS !== 'web' && tracks.length > 0 && <Btn label="Скачать для офлайна" kind="dark" icon="download" onPress={() => void saveTracks(tracks)} />}
       {p.below}
       <View style={{ height: 18 }} />
       {p.error && !tracks.length ? <Offline onRetry={p.onRetry || (() => {})} /> : p.loading && !tracks.length ? <ListSkeleton n={6} /> : !tracks.length ? p.empty : (

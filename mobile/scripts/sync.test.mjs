@@ -183,6 +183,14 @@ await test('Удаление аккаунта: на сервере не оста
   ok(me.status >= 400 || !(await me.json()).user, 'профиль удалён');
 });
 
+await test('Передача очереди доступна только второму устройству того же аккаунта', async () => {
+  const send = body => realFetch(API+'/api/auth/playback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const data = {queue:[{id:'example1234',title:'Song'}],index:0,position:42};
+  eq((await send({token:'tA',op:'put',data})).status,200,'сохранение');
+  eq((await (await send({token:'tA2'})).json()).position,42,'позиция');
+  eq(await (await send({token:'tC'})).json(),null,'чужая очередь');
+  ok((await send({token:'bad'})).status>=400,'нужна авторизация');
+});
 srv.kill();
 console.log(`\n${pass} прошло, ${fail} упало`);
 process.exit(fail ? 1 : 0);
