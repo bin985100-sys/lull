@@ -51,21 +51,36 @@ async function timeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
 
 /** Ссылка реально отдаёт звук так, как его будет брать звуковой сервер: первый кусок 256 КБ, следующий
     кусок в 2 МБ и кусок ближе к концу. Возвращает ошибку или ''. */
-async function probe(url: string, len: number): Promise<string> {
-  const get = async (a: number, b: number) => {
-    const r = await fetch(`${url}&range=${a}-${b}`, { signal: AbortSignal.timeout(5000) });
-    const buf = await r.arrayBuffer().catch(() => new ArrayBuffer(0));
-    if (!r.ok) return `${r.status} на ${a}`;
-    if (buf.byteLength !== b - a + 1) return `короткий ответ на ${a}`;
-    return '';
-  };
-  const first = 262143, second = Math.min(len - 1, first + 2 * 1024 * 1024);
-  const tail = len > 4_000_000 ? Math.floor(len * 0.8) : 0;
-  const res = await Promise.all([get(0, Math.min(first, len - 1)), second > first ? get(first + 1, second) : '', tail ? get(tail, tail + 65535) : '']);
-  return res.filter(Boolean).join(', ');
+const FIRST = 256 * 1024;
+const CHUNK = 2 * 1024 * 1024;
+const MAX_INLINE = 8 * 1024 * 1024;
+
+async function probe(url: string, len: number, prepare: boolean): Promise<Buffer | undefined> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 5500);
+  async function read(start: number, end: number) {
+    const response = await fetch(url + '&range=' + start + '-' + end, { signal: abort.signal });
+    const expected = end - start + 1;
+    if (!response.ok) throw Error(response.status + ' на ' + start);
+    const count = response.headers.get('content-length');
+    if (count !== null && Number(count) !== expected) throw Error('неверная длина на ' + start);
+    const data = Buffer.from(await response.arrayBuffer());
+    if (data.length !== expected) throw Error('неполный диапазон на ' + start);
+    return data;
+  }
+  try {
+    const bytes = prepare && len <= MAX_INLINE ? len : Math.min(len, FIRST + CHUNK);
+    const reads = [read(0, Math.min(bytes, FIRST) - 1)];
+    for (let start = FIRST; start < bytes; start += CHUNK)
+      reads.push(read(start, Math.min(bytes, start + CHUNK) - 1));
+    // For a large file also verify a later range before declaring the URL good.
+    const tail = bytes < len && len > 4_000_000 ? Math.floor(len * 0.8) : 0;
+    const [parts] = await Promise.all([Promise.all(reads), tail ? read(tail, Math.min(len - 1, tail + 65535)) : undefined]);
+    if (prepare) return Buffer.concat(parts, bytes);
+  } finally { clearTimeout(timer); abort.abort(); }
 }
 
-async function tryWay(id: string, w: Way) {
+async function tryWay(id: string, w: Way, prepare = false) {
   const c = w.pot || w.anonymous ? await timeout(anon(), 8000, 'сессия') : await yt();
   let gvs = '';
   const opts: any = { client: w.client };
@@ -98,9 +113,8 @@ async function tryWay(id: string, w: Way) {
   }
   const len = Number(f.content_length) || 0;
   if (!len) throw new Error('нет размера');
-  const bad = await timeout(probe(url, len), 6000, 'проверка');
-  if (bad) throw new Error(bad);
-  return { url, mime: String(f.mime_type).split(';')[0], size: len, duration: Math.round((f.approx_duration_ms || 0) / 1000), bitrate: f.bitrate, client: w.name };
+  const prefix = await probe(url, len, prepare);
+  return { prefix, url, mime: String(f.mime_type).split(';')[0], size: len, duration: Math.round((f.approx_duration_ms || 0) / 1000), bitrate: f.bitrate, client: w.name };
 }
 
 /** Замер для обновления сервера: каждый способ отдельно, со временем и ошибкой */
@@ -119,7 +133,7 @@ export function markBad(name: string) {
   if (name.includes('токен')) resetMinter();
 }
 
-export async function fastStream(id: string) {
+export async function fastStream(id: string, prepare = false) {
   const order = best ? [WAYS.find((w) => w.name === best)!, ...WAYS.filter((w) => w.name !== best)] : WAYS;
   const errors: string[] = [];
   const started = Date.now();
@@ -127,7 +141,7 @@ export async function fastStream(id: string) {
     if (Date.now() - started > 14000) break; // дальше пусть работает yt-dlp — гонка на звуковом сервере уже идёт
     const t0 = Date.now();
     try {
-      const r = await tryWay(id, w);
+      const r = await tryWay(id, w, prepare);
       best = w.name;
       return { ...r, ms: Date.now() - started };
     } catch (e) {
@@ -137,7 +151,7 @@ export async function fastStream(id: string) {
         const candidates = await timeout(alternatives(id), 3000, 'поиск версии').catch(() => []);
         for (const candidate of candidates.slice(0,3)) {
           try {
-            const alt = await timeout(tryWay(candidate,WAYS[0]), 4000,'аудио версии');
+            const alt = await timeout(tryWay(candidate,WAYS[0],prepare), 4000,'аудио версии');
             console.log('[stream] alternate', id, candidate);
             return {...alt, mediaId:candidate, ms:Date.now()-started};
           } catch {}

@@ -112,6 +112,20 @@ await test('«Дальше» на подготовленный трек — мг
   if (same(m, 'после next') !== 's1') throw new Error('должен играть s1');
 });
 
+await test('Нажатие на готовый следующий в том же списке сохраняет нативный буфер', async () => {
+  const m = await freshApp();
+  await m.player.play(LIST, 's0'); await settle(900);
+  const native = globalThis.__pl;
+  const item = native.sources[1];
+  if (!item) throw new Error('следующий не подготовлен');
+  m.player.move(3, 4); m.player.move(4, 3);
+  if (native.sources[1] !== item) throw new Error('перестановка дальних треков сбросила буфер');
+  m.player.addToQueue(T('extra'));
+  await m.player.play(LIST.map(t => ({...t})), 's1');
+  if (native.currentIndex !== 1 || native.sources[1] !== item || native.current !== 'yt:s1') throw new Error('потерян буфер следующего');
+  if (m.usePlayer.getState().queue.length !== LIST.length) throw new Error('не восстановлен выбранный список');
+});
+
 await test('Пять быстрых «дальше» подряд — в итоге играет s5, а не старый трек', async () => {
   const m = await freshApp(); await m.player.play(LIST, 's0'); await settle(1500);
   for (let i = 0; i < 5; i++) { m.player.next(); await sleep(40); }

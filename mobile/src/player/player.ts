@@ -41,6 +41,13 @@ let ready: Promise<void> | null = null;
    Так очередь приложения и плеера не расходятся: раньше после волны и пропусков мог играть не тот трек. */
 let base = 0;
 let nativeLen = 0;
+let stagedTail: string | null = null;
+const trackKey = (track: Track) => (track.source || 'audius') + ':' + track.id;
+function stageNext(p: AudioPlaylist, track: Track) {
+  p.add(source(track));
+  nativeLen++;
+  stagedTail = trackKey(track);
+}
 let mountedAt = 0;
 export const useSleep = create<{ deadline: number; endTrack: boolean }>(() => ({ deadline: 0, endTrack: false }));
 let sleepTask: ReturnType<typeof setInterval> | undefined;
@@ -286,6 +293,7 @@ function silence() {
    добавленного трека медиасессия видит «трек №1 при одном треке» и роняет приложение (Invalid PlayerInfo update).
    Поэтому сначала встаём на трек №0, потом очищаем. */
 function wipe(p: AudioPlaylist) {
+  stagedTail = null;
   try { if (p.trackCount > 0 && p.currentIndex !== 0) p.skipTo(0); } catch {}
   p.clear();
 }
@@ -304,7 +312,7 @@ function mount(i: number) {
   base = i;
   p.add(source(q[i]));
   nativeLen = 1;
-  if (!useSleep.getState().endTrack && q[i + 1] && isPrimed(q[i + 1])) { p.add(source(q[i + 1])); nativeLen = 2; }
+  if (!useSleep.getState().endTrack && q[i + 1] && isPrimed(q[i + 1])) { stageNext(p, q[i + 1]); }
   p.skipTo(0); touch();
   if (wantPlay) p.play();
   mountedAt = Date.now();
@@ -335,12 +343,16 @@ function ensureNext() {
   try { nat = Math.max(nat, pl.currentIndex); } catch {}
   const cur = nat;
   const want = s.queue[base + cur + 1];
+  // Priming and queue updates can both call ensureNext. Removing an unchanged
+  // MediaItem discards the media the native player has already buffered for it.
+  if (!useSleep.getState().endTrack && want && nativeLen === cur + 2 && stagedTail === trackKey(want)) return;
+  stagedTail = null;
   for (let k = nativeLen - 1; k > cur; k--) { pl.remove(k); touch(); }
   nativeLen = cur + 1;
   if (!want || useSleep.getState().endTrack) return;
   /* в плеер телефона кладём только подготовленный трек: кнопка «следующий» в шторке и на экране блокировки
      переключает плеер напрямую, мимо приложения — неподготовленный трек там зависал */
-  if (isPrimed(want)) { pl.add(source(want)); nativeLen++; touch(); return; }
+  if (isPrimed(want)) { stageNext(pl, want); touch(); return; }
   prime(want).then((ok) => { const st = usePlayer.getState(); if (ok && st.queue[base + nativeLen]?.id === want.id) ensureNext(); });
 }
 
@@ -407,6 +419,12 @@ export const player = {
       start = 0;
     }
     if (opts.shuffle !== undefined) usePlayer.setState({ shuffle: opts.shuffle });
+    if (!shuf && pl && !loading && start === s.index + 1 && nativeLen === start - base + 1 &&
+        stagedTail === trackKey(q[start]) && q.every((t, i) => s.queue[i] && trackKey(t) === trackKey(s.queue[i]))) {
+      usePlayer.setState({ queue: q });
+      await jump(start, 'next');
+      return;
+    }
     try { await load(q, start); } catch (e) { report(e, 'player.play'); usePlayer.setState({ playing: false, buffering: false }); }
   },
   toggle() {

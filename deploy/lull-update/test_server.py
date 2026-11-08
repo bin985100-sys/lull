@@ -1,6 +1,7 @@
 """Offline regression tests. Never use production data/cookies or YouTube."""
 import asyncio
 import importlib.util
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -21,6 +22,21 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         s.cache.clear(); s.inflight.clear(); s.prep_inflight.clear()
         s.ladder = s.Ladder()
+
+    async def test_verified_frame_rejects_partial_and_extra_audio(self):
+        metadata = json.dumps({"size": 7, "url": "https://example.invalid/audio"}).encode()
+        header = len(metadata).to_bytes(4, "big") + metadata
+        def reader(data):
+            stream = asyncio.StreamReader()
+            stream.feed_data(header + data)
+            stream.feed_eof()
+            return stream
+        _, audio = await s.read_audio_frame(reader(b"1234567"))
+        self.assertEqual(audio, b"1234567")
+        with self.assertRaises(asyncio.IncompleteReadError):
+            await s.read_audio_frame(reader(b"12"))
+        with self.assertRaises(ValueError):
+            await s.read_audio_frame(reader(b"12345678"))
 
     async def test_failed_method_advances_without_hedge_delay(self):
         async def worker(vid, fmt, client):

@@ -121,7 +121,17 @@ http
         const vid = String(rest[0] || '').slice(0, 20);
         if (url.searchParams.get('diag')) return json(res, await diagClients(vid));
         if (url.searchParams.get('bad')) { markBad(url.searchParams.get('bad')!); return json(res, { ok: true }); }
-        return json(res, await fastStream(vid));
+        const binary = req.headers.accept === 'application/vnd.lull.prepared-audio';
+        const {prefix, ...meta} = await fastStream(vid, binary);
+        if (!binary || !prefix) return json(res, meta);
+        const metadata = Buffer.from(JSON.stringify(meta));
+        const header = Buffer.alloc(4);
+        header.writeUInt32BE(metadata.length);
+        res.writeHead(200, {'Content-Type':'application/vnd.lull.prepared-audio','Content-Length':4 + metadata.length + prefix.length});
+        res.write(header);
+        res.write(metadata);
+        res.end(prefix);
+        return;
       } catch (e) {
         return json(res, { error: (e as Error).message, ms: Date.now() - t0 }, 502);
       }

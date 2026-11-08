@@ -17,6 +17,7 @@ Lull Relay — сервер-посредник плеера Lull.
 """
 
 import asyncio
+import contextvars
 import base64
 import hashlib
 import json
@@ -301,11 +302,42 @@ YT_PROXY = os.environ.get("LULL_YT_PROXY", "")
 yt_session: "ClientSession | None" = None
 
 
+# Only preparation requests ask the catalog for bytes. Link-only API clients keep JSON.
+prepare_audio = contextvars.ContextVar("prepare_audio", default=False)
+READ_AHEAD = os.environ.get("LULL_READ_AHEAD", "1") != "0"
+verified_audio = OrderedDict()
+AUDIO_FRAME = "application/vnd.lull.prepared-audio"
+MAX_INLINE = 8 * 1024 * 1024
+
+
+async def read_audio_frame(reader):
+    length = int.from_bytes(await reader.readexactly(4), "big")
+    if not 0 < length <= 128 * 1024:
+        raise ValueError("invalid stream metadata length")
+    meta = json.loads(await reader.readexactly(length))
+    total = int(meta["size"])
+    if not meta.get("url") or total <= 0:
+        raise ValueError("invalid stream metadata")
+    expected = total if total <= MAX_INLINE else FIRST_CHUNK + CHUNK
+    data = await reader.readexactly(expected)
+    if await reader.read(1):
+        raise ValueError("oversized stream frame")
+    return meta, data
+
+
 async def resolve_innertube(vid: str) -> dict:
     """Ссылка от каталога Lull (youtubei.js). Он сам проверяет начало и середину файла, поэтому повторно не проверяем."""
     assert session is not None
-    async with session.get(f"{API_LOCAL}/internal/stream/{vid}", timeout=ClientTimeout(total=15)) as r:
-        j = await r.json(content_type=None)
+    headers = {"Accept": AUDIO_FRAME} if prepare_audio.get() else {}
+    async with session.get(f"{API_LOCAL}/internal/stream/{vid}", headers=headers, timeout=ClientTimeout(total=15)) as r:
+        if r.status == 200 and r.content_type == AUDIO_FRAME:
+            j, data = await read_audio_frame(r.content)
+            verified_audio[j["url"]] = data
+            verified_audio.move_to_end(j["url"])
+            while len(verified_audio) > 4:
+                verified_audio.popitem(last=False)
+        else:
+            j = await r.json(content_type=None)
     if r.status != 200 or j.get("error") or not j.get("url"):
         raise RuntimeError(j.get("error") or f"innertube {r.status}")
     mime = (j.get("mime") or "audio/mp4").split(";")[0]
@@ -709,18 +741,23 @@ def prep_cleanup():
 async def _prepare(vid: str, fmt: str) -> Path:
     async with prep_sem:
         t0 = time.monotonic()
-        s = await get_stream(vid, fmt)
+        flag = prepare_audio.set(READ_AHEAD)
+        try:
+            s = await get_stream(vid, fmt)
+        finally:
+            prepare_audio.reset(flag)
         if not s.get("contentLength"):
             await verify(s)
         total = int(s.get("contentLength") or 0)
         if not total:
             raise RuntimeError("нет размера файла")
         get = range_getter(vid, fmt, s)
-        spans, pos = [], 0
+        prefix = verified_audio.pop(s["url"], b"")
+        spans, pos = [], len(prefix)
         while pos < total:
             spans.append((pos, min(pos + CHUNK - 1, total - 1)))
             pos += CHUNK
-        parts = await asyncio.gather(*(get(x) for x in spans))
+        parts = [prefix, *await asyncio.gather(*(get(x) for x in spans))]
         t1 = time.monotonic()
         PREP.mkdir(parents=True, exist_ok=True)
         mime = s.get("mime") or "audio/mp4"
@@ -744,7 +781,7 @@ async def _prepare(vid: str, fmt: str) -> Path:
                 raw.replace(out)
         else:
             raw.replace(out)
-        log.info("prepare %s: %d КБ, скачано за %.1fs, всего %.1fs", vid, total // 1024, t1 - t0, time.monotonic() - t0)
+        log.info("prepare %s: %d КБ, без повторной загрузки %d КБ, скачано за %.1fs, всего %.1fs", vid, total // 1024, len(prefix) // 1024, t1 - t0, time.monotonic() - t0)
         prep_cleanup()
         return out
 
