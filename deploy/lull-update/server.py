@@ -330,7 +330,7 @@ async def resolve_innertube(vid: str, regional: str = "") -> dict:
     """Ссылка от каталога Lull (youtubei.js). Он сам проверяет начало и середину файла, поэтому повторно не проверяем."""
     assert session is not None
     headers = {"Accept": AUDIO_FRAME} if prepare_audio.get() or regional else {}
-    async with session.get(f"{regional or API_LOCAL}/internal/stream/{vid}", headers=headers, timeout=ClientTimeout(total=4 if regional else 15)) as r:
+    async with session.get(f"{regional or API_LOCAL}/internal/stream/{vid}", headers=headers, timeout=ClientTimeout(total=5 if regional else 15)) as r:
         if r.status == 200 and r.content_type == AUDIO_FRAME:
             j, data = await read_audio_frame(r.content)
             if regional and len(data) != int(j.get("size") or 0):
