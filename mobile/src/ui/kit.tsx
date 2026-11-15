@@ -23,7 +23,7 @@ export function Reveal({children,step=0,style}:{children:ReactNode;step?:number;
     return ()=>cancelAnimation(progress);
   },[reduced,step,progress]);
   const motion=useAnimatedStyle(()=>({opacity:progress.get(),transform:[{translateY:(1-progress.get())*12}]}));
-  return <Animated.View style={[style,motion]}>{children}</Animated.View>;
+  return <Animated.View style={[{flexShrink:0,minWidth:0},style,motion]}>{children}</Animated.View>;
 }
 
 /* ---------- текст ---------- */
@@ -53,15 +53,22 @@ const PRESS_EASE = cubicBezier(EASE[0], EASE[1], EASE[2], EASE[3]);
 export function Press({ style, outer, children, scaleTo = 0.96, onPress, ...p }: PressableProps & { style?: any; outer?: any; scaleTo?: number; children?: ReactNode }) {
   const [down, setDown] = useState(false);
   const reduced=useReducedMotion();
+  const visual={...StyleSheet.flatten(style)};
+  const flow:ViewStyle={};
+  // The press target owns its position in the parent. A flex child inside an
+  // unsized press target can collapse the row while still painting its contents.
+  for(const key of ['flex','flexGrow','flexShrink','flexBasis','alignSelf','margin','marginTop','marginBottom','marginLeft','marginRight','marginHorizontal','marginVertical'] as const){
+    if(visual[key]!==undefined){(flow as any)[key]=visual[key];delete visual[key];}
+  }
   return (
     <Pressable
       {...p}
-      style={outer}
+      style={[{flexShrink:0},flow,outer]}
       onPress={onPress}
       onPressIn={(e) => { setDown(true); p.onPressIn?.(e); }}
       onPressOut={(e) => { setDown(false); p.onPressOut?.(e); }}
     >
-      <Animated.View style={[style, { transform: [{ scale: down && !reduced ? scaleTo : 1 }], transitionProperty: 'transform', transitionDuration: reduced ? 0 : down ? 90 : 260, transitionTimingFunction: PRESS_EASE }]}>{children}</Animated.View>
+      <Animated.View style={[visual, { transform: [{ scale: down && !reduced ? scaleTo : 1 }], transitionProperty: 'transform', transitionDuration: reduced ? 0 : down ? 90 : 220, transitionTimingFunction: PRESS_EASE }]}>{children}</Animated.View>
     </Pressable>
   );
 }
@@ -79,26 +86,30 @@ export function Btn({ label, icon, kind = 'white', onPress, disabled, small, sty
   const fg = kind === 'white' ? '#000' : C.tx;
   return (
     <Press accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
-      style={[s.btn, { height: small ? 48 : 58, backgroundColor: kind === 'white' ? C.tx : kind === 'dark' ? C.s2 : C.s1, opacity: disabled ? 0.32 : 1 }, style]}>
-      <T v="title" style={{ color: fg, fontFamily: F.bold, fontSize: small ? 15.5 : 17, flexShrink: 1 }} numberOfLines={1}>{label}</T>
-      {icon === 'playpause' ? <PlayPause playing={!!playing} size={22} color={fg} /> : icon ? <Icon name={icon} size={24} color={fg} /> : null}
+      style={[s.btn, { minHeight: small ? 48 : 58,paddingVertical:12, backgroundColor: kind === 'white' ? C.tx : kind === 'dark' ? C.s2 : C.s1, opacity: disabled ? 0.32 : 1 }, style]}>
+      <T v="title" style={{ color: fg, fontFamily: F.bold, fontSize: small ? 15.5 : 17, flexShrink: 1 }} numberOfLines={2}>{label}</T>
+      {icon === 'playpause' ? <PlayPause playing={!!playing} size={22} color={fg} /> : icon ? <Icon name={icon} size={24} color={kind==='white' ? fg : undefined} /> : null}
     </Press>
   );
 }
 
-export function Cover({ uri, size, radius = R.cover, style, source }: { uri?: string; size: number | `${number}%`; radius?: number; style?: any; source?: any }) {
+export function Cover({ uri, size, radius = R.cover, style, source, label,fallbackUri }: { uri?: string; size: number | `${number}%`; radius?: number; style?: any; source?: any;label?:string;fallbackUri?:string }) {
+  const [failed,setFailed]=useState<string[]>([]);
+  const reduced=useReducedMotion();
+  const effective=[uri,fallbackUri].find((url):url is string=>!!url && !failed.includes(url));
+  const show=effective || source;
+  const initial=label?.trim().slice(0,1).toUpperCase();
   return (
     <View style={[{ width: size, aspectRatio: 1, borderRadius: radius, overflow: 'hidden', backgroundColor: C.s2 }, style]}>
-      {uri || source ? <Image source={source ?? { uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={250} recyclingKey={uri} /> : (
-        <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><Icon name="note" size={typeof size === 'number' ? size * 0.4 : 40} /></View>
-      )}
+      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center',backgroundColor:initial ? '#202434' : C.s2 }]}>{initial ? <T style={{color:C.sky,fontSize:typeof size==='number' ? Math.max(20,size*.32) : 38}}>{initial}</T> : <Icon name="note" size={typeof size === 'number' ? size * 0.4 : 40} color={C.tx3}/>}</View>
+      {show ? <Image source={source ?? { uri:effective }} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced ? 0 : 180} recyclingKey={effective} onError={()=>{if(effective)setFailed(old=>[...old.slice(-3),effective]);}}/> : null}
     </View>
   );
 }
 
 /* ---------- экран со скроллом: отступ под капсулу ---------- */
 /* В браузере стек экранов без анимации переходов — добавляем свою: экран мягко въезжает */
-const WEB_ENTER = Platform.OS === 'web' ? slideIn(22, 1, 320) : undefined;
+const WEB_ENTER = Platform.OS === 'web' ? slideIn(0, 1, 220) : undefined;
 function Ambient() {
   return <LinearGradient pointerEvents="none" colors={['rgba(42,65,106,0.28)','rgba(23,30,55,0.10)','transparent']}
     start={{x:0,y:0}} end={{x:1,y:1}} style={{position:'absolute',top:0,left:0,right:0,height:380}}/>;
@@ -168,8 +179,9 @@ export function Offline({ onRetry }: { onRetry: () => void }) {
 }
 
 export function Skeleton({ h, w = '100%', r = 18, style }: { h: number; w?: number | `${number}%`; r?: number; style?: any }) {
+  const reduced=useReducedMotion();
   const o = useSharedValue(0.45);
-  useEffect(() => { o.set(withRepeat(withTiming(1, { duration: 900 }), -1, true)); }, [o]);
+  useEffect(() => { o.set(reduced ? .65 : withRepeat(withTiming(1, { duration: 900 }), -1, true));return ()=>cancelAnimation(o); }, [o,reduced]);
   const a = useAnimatedStyle(() => ({ opacity: o.get() }));
   return <Animated.View style={[{ height: h, width: w, borderRadius: r, backgroundColor: C.s2 }, a, style]} />;
 }
@@ -185,12 +197,14 @@ export function ListSkeleton({ n = 4 }: { n?: number }) {
 export const Spinner = () => <ActivityIndicator color={C.tx2} />;
 
 export function Segmented<K extends string>({ items, value, onChange, label }: { items: [K, string][]; value: K; onChange: (k: K) => void; label: string }) {
+  const reduced=useReducedMotion();
   return (
     <View style={s.seg} accessibilityRole="tablist" accessibilityLabel={label}>
       {items.map(([k, l]) => {
         const on = k === value;
         return (
-          <Pressable key={k} onPress={() => { haptic(); onChange(k); }} accessibilityRole="tab" accessibilityState={{ selected: on }} style={[s.segBtn, on && { backgroundColor: C.s4 }]}>
+          <Pressable key={k} onPress={() => { haptic(); onChange(k); }} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} style={s.segBtn}>
+            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill,{borderRadius:999,backgroundColor:C.s4,opacity:on ? 1 : 0,transitionProperty:'opacity',transitionDuration:reduced ? 0 : 160}]}/>
             <T v="small" style={{ color: on ? C.tx : C.tx3, fontFamily: F.bold, fontSize: items.length > 3 ? 12.5 : 14 }} numberOfLines={1}>{l}</T>
           </Pressable>
         );
@@ -202,7 +216,7 @@ export function Segmented<K extends string>({ items, value, onChange, label }: {
 export const s = StyleSheet.create({
   btn: { borderRadius: R.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingLeft: 26, paddingRight: 22 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
-  sec: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  sec: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',gap:12, marginBottom: 12 },
   seg: { flexDirection: 'row', height: 50, padding: 4, borderRadius: R.pill, backgroundColor: C.s1 },
   segBtn: { flex: 1, borderRadius: R.pill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
   field: { height: 54, borderRadius: R.pill, backgroundColor: C.s2, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 20, paddingRight: 8 },

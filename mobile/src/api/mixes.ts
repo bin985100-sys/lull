@@ -14,7 +14,7 @@ export const useMixSeed = create<{ n: number }>(() => ({ n: 0 }));
 export const MIXES: Record<string, Mix> = {
   foryou: { id: 'foryou', title: 'Для тебя', image: FOCUS_IMAGE, load: forYou },
   recommended: { id: 'recommended', title: 'Дальше по звучанию', load: recommended },
-  trending: { id: 'trending', title: 'В тренде', load: async (s) => tracksOf((await lull.charts(s)).filter((x) => x.layout === 'tracks')) },
+  trending: { id: 'trending', title: 'Популярное в России', load: async (s) => tracksOf((await lull.charts(s)).filter((x) => x.layout === 'tracks')) },
   underground: { id: 'underground', title: 'Независимые артисты', load: (s) => audius.underground(s) },
 };
 

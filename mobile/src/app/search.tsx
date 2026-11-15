@@ -129,7 +129,7 @@ function TopResult({ top, tracks }: { top: Top; tracks: import('@/api/audius').T
       <SectionHead title="Лучший результат" />
       <Press onPress={() => (isArtist ? openArtist(top.artist) : openPlaylist(top.album))} accessibilityRole="button" accessibilityLabel={title}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 16, padding: 14, borderRadius: 28, backgroundColor: C.s2 }}>
-        <Cover uri={img} size={88} radius={isArtist ? 44 : 20} />
+        <Cover uri={img} label={title} size={88} radius={isArtist ? 44 : 20} />
         <View style={{ flex: 1, gap: 4 }}>
           <T numberOfLines={2} style={{ fontFamily: F.bold, fontSize: 20 }}>{title}</T>
           <T v="small" numberOfLines={1}>{sub}</T>

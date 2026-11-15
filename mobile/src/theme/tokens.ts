@@ -12,6 +12,10 @@ export const C = {
   glass: 'rgba(34,36,40,0.66)',
   glassLine: 'rgba(255,255,255,0.07)',
   danger: '#ffb4a8',
+  rose: '#ff607f',
+  sky: '#75bcff',
+  violet: '#b49bff',
+  gold: '#f2c275',
 } as const;
 
 export const R = { card: 26, panel: 36, pill: 999, cover: 12 } as const;

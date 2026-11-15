@@ -22,8 +22,8 @@ export default function Discover() {
     <Screen>
       <T v="h1" style={{ marginTop: 10, marginBottom: 18 }} accessibilityRole="header">Открывать</T>
       <Pressable onPress={() => router.push('/search')} accessibilityRole="search" accessibilityLabel="Поиск: треки, альбомы, исполнители"
-        style={{ height: 54, borderRadius: 999, backgroundColor: C.s2, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 }}>
-        <Icon name="search" size={22} color={C.tx2} /><T style={{ color: C.tx3, fontSize: 16 }}>Треки, альбомы, исполнители</T>
+        style={{ minHeight: 54,paddingVertical:12, borderRadius: 28, backgroundColor: C.s2, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 }}>
+        <Icon name="search" size={22} color={C.tx2} /><T numberOfLines={2} style={{flex:1,minWidth:0, color: C.tx2, fontSize: 16 }}>Треки, альбомы, исполнители</T>
       </Pressable>
 
       <View style={{ gap: 28, marginTop: 26 }}>
@@ -41,7 +41,8 @@ export default function Discover() {
         </View>
 
         <View>
-          <SectionHead title="В тренде" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'trending' } })} />
+          <SectionHead title={trending?.title || 'Популярное в России'} onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'trending' } })} />
+          {trending?.subtitle ? <T v="small" style={{marginBottom:12}}>{trending.subtitle}</T> : null}
           {charts.error && !charts.data ? <Offline onRetry={charts.reload} /> : charts.loading && !charts.data ? <ListSkeleton n={4} /> : trTracks.slice(0, 5).map((t) => <TrackRow key={t.id} track={t} list={trTracks} sub />)}
         </View>
 

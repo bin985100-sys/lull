@@ -81,8 +81,9 @@ export default function Listen() {
 
         {trTracks.length ? (
           <View>
-            <SectionHead title="Сейчас в тренде" more="Все" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'trending' } })} />
-            {trTracks.slice(0, 5).map((t, i) => <TrackRow key={t.id} track={t} list={trTracks} num={i + 1} sub />)}
+            <SectionHead title={trending?.title || 'Популярное в России'} more="Все" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'trending' } })} />
+            {trending?.subtitle ? <T v="small" style={{marginBottom:12}}>{trending.subtitle}</T> : null}
+            {trTracks.slice(0, 5).map(t => <TrackRow key={t.id} track={t} list={trTracks} sub />)}
           </View>
         ) : charts.loading ? <ListSkeleton n={3} /> : null}
 
@@ -176,7 +177,7 @@ function ArtistMixes() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}>
         {list.map((a) => (
           <Press key={a.id} onPress={() => router.push({ pathname: '/mix/[id]', params: { id: `artist:${a.id}`, n: a.name } })} accessibilityRole="button" accessibilityLabel={`Микс: ${a.name}`} style={{ width: 132, gap: 8 }}>
-            <View><Cover uri={a.avatar} size={132} radius={28} />
+            <View><Cover uri={a.avatar} label={a.name} size={132} radius={28} />
               <View style={{ position: 'absolute', left: 10, bottom: 10, paddingHorizontal: 10, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center' }}><T v="label" style={{ color: C.tx, fontFamily: F.bold }}>Микс</T></View>
             </View>
             <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 15 }}>{a.name}</T>

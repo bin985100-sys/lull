@@ -1,5 +1,4 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -13,10 +12,11 @@ import { TrackRow } from '@/components/TrackRow';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { useLibrary } from '@/store/library';
 import { C } from '@/theme/tokens';
-import { Btn, IconBtn, ListSkeleton, Offline, Screen, SectionHead, T } from '@/ui/kit';
+import { Btn,Cover, IconBtn, ListSkeleton, Offline, Screen, SectionHead, T } from '@/ui/kit';
 import { toast } from '@/ui/overlay';
 
 type Page = { artist: Artist; monthly?: string; top: Track[]; sections: Section[]; similar: Artist[] };
+const EMPTY_TRACKS:Track[]=[];
 
 async function loadAudius(id: string, s: AbortSignal): Promise<Page> {
   const [artist, top, similar] = await Promise.all([audius.artist(id, s), audius.artistTracks(id, s), audius.related(id, s).catch(() => [] as Artist[])]);
@@ -29,14 +29,14 @@ export default function ArtistScreen() {
   const ins = useSafeAreaInsets();
   const { data, loading, error, reload } = useData(`artistpage:${src}:${id}`, (sig) => (isAudius ? loadAudius(id, sig) : lull.artist(id, sig)));
   const fol = useLibrary((x) => x.favArtists.some((a) => a.id === id));
-  const tracks = data?.top ?? [];
+  const tracks = data?.top ?? EMPTY_TRACKS;
   useEffect(() => { if (tracks.length) warm(tracks.slice(0, 2)); }, [tracks]);
   const playingHere = usePlayer((x) => x.playing && !!currentTrack(x) && tracks.some((t) => t.id === currentTrack(x)!.id));
   const art = data?.artist;
   return (
     <Screen style={{ paddingTop: 0 }}>
       <View style={{ height: 400, marginHorizontal: -20, backgroundColor: C.s1 }}>
-        {art?.cover || art?.avatar ? <Image source={{ uri: art.cover || art.avatar }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" transition={300} /> : null}
+        <Cover uri={art?.cover || art?.avatar} fallbackUri={art?.avatar} label={art?.name} size="100%" radius={0} style={{height:'100%',aspectRatio:undefined}}/>
         {/* плавное затемнение к низу, чтобы имя читалось, а обложка не резалась полосой */}
         <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.55)', '#000']} locations={[0, 0.22, 0.5, 0.8, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={{ position: 'absolute', top: Math.max(ins.top, 18) + 14, left: 20 }}>

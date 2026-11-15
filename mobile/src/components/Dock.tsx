@@ -283,11 +283,12 @@ function Mini() {
 const TR = { transitionDuration: 560, transitionTimingFunction: cubicBezier(EASE[0], EASE[1], EASE[2], EASE[3]) } as const;
 
 function Nav({active}:{active:Tab | null}) {
+  const reduced=useReducedMotion();
   const items:[Tab,IconName,string][]=[['listen','navListen','Слушать'],['discover','navDiscover','Открывать'],['collection','navCollection','Коллекция']];
   return <View accessibilityRole="tablist" accessibilityLabel="Основная навигация" style={st.nav}>
     {items.map(([key,icon,label])=><Pressable key={key} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{selected:key===active}} aria-selected={key===active}
       style={st.navBtn} onPress={()=>{haptic();player.expand(false);useTab.setState({tab:key});resetTo(`/${key}` as '/listen');}}>
-      <Icon name={icon} size={27} color={key===active ? '#fff' : C.tx2}/>
+      <Animated.View style={{transform:[{scale:key===active && !reduced ? 1.06 : 1}],transitionProperty:'transform',transitionDuration:reduced ? 0 : 180}}><Icon name={icon} size={27} color={key===active ? C.sky : C.tx2}/></Animated.View>
       <T v="label" numberOfLines={1} style={{color:key===active ? '#fff' : C.tx2}}>{label}</T>
     </Pressable>)}
   </View>;
@@ -338,7 +339,7 @@ export function Dock() {
         transitionProperty: ['height', 'left', 'right', 'bottom', 'borderRadius', 'opacity', 'transform'], transitionDuration: dur, transitionTimingFunction: TR.transitionTimingFunction,
       }]}
       pointerEvents={hidden ? 'none' : 'box-none'} aria-hidden={hidden} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}>
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill,{backgroundColor:C.glass}]}/>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill,{backgroundColor:C.s1}]}/>
       {has ? <Tint uri={cover} strong={expanded} /> : null}
       {has && (fullMounted||expanded) ? (
         <Animated.View pointerEvents={fullOn ? 'auto' : 'none'} aria-hidden={!fullOn} accessibilityElementsHidden={!fullOn} importantForAccessibility={fullOn ? 'auto' : 'no-hide-descendants'} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: DOCK.compact, opacity: fullOn ? 1 : 0, transform: [{ translateY: fullOn ? 0 : 24 }],
@@ -360,7 +361,7 @@ export function Dock() {
 const st = StyleSheet.create({
   nav:{position:'absolute',left:0,right:0,bottom:0,height:DOCK.compact,flexDirection:'row',paddingHorizontal:6},
   navBtn:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center',gap:5},
-  dock: { position: 'absolute', overflow: 'hidden', borderWidth:1,borderColor:'rgba(255,255,255,0.16)',backgroundColor:'rgba(0,0,0,0.5)', shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 30, shadowOffset: { width: 0, height: 14 }, elevation: 24 },
+  dock: { position: 'absolute', overflow: 'hidden', borderWidth:1,borderColor:'rgba(255,255,255,0.16)',backgroundColor:C.s1, shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 30, shadowOffset: { width: 0, height: 14 }, elevation: 24 },
   miniRow: { position: 'absolute', left: 0, right: 0, bottom: DOCK.compact, height: DOCK.mini-DOCK.compact, flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 14, paddingRight: 10 },
   ctl: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
   extra: { flex:1,minWidth:0,alignItems:'center',justifyContent:'center',gap:5,minHeight:62,paddingHorizontal:2 },

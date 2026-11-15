@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import {artistPhoto} from '@/api/lull';
 import { resetTo } from '@/nav';
 import { useState } from 'react';
 import { Platform, Pressable, TextInput, View } from 'react-native';
@@ -42,7 +43,7 @@ export default function Collection() {
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, rowGap: 18 }}>
       {items.map((it) => (
         <Press key={it.key} onPress={it.onPress} accessibilityRole="button" accessibilityLabel={it.title} outer={{ width: '47%', flexGrow: 1, maxWidth: '50%' }} style={{ gap: 10, alignItems: it.round ? 'center' : 'stretch' }}>
-          {it.round ? <Cover uri={it.cover} size="100%" radius={999} /> : it.cover}
+          {it.round ? <Cover uri={it.cover} fallbackUri={artistPhoto(it.key)} label={it.title} size="100%" radius={999} /> : it.cover}
           <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 16 }}>{it.title}</T>
         </Press>
       ))}
@@ -61,7 +62,7 @@ export default function Collection() {
         <View>
           {!q ? (
             <Pressable onPress={() => router.push('/favorites')} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 16, padding: 14, borderRadius: 26, backgroundColor: C.s1, marginBottom: 26 }}>
-              <View style={{ width: 56, height: 56, borderRadius: 20, backgroundColor: C.s2, alignItems: 'center', justifyContent: 'center' }}><Icon name="heart" /></View>
+              <View style={{ width: 56, height: 56, borderRadius: 20, backgroundColor:'rgba(255,96,127,0.13)', alignItems: 'center', justifyContent: 'center' }}><Icon name="heartF" size={28}/></View>
               <T style={{ flex: 1, fontFamily: F.bold, fontSize: 18 }}>Любимые треки</T>
               <T v="sub">{lib.liked.length || ''}</T><Icon name="chev" size={22} />
             </Pressable>

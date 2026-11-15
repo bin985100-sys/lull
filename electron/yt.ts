@@ -164,7 +164,8 @@ type Thumb = { url: string; width?: number; height?: number };
 
 export function bestThumb(list?: Thumb[] | null, size = 544): string | undefined {
   if (!list || list.length === 0) return undefined;
-  const sorted = [...list].sort((a, b) => (b.width ?? 0) - (a.width ?? 0));
+  const sorted = list.filter(t=>typeof t?.url==='string').sort((a, b) => (b.width ?? 0) - (a.width ?? 0));
+  if(!sorted.length)return undefined;
   let url = sorted[0].url;
   if (url.startsWith('//')) url = `https:${url}`;
   // У lh3.googleusercontent можно запросить нужный размер прямо в ссылке
@@ -189,6 +190,8 @@ const thumbsOfNode = (node: any): Thumb[] | undefined => {
   if (!node) return undefined;
   if (Array.isArray(node)) return node;
   if (Array.isArray(node.contents)) return node.contents;
+  if (Array.isArray(node.sources)) return node.sources;
+  if (node.image) return thumbsOfNode(node.image);
   if (node.thumbnail) return thumbsOfNode(node.thumbnail);
   return undefined;
 };

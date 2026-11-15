@@ -7,15 +7,15 @@ import { warm } from '@/api/lull';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { C } from '@/theme/tokens';
 import { Btn, IconBtn, ListSkeleton, Offline, Screen, Skeleton, T, TopBar } from '@/ui/kit';
-import { saveTracks } from './MusicActions';
+import { OfflineSaveButton } from './MusicActions';
 import { TrackRow } from './TrackRow';
-import { Icon } from '@/ui/Icon';
+import { Icon,type IconName } from '@/ui/Icon';
 import { Banner } from './Banner';
 
 type Props = {
   title: string;
   sub?: ReactNode;
-  cover?: { uri?: string; source?: any; collage?: (string | undefined)[]; wide?: boolean };
+  cover?: { uri?: string; source?: any; collage?: (string | undefined)[]; wide?: boolean;icon?:IconName;accent?:string };
   tracks?: Track[];
   loading?: boolean;
   error?: boolean;
@@ -34,7 +34,7 @@ export function CoverArt({ cover, size, radius = 34 }: { cover?: Props['cover'];
   const col = (cover?.collage || []).filter(Boolean).slice(0, 3) as string[];
   return (
     <View style={{ width: size, aspectRatio: 1, borderRadius: radius, overflow: 'hidden', backgroundColor: C.s2, alignSelf: 'center' }}>
-      {cover?.uri || cover?.source ? <Image source={cover.source ?? { uri: cover.uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={250} />
+      {cover?.icon ? <View style={[StyleSheet.absoluteFill,{alignItems:'center',justifyContent:'center',backgroundColor:(cover.accent || C.rose)+'22'}]}><Icon name={cover.icon} color={cover.accent} size={typeof size==='number' ? size*.42 : 80}/></View> : cover?.uri || cover?.source ? <Image source={cover.source ?? { uri: cover.uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={250} />
         : col.length ? (
           <View style={{ flex: 1, flexDirection: 'row', gap: 2 }}>
             <Image source={{ uri: col[0] }} style={{ flex: 1 }} contentFit="cover" />
@@ -71,7 +71,7 @@ export function ListPage(p: Props) {
         <IconBtn name="shuffle" label="Перемешать" size={58} iconSize={26} onPress={() => !disabled && player.play(tracks, undefined, { shuffle: true })} style={{ opacity: disabled ? 0.32 : 1 }} />
         {p.extraBtn}
       </View>
-      {Platform.OS !== 'web' && tracks.length > 0 && <Btn label="Скачать для офлайна" kind="dark" icon="download" onPress={() => void saveTracks(tracks)} />}
+      {Platform.OS !== 'web' && tracks.length > 0 && <OfflineSaveButton tracks={tracks}/>}
       {p.below}
       <View style={{ height: 18 }} />
       {p.error && !tracks.length ? <Offline onRetry={p.onRetry || (() => {})} /> : p.loading && !tracks.length ? <ListSkeleton n={6} /> : !tracks.length ? p.empty : (

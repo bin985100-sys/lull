@@ -29,7 +29,7 @@ async function get<T = any>(path: string, signal?: AbortSignal): Promise<T> {
 export function img(u?: string, size = 544): string | undefined {
   if (!u) return undefined;
   let url = u.replace(/=w\d+-h\d+/, `=w${size}-h${size}`).replace(/=s\d+$/, `=s${size}`);
-  if (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(url)) url = `${LULL_API}/api/img?u=${enc(url)}`;
+  if (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(url)) url = `${LULL_API}/api/img?u=${enc(url)}&v=2`;
   return url;
 }
 
@@ -50,7 +50,8 @@ const mapCard = (c: Raw): Card => ({
   track: c.track ? mapTrack(c.track, c.thumb) : undefined,
 });
 const mapSection = (s: Raw): Section => ({ title: s.title, subtitle: s.subtitle, layout: s.layout, items: (s.items || []).map(mapCard) });
-export const cardArtist = (c: Card): Artist => ({ id: c.id, name: c.title, handle: '', avatar: c.image, followers: 0, source: 'yt' });
+export const artistPhoto=(id:string)=>/^UC[\w-]{22}$/.test(id) ? `${LULL_API}/api/artist-photo/${enc(id)}` : undefined;
+export const cardArtist = (c: Card): Artist => ({ id: c.id, name: c.title, handle: '', avatar: c.image || artistPhoto(c.id), followers: 0, source: 'yt' });
 export const cardPlaylist = (c: Card): Playlist => ({ id: c.id, title: c.title, artist: c.subtitle ?? '', artistId: '', artwork: c.image, trackCount: 0, source: 'yt', kind: c.kind === 'album' ? 'album' : 'playlist' });
 
 export const streamUrlYt = (id: string) => `${LULL_API}/api/stream/${enc(id)}?q=aac`;

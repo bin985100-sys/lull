@@ -1,5 +1,6 @@
 import { Pressable, View } from 'react-native';
-import { T } from '@/ui/kit';
+import {useRef,useState} from 'react';
+import { Btn,T } from '@/ui/kit';
 import { closeSheet, openSheet, toast } from '@/ui/overlay';
 import { setSleep, useSleep } from '@/player/player';
 import { downloaded, saveDownload } from '@/player/downloads';
@@ -7,13 +8,21 @@ import { streamUrl, type Track } from '@/api/audius';
 import { streamUrlYt } from '@/api/lull';
 import { Icon } from '@/ui/Icon';
 
-export async function saveTracks(tracks: Track[]) {
+export async function saveTracks(tracks: Track[],progress?:(done:number)=>void) {
   let ok = 0;
   toast('Скачивание началось', 'download');
+  let done=0;
   for (const t of tracks) {
     try { if (!downloaded(t)) await saveDownload(t,t.source === 'yt' ? streamUrlYt(t.id) : streamUrl(t.id)); ok++; } catch {}
+    progress?.(++done);
   }
   toast(`Скачано ${ok} из ${tracks.length}`, ok === tracks.length ? 'check' : 'info');
+}
+export function OfflineSaveButton({tracks}:{tracks:Track[]}) {
+  const [done,setDone]=useState<number | null>(null);
+  const busy=useRef(false);
+  return <Btn label={done===null ? 'Скачать для офлайна' : `Скачиваем: ${done} из ${tracks.length}`} kind="dark" icon="download" disabled={done!==null} style={{marginTop:12}}
+    onPress={()=>{if(busy.current)return;busy.current=true;setDone(0);void saveTracks(tracks,setDone).catch(()=>toast('Не удалось начать скачивание','info')).finally(()=>{busy.current=false;setDone(null);});}}/>;
 }
 export function SleepButton() {
   const state = useSleep();

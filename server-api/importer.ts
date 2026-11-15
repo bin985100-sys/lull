@@ -110,7 +110,7 @@ function score(q: SourceTrack, t: Track) {
   const dur = q.durationSec && t.durationSec ? Math.max(0, 1 - Math.abs(q.durationSec - t.durationSec) / 20) : 0.6;
   return title * 0.55 + artist * 0.3 + dur * 0.15;
 }
-async function find(q: SourceTrack, requireArtist = false): Promise<Track | null> {
+export async function find(q: SourceTrack, requireArtist = false): Promise<Track | null> {
   const r = await search(`${q.artist} ${q.title}`.trim(), 'songs');
   let best: Track | null = null, bs = 0;
   for (const t of r.tracks.slice(0, 6)) {

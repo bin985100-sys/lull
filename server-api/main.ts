@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import { album, artist, charts, home, homeChips, playlist, search, setAuth, suggest, suggestRich, upNext } from '../electron/yt';
 import { storeGet, storeSet } from '../electron/store';
 import { SearchPrefixes } from './search-prefix';
+import {publicCharts,refreshCharts} from './charts';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
 import { matchFile, importStatus, startImport } from './importer';
@@ -50,7 +51,7 @@ async function route(name: string, arg: string, q: URLSearchParams, body: string
   switch (name) {
     case 'home': return home(q.get('chip') || undefined);
     case 'chips': return homeChips();
-    case 'charts': return charts();
+    case 'charts': return publicCharts();
     case 'search': {
       const query=q.get('q') ?? '', filter=(q.get('f') as any) || 'all';
       const result=await search(query,filter);
@@ -77,8 +78,10 @@ async function image(u: string, res: http.ServerResponse) {
     res.writeHead(400).end();
     return;
   }
-  const r = await fetch(u);
-  res.writeHead(r.status, { 'Content-Type': r.headers.get('content-type') ?? 'image/jpeg', 'Cache-Control': 'public, max-age=604800, immutable' });
+  let r = await fetch(u,{signal:AbortSignal.timeout(8000)});
+  if(!r.ok && /=(?:w\d+|s\d+)/.test(u)){await r.body?.cancel();r=await fetch(u.replace(/=(?:w\d+|s\d+).*$/,'=s256'),{signal:AbortSignal.timeout(8000)});}
+  if(!r.ok || !r.headers.get('content-type')?.startsWith('image/')){await r.body?.cancel();res.writeHead(r.ok ? 502 : r.status,{'Cache-Control':'no-store'}).end();return;}
+  res.writeHead(200, { 'Content-Type': r.headers.get('content-type') ?? 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
   res.end(Buffer.from(await r.arrayBuffer()));
 }
 
@@ -154,6 +157,13 @@ http
     if (api !== 'api') return void res.writeHead(404).end();
     try {
       if (name === 'img') return void (await image(url.searchParams.get('u') ?? '', res));
+      if(name==='artist-photo') {
+        const id=String(rest[0] || '');
+        if(!/^UC[\w-]{22}$/.test(id)){res.writeHead(404,{'Cache-Control':'no-store'}).end();return;}
+        const page=await artist(id);
+        if(!page.thumb){res.writeHead(404,{'Cache-Control':'no-store'}).end();return;}
+        return void await image(page.thumb,res);
+      }
       if (name === 'health') return void res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"ok":true}');
       let body = '';
       for await (const c of req) body += c;
@@ -187,4 +197,4 @@ http
       res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: (e as Error).message }));
     }
   })
-  .listen(PORT, '127.0.0.1', () => { console.log(`[api] Lull API на 127.0.0.1:${PORT}`); warmStream(); });
+  .listen(PORT, '127.0.0.1', () => { console.log(`[api] Lull API на 127.0.0.1:${PORT}`); warmStream(); if(!process.env.LULL_API_REGION_ONLY)void refreshCharts().catch(e=>console.warn('[charts]',e.message)); });
