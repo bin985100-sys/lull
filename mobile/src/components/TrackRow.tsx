@@ -25,15 +25,15 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
   const lit = useSharedValue(0);
   /* у первых трёх треков списка сервер заранее берёт ссылку на звук (в поиске — нет: каждая буква давала новые запросы) */
   useEffect(() => { const i = list.indexOf(track); if (!noWarm && i >= 0 && i < 3) warmSoon(track); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (isCur) lit.value = withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 800 })); }, [isCur, lit]);
+  useEffect(() => { if (isCur) lit.set(withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 800 }))); }, [isCur, lit]);
   /* прозрачность пишем обычным числом: «6e-8» из конца анимации ронял приложение на новых Android */
-  const bg = useAnimatedStyle(() => ({ backgroundColor: `rgba(255,255,255,${(Math.max(0, lit.value) * 0.1).toFixed(3)})` }));
+  const bg = useAnimatedStyle(() => ({ backgroundColor: `rgba(255,255,255,${(Math.max(0, lit.get()) * 0.1).toFixed(3)})` }));
   const play = () => { haptic(); player.play(list, track.id); };
   const more = () => { haptic(); openTrackActions(track, playlistId); };
 
   return (
     <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 66, borderRadius: 16, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
-      <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={more} delayLongPress={420} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 4 }}
+      <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={more} delayLongPress={420} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 6 }}
         accessibilityRole="button" accessibilityLabel={`${track.title}, ${track.artist}`} accessibilityHint="Двойное касание — слушать, удержание — меню трека"
         accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Меню трека' }]}
         onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'longpress' ? more() : play())}>
@@ -70,7 +70,7 @@ export function likeWithUndo(t: Track) {
 function Item({ icon, label, onPress }: { icon: any; label: string; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 56 }}>
-      <Icon name={icon} size={28} /><T style={{ fontSize: 16.5 }}>{label}</T>
+      <Icon name={icon} size={28} /><T style={{ fontSize: 16.5, flex: 1, paddingVertical: 12 }}>{label}</T>
     </Pressable>
   );
 }

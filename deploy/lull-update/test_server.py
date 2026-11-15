@@ -94,6 +94,35 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(s.ladder, 'order', return_value=['innertube']), patch.object(s, 'resolve_innertube', inner):
             self.assertEqual((await s.resolve_checked(VID, 'aac'))['client'], 'TV-SAMSUNG')
 
+    async def test_alternate_works_when_innertube_is_paused(self):
+        alternate = 'kJQP7kiw5Fk'
+        class Reply:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *args): pass
+            async def json(self): return {'ids': [alternate]}
+        class Session:
+            def get(self, *args, **kwargs): return Reply()
+        async def worker(vid, fmt, client):
+            if vid == VID: raise RuntimeError('Video unavailable in your country')
+            return {'checked': True, 'url': 'https://example.invalid/audio'}
+        with patch.object(s.ladder, 'order', side_effect=lambda: ['mweb']), patch.object(s, 'resolve_worker', worker), patch.object(s, 'session', Session()):
+            found = await s.resolve_checked(VID, 'aac')
+        self.assertEqual(found['mediaId'], alternate)
+        self.assertEqual(found['method'], 'mweb')
+
+    async def test_alternate_keeps_the_same_deadline(self):
+        class Reply:
+            async def __aenter__(self): await asyncio.sleep(20)
+            async def __aexit__(self, *args): pass
+        class Session:
+            def get(self, *args, **kwargs): return Reply()
+        async def worker(*args): raise RuntimeError('Video unavailable')
+        with patch.object(s.ladder, 'order', return_value=['mweb']), patch.object(s, 'resolve_worker', worker), patch.object(s, 'session', Session()), patch.object(s, 'RESOLVE_TIMEOUT', .03):
+            start = time.monotonic()
+            with self.assertRaisesRegex(RuntimeError, 'deadline'):
+                await s.resolve_checked(VID, 'aac')
+            self.assertLess(time.monotonic() - start, .2)
+
     async def test_partial_file_is_not_ready_or_evicted(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(s, 'PREP', Path(folder)), patch.object(s, 'PREP_MAX', 0):
             part = Path(folder) / f'aac-{VID}.part.m4a'; part.write_bytes(b'partial')

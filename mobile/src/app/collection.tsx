@@ -20,15 +20,15 @@ export default function Collection() {
   const empty = !lib.playlists.length && !lib.liked.length && !lib.savedPlaylists.length && !lib.favArtists.length;
   const head = (
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10, marginBottom: 18 }}>
-      <T v="h1" accessibilityRole="header">Коллекция</T>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
+      <T v="h1" accessibilityRole="header" style={{ flex: 1, minWidth: 0, marginRight: 12 }}>Коллекция</T>
+      <View style={{ flexDirection: 'row', gap: 10, flexShrink: 0 }}>
 
         <IconBtn name="download" label="Перенести музыку из другого сервиса" onPress={() => router.push('/import')} />
         <IconBtn name="plus" label="Новый плейлист" onPress={() => router.push('/new-playlist')} />
       </View>
     </View>
   );
-  const offline = Platform.OS !== 'web' && <Btn label="Скачанная музыка" icon="download" kind="dark" onPress={() => router.push('/downloads')}/>;
+  const offline = Platform.OS !== 'web' && <Btn label="Скачанная музыка" icon="download" kind="dark" style={{ marginBottom: 16 }} onPress={() => router.push('/downloads')}/>;
   if (empty) return (
     <Screen>{head}{offline}
       <Empty icon="stack" title="Здесь пока пусто" text="Сохраняй треки, плейлисты и исполнителей — они появятся здесь.">

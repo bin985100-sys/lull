@@ -27,7 +27,7 @@ export function CardItem({ c, w = 150 }: { c: Card; w?: number }) {
         <View style={{ width: '100%', aspectRatio: 16 / 9, borderRadius: 20, overflow: 'hidden' }}><Cover uri={c.image} size="100%" radius={0} style={{ aspectRatio: 16 / 9 }} /></View>
       ) : <Cover uri={c.image} size={w} radius={round ? w / 2 : 24} />}
       <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 15.5, textAlign: round ? 'center' : 'left' }}>{c.title}</T>
-      {c.subtitle && !round ? <T v="small" numberOfLines={1} style={{ marginTop: -4 }}>{c.subtitle}</T> : null}
+      {c.subtitle && !round ? <T v="small" numberOfLines={1}>{c.subtitle}</T> : null}
     </Press>
   );
 }

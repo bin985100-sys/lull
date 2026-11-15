@@ -386,15 +386,17 @@ async def resolve_worker(vid: str, fmt: str, client: str) -> dict:
 async def resolve_checked(vid: str, fmt: str) -> dict:
     """Bounded hedged race: advance on failure, cancel losers, cap total latency."""
     errors: list[str] = []
-    async def one(client: str):
+    unavailable = asyncio.Event()
+    async def one(client: str, media_id: str | None = None):
         started = time.monotonic()
+        target = media_id or vid
         try:
             if client == "innertube":
                 if fmt != "aac":
                     return
-                s = await resolve_innertube(vid)
+                s = await resolve_innertube(target)
             else:
-                s = await resolve_worker(vid, fmt, client)
+                s = await resolve_worker(target, fmt, client)
             if not s.get("checked") and not await verify(s):
                 raise RuntimeError("403 or incomplete audio probe")
         except Exception as e:
@@ -402,6 +404,8 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             # «недоступно» запасной клиент (tv и др.) пишет и про нормальные видео — решает только итог по всем
             errors.append(f"{client or 'default'}: {msg}")
             low = msg.lower()
+            if media_id is None and any(x in low for x in ("unavailable", "not available", "country", "claimed content")):
+                unavailable.set()
             if "unavailable" not in low and "not available" not in low and "claimed content" not in low:
                 ladder.fail(client, msg)
             return
@@ -409,13 +413,34 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
         s["method"] = client
         if client != "innertube":
             s["client"] = client
+        if media_id:
+            s["mediaId"] = media_id
         return s
+
+    async def other_recording():
+        # Version discovery must not depend on the Innertube audio method being
+        # healthy: a bot cooldown there used to disable all alternate recordings.
+        try:
+            assert session is not None
+            async with session.get(f"{API_LOCAL}/internal/stream/{vid}?alternatives=1", timeout=ClientTimeout(total=4)) as response:
+                result = await response.json()
+            ids = [x for x in result.get("ids", []) if valid_vid(x) and x != vid][:3]
+            clients = [x for x in ladder.order() if x != "innertube"][:2]
+            for candidate in ids:
+                for client in clients:
+                    found = await one(client, candidate)
+                    if found:
+                        log.info("alternate %s -> %s via %s", vid, candidate, client or "default")
+                        return found
+        except Exception as e:
+            errors.append(f"alternate: {e}")
 
     t0 = time.monotonic()
     order = ladder.order()
     if fmt != "aac" and "innertube" in order:
         order.remove("innertube")
     pending = set()
+    alternate_started = False
     try:
         while order or pending:
             remaining = RESOLVE_TIMEOUT - (time.monotonic() - t0)
@@ -432,6 +457,9 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 if s:
                     log.info("race %s: %s %.2fs", vid, s.get("method") or "default", time.monotonic() - t0)
                     return s
+            if unavailable.is_set() and not alternate_started and len(pending) < RACE_WIDTH:
+                alternate_started = True
+                pending.add(asyncio.create_task(other_recording()))
             # A failure advances immediately; a slow attempt gets a bounded hedge.
             if order and len(pending) < RACE_WIDTH:
                 pending.add(asyncio.create_task(one(order.pop(0))))

@@ -28,7 +28,12 @@ const TV: Record<V, any> = {
   label: { fontFamily: F.semi, fontSize: 12.5, lineHeight: 15, color: C.tx2 },
 };
 export function T({ v = 'title', style, ...p }: TextProps & { v?: V }) {
-  return <Text {...p} style={[{ color: C.tx }, TV[v], style]} />;
+  const custom = StyleSheet.flatten(style);
+  const fontSize = custom?.fontSize ?? TV[v].fontSize;
+  // Larger titles must reserve their own line box instead of inheriting the
+  // smaller variant's height (especially in wrapped Russian headings).
+  const lineHeight = custom?.lineHeight ?? Math.max(TV[v].lineHeight, Math.ceil(fontSize * 1.25));
+  return <Text {...p} style={[{ color: C.tx }, TV[v], style, { lineHeight }]} />;
 }
 
 /* ---------- нажатие: лёгкое сжатие через CSS-переход, без работы JS на каждом кадре ---------- */
@@ -112,9 +117,9 @@ export function TopBar({ title, right, onBack, close }: { title?: string; right?
 export function SectionHead({ title, more, onMore }: { title: string; more?: string; onMore?: () => void }) {
   return (
     <View style={s.sec}>
-      <T v="h2" accessibilityRole="header">{title}</T>
+      <T v="h2" accessibilityRole="header" style={{ flex: 1, minWidth: 0 }}>{title}</T>
       {onMore ? (
-        <Pressable onPress={onMore} hitSlop={10} accessibilityRole="button" accessibilityLabel={more ? `${title}: ${more}` : `${title}: все`} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <Pressable onPress={onMore} hitSlop={10} accessibilityRole="button" accessibilityLabel={more ? `${title}: ${more}` : `${title}: все`} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           {more ? <T v="sub">{more}</T> : null}<Icon name="chev" size={20} color={C.tx2} />
         </Pressable>
       ) : null}
@@ -145,8 +150,8 @@ export function Offline({ onRetry }: { onRetry: () => void }) {
 
 export function Skeleton({ h, w = '100%', r = 18, style }: { h: number; w?: number | `${number}%`; r?: number; style?: any }) {
   const o = useSharedValue(0.45);
-  useEffect(() => { o.value = withRepeat(withTiming(1, { duration: 900 }), -1, true); }, [o]);
-  const a = useAnimatedStyle(() => ({ opacity: o.value }));
+  useEffect(() => { o.set(withRepeat(withTiming(1, { duration: 900 }), -1, true)); }, [o]);
+  const a = useAnimatedStyle(() => ({ opacity: o.get() }));
   return <Animated.View style={[{ height: h, width: w, borderRadius: r, backgroundColor: C.s2 }, a, style]} />;
 }
 export function ListSkeleton({ n = 4 }: { n?: number }) {
