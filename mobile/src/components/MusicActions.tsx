@@ -5,6 +5,7 @@ import { setSleep, useSleep } from '@/player/player';
 import { downloaded, saveDownload } from '@/player/downloads';
 import { streamUrl, type Track } from '@/api/audius';
 import { streamUrlYt } from '@/api/lull';
+import { Icon } from '@/ui/Icon';
 
 export async function saveTracks(tracks: Track[]) {
   let ok = 0;
@@ -17,8 +18,11 @@ export async function saveTracks(tracks: Track[]) {
 export function SleepButton() {
   const state = useSleep();
   const label = state.endTrack ? 'До конца трека' : state.deadline ? 'До ' + new Date(state.deadline).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : 'Таймер сна';
-  return <Pressable accessibilityRole="button" onPress={() => openSheet(() => <View><T v="h2">Таймер сна</T>
+  return <Pressable accessibilityRole="button" accessibilityLabel={state.endTrack || state.deadline ? `Таймер сна: ${label}` : label} onPress={() => openSheet(() => <View><T v="h2">Таймер сна</T>
     {([15,30,45,'track',null] as const).map(m => <Pressable key={String(m)} style={{paddingVertical:14}} onPress={() => { setSleep(m); closeSheet(); }}>
       <T>{m === null ? 'Выключить' : m === 'track' ? 'До конца трека' : m + ' минут'}</T></Pressable>)}</View>)}
-    style={{alignItems:'center',justifyContent:'center',padding:6}}><T>{label}</T></Pressable>;
+    style={{flex:1,minWidth:0,alignItems:'center',justifyContent:'center',paddingHorizontal:2,gap:5,minHeight:62}}>
+      <Icon name="clock" size={24} color={state.endTrack || state.deadline ? '#b4eaff' : undefined}/>
+      <T v="small" numberOfLines={1} style={{fontSize:11.5}}>{label}</T>
+    </Pressable>;
 }

@@ -55,7 +55,7 @@ export default function Collection() {
         <TextInput value={q} onChangeText={setQ} placeholder="Найти в коллекции" placeholderTextColor={C.tx3} style={s.input} accessibilityLabel="Найти в коллекции" />
       </View>
       <View style={{ marginTop: 14, marginBottom: 22 }}>
-        <Segmented label="Разделы коллекции" value={tab} onChange={setTab} items={[['pl', 'Плейлисты'], ['saved', 'Сохранённое'], ['ar', 'Артисты']]} />
+        <Segmented label="Разделы коллекции" value={tab} onChange={setTab} items={[['pl', 'Плейлисты'], ['saved', 'Сохранено'], ['ar', 'Артисты']]} />
       </View>
       {tab === 'pl' ? (
         <View>

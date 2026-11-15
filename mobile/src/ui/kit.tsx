@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { type ReactNode, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, type PressableProps, ScrollView, type ScrollViewProps, StyleSheet, Text, type TextProps, useWindowDimensions, View, type ViewStyle } from 'react-native';
-import Animated, { cubicBezier, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, DOCK, EASE, F, R } from '@/theme/tokens';
@@ -40,6 +41,7 @@ export function T({ v = 'title', style, ...p }: TextProps & { v?: V }) {
 const PRESS_EASE = cubicBezier(EASE[0], EASE[1], EASE[2], EASE[3]);
 export function Press({ style, outer, children, scaleTo = 0.96, onPress, ...p }: PressableProps & { style?: any; outer?: any; scaleTo?: number; children?: ReactNode }) {
   const [down, setDown] = useState(false);
+  const reduced=useReducedMotion();
   return (
     <Pressable
       {...p}
@@ -48,7 +50,7 @@ export function Press({ style, outer, children, scaleTo = 0.96, onPress, ...p }:
       onPressIn={(e) => { setDown(true); p.onPressIn?.(e); }}
       onPressOut={(e) => { setDown(false); p.onPressOut?.(e); }}
     >
-      <Animated.View style={[style, { transform: [{ scale: down ? scaleTo : 1 }], transitionProperty: 'transform', transitionDuration: down ? 90 : 260, transitionTimingFunction: PRESS_EASE }]}>{children}</Animated.View>
+      <Animated.View style={[style, { transform: [{ scale: down && !reduced ? scaleTo : 1 }], transitionProperty: 'transform', transitionDuration: reduced ? 0 : down ? 90 : 260, transitionTimingFunction: PRESS_EASE }]}>{children}</Animated.View>
     </Pressable>
   );
 }
@@ -86,7 +88,12 @@ export function Cover({ uri, size, radius = R.cover, style, source }: { uri?: st
 /* ---------- экран со скроллом: отступ под капсулу ---------- */
 /* В браузере стек экранов без анимации переходов — добавляем свою: экран мягко въезжает */
 const WEB_ENTER = Platform.OS === 'web' ? slideIn(22, 1, 320) : undefined;
+function Ambient() {
+  return <LinearGradient pointerEvents="none" colors={['rgba(42,65,106,0.28)','rgba(23,30,55,0.10)','transparent']}
+    start={{x:0,y:0}} end={{x:1,y:1}} style={{position:'absolute',top:0,left:0,right:0,height:380}}/>;
+}
 export function Screen({ children, dock = true, scroll = true, style, ...p }: ScrollViewProps & { dock?: boolean; scroll?: boolean; children?: ReactNode }) {
+  const reduced=useReducedMotion();
   const ins = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   /* на планшете колонка контента не шире 720, в горизонтали учитываем вырез сбоку */
@@ -94,9 +101,10 @@ export function Screen({ children, dock = true, scroll = true, style, ...p }: Sc
   const hasTrack = usePlayer((x) => x.index >= 0);
   const pb = dock ? (hasTrack ? DOCK.mini : DOCK.compact) + Math.max(ins.bottom, 14) + 30 : Math.max(ins.bottom, 14) + 24;
   const pad = { paddingTop: Math.max(ins.top, 18) + 14, paddingBottom: pb, paddingHorizontal: side };
-  if (!scroll) return <Animated.View entering={WEB_ENTER} style={[{ flex: 1, backgroundColor: C.bg }, pad, style as any]}>{children}</Animated.View>;
+  if (!scroll) return <Animated.View entering={reduced ? undefined : WEB_ENTER} style={[{ flex: 1, backgroundColor: C.bg }, pad, style as any]}><Ambient/>{children}</Animated.View>;
   return (
-    <Animated.View entering={WEB_ENTER} style={{ flex: 1, backgroundColor: C.bg }}>
+    <Animated.View entering={reduced ? undefined : WEB_ENTER} style={{ flex: 1, backgroundColor: C.bg }}>
+      <Ambient/>
       <ScrollView {...p} style={{ flex: 1 }} contentContainerStyle={[pad, style as any]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {children}
       </ScrollView>
