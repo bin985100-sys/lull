@@ -4,12 +4,13 @@
  * Слушает 127.0.0.1:8787; наружу его отдаёт Python-часть Lull Relay по /api/*.
  */
 import './proxy';
-import { alternatives, rememberTracks } from './alternative';
+import { alternativeHint, alternatives, rememberTracks } from './alternative';
 import dns from 'node:dns';
 import http from 'node:http';
 import fs from 'node:fs';
 import { album, artist, charts, home, homeChips, playlist, search, setAuth, suggest, suggestRich, upNext } from '../electron/yt';
 import { storeGet, storeSet } from '../electron/store';
+import { SearchPrefixes } from './search-prefix';
 import { lyrics } from '../electron/lyrics';
 import type { Track } from '../shared/types';
 import { matchFile, importStatus, startImport } from './importer';
@@ -34,7 +35,7 @@ export function cookieHeader(netscape: string): string {
   return [...out].map(([k, v]) => `${k}=${v}`).join('; ');
 }
 try {
-  if (fs.existsSync(COOKIES)) {
+  if (process.env.LULL_YT_USE_COOKIES === '1' && fs.existsSync(COOKIES)) {
     const c = cookieHeader(fs.readFileSync(COOKIES, 'utf8'));
     if (c) { await setAuth(c); console.log(`[api] аккаунт YouTube подключён (${c.split('; ').length} cookies)`); }
   }
@@ -42,6 +43,7 @@ try {
 /* Телефонам нужен AAC (m4a) — он играет везде и начинается быстрее */
 storeSet('settings', { ...(storeGet<Record<string, unknown>>('settings') ?? {}), quality: 'aac' });
 const cache = new Map<string, { t: number; body: string }>();
+const prefixes = new SearchPrefixes(storeGet<Track[]>('catalog-search-prefixes') ?? []);
 const TTL: Record<string, number> = { home: 10, chips: 60, charts: 30, search: 10, suggest: 30, 'suggest-rich': 30, album: 60, playlist: 15, artist: 30, upnext: 30, lyrics: 24 * 60 };
 
 async function route(name: string, arg: string, q: URLSearchParams, body: string): Promise<unknown> {
@@ -49,7 +51,16 @@ async function route(name: string, arg: string, q: URLSearchParams, body: string
     case 'home': return home(q.get('chip') || undefined);
     case 'chips': return homeChips();
     case 'charts': return charts();
-    case 'search': return search(q.get('q') ?? '', (q.get('f') as any) || 'all');
+    case 'search': {
+      const query=q.get('q') ?? '', filter=(q.get('f') as any) || 'all';
+      const result=await search(query,filter);
+      // Learn the provider's main recording, rather than every low-ranked hit.
+      if(result.top?.track) {
+        prefixes.learn([result.top.track]);
+        storeSet('catalog-search-prefixes',prefixes.snapshot());
+      }
+      return {...result, completions:filter==='all' || filter==='songs' ? prefixes.complete(query,result) : []};
+    }
     case 'suggest': return suggest(q.get('q') ?? '');
     case 'suggest-rich': return suggestRich(q.get('q') ?? '');
     case 'album': return album(arg);
@@ -116,7 +127,11 @@ http
     if (api === 'internal' && name === 'stream') {
       const t0 = Date.now();
       try {
-        if (url.searchParams.has('alternatives')) return json(res,{ ids: await alternatives(String(rest[0])) });
+        if (url.searchParams.has('alternatives')) {
+          const id=String(rest[0]);
+          const ids=await alternatives(id);
+          return json(res,url.searchParams.has('details') ? {ids,track:alternativeHint(id)} : {ids});
+        }
         if (url.searchParams.has('state')) return json(res, streamState());
         const vid = String(rest[0] || '').slice(0, 20);
         if (url.searchParams.get('diag')) return json(res, await diagClients(vid));

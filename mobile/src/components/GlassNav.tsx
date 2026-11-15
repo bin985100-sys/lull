@@ -18,15 +18,13 @@ const spring = {damping:21,stiffness:260,mass:0.8};
 
 function GlassTab({ item, selected, onSelect }: { item: typeof items[number]; selected: boolean; onSelect: (key: DockTab) => void }) {
   const reduced = useReducedMotion();
-  const focus = useSharedValue(selected ? 1 : 0);
   const press = useSharedValue(1);
-  useEffect(()=>{focus.set(reduced ? Number(selected) : withSpring(Number(selected),spring));},[selected,reduced,focus]);
-  const iconStyle=useAnimatedStyle(()=>({transform:[{translateY:-2*focus.get()},{scale:press.get()*(1+focus.get()*0.06)}]}));
+  const iconStyle=useAnimatedStyle(()=>({transform:[{scale:press.get()}]}));
   return <Pressable accessibilityRole="tab" accessibilityState={{selected}} aria-selected={selected} accessibilityLabel={item.label}
     onPress={()=>{haptic();onSelect(item.key);}}
     onPressIn={()=>press.set(reduced ? 1 : withTiming(.88,{duration:100}))}
     onPressOut={()=>press.set(reduced ? 1 : withSpring(1,spring))} style={styles.tab}>
-    <Animated.View style={iconStyle}><Icon name={item.icon} size={27} color={selected ? '#b4eaff' : '#aab1c1'}/></Animated.View>
+    <Animated.View style={iconStyle}><Icon name={item.icon} size={27} color="#aab1c1"/></Animated.View>
     <T v="label" numberOfLines={1} style={{fontSize:11.5,fontFamily:selected ? F.bold : F.semi,color:selected ? '#f4fbff' : '#aab1c1'}}>{item.label}</T>
   </Pressable>;
 }
@@ -44,25 +42,35 @@ export function GlassNav({ active, onSelect, blurTarget }: { active: DockTab | n
   },[index,reduced,position,stretch]);
   const unit=Math.max(0,(width-12)/3);
   const lens=useAnimatedStyle(()=>({transform:[{translateX:position.get()*unit},{scaleX:stretch.get()}]}));
-  return <View accessibilityRole="tablist" accessibilityLabel="Основная навигация" style={[styles.nav,active===null&&{backgroundColor:'#000'}]}
+  const underLens=useAnimatedStyle(()=>({transform:[{translateX:-position.get()*unit-2}]}));
+  return <View accessibilityRole="tablist" accessibilityLabel="Основная навигация" style={styles.nav}
     onLayout={e=>setWidth(e.nativeEvent.layout.width)}>
     {width>0 && active ? <Animated.View pointerEvents="none" style={[styles.lens,{width:Math.max(0,unit-4)},lens]}>
       <GlassLens target={blurTarget}/>
-      <LinearGradient colors={['rgba(187,221,255,0.22)','rgba(255,255,255,0.08)','rgba(114,175,255,0.14)']}
+      <LinearGradient colors={['rgba(255,255,255,0.18)','rgba(255,255,255,0.06)','rgba(255,255,255,0.10)']}
         start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>
-      <LinearGradient colors={['transparent','rgba(141,234,255,0.85)','rgba(233,187,255,0.65)','transparent']}
+      <LinearGradient colors={['transparent','rgba(255,255,255,0.70)','rgba(255,255,255,0.40)','transparent']}
         start={{x:0,y:0}} end={{x:1,y:0}} style={styles.topLight}/>
-      <LinearGradient colors={['transparent','rgba(141,234,255,0.36)','rgba(233,187,255,0.48)','transparent']}
+      <LinearGradient colors={['transparent','rgba(255,255,255,0.16)','rgba(255,255,255,0.24)','transparent']}
         start={{x:0,y:0}} end={{x:1,y:0}} style={styles.bottomLight}/>
     </Animated.View> : null}
     {items.map(item=><GlassTab key={item.key} item={item} selected={item.key===active} onSelect={onSelect}/>)}
+    {width>0 && active ? <Animated.View pointerEvents="none" accessible={false} aria-hidden style={[styles.mask,{width:Math.max(0,unit-4)},lens]}>
+      <Animated.View style={[{position:'absolute',top:1,width:width-12,height:DOCK.compact-16,flexDirection:'row'},underLens]}>
+        {items.map(item=><View key={item.key} style={styles.tab}>
+          <Icon name={item.icon} size={27} color="#35baff"/>
+          <T v="label" numberOfLines={1} style={{fontSize:11.5,color:'transparent'}}>{item.label}</T>
+        </View>)}
+      </Animated.View>
+    </Animated.View> : null}
   </View>;
 }
 
 const styles=StyleSheet.create({
   nav:{position:'absolute',left:0,right:0,bottom:0,height:DOCK.compact,flexDirection:'row',paddingHorizontal:6,paddingVertical:8},
   tab:{flex:1,minWidth:0,minHeight:48,alignItems:'center',justifyContent:'center',gap:5},
-  lens:{position:'absolute',left:8,top:7,bottom:7,borderRadius:999,overflow:'hidden',borderWidth:1,borderColor:'rgba(213,235,255,0.22)',backgroundColor:'rgba(140,181,226,0.08)'},
+  lens:{position:'absolute',left:8,top:7,bottom:7,borderRadius:999,overflow:'hidden',borderWidth:1,borderColor:'rgba(255,255,255,0.24)',backgroundColor:'rgba(255,255,255,0.05)'},
+  mask:{position:'absolute',left:8,top:7,bottom:7,borderRadius:999,overflow:'hidden'},
   topLight:{position:'absolute',left:18,right:18,top:0,height:1.5},
   bottomLight:{position:'absolute',left:18,right:18,bottom:0,height:1},
 });

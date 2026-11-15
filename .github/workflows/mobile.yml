@@ -26,6 +26,9 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Тесты входа и синхронизации
         run: node scripts/sync.test.mjs
+      - name: Тесты поиска и резервных записей
+        working-directory: .
+        run: node --test server-api/alternative.test.mjs server-api/search-prefix.test.mjs
       - name: Тесты плеера
         run: node scripts/player.test.mjs
       - name: Тесты локального кэша звука

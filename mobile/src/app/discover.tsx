@@ -4,18 +4,16 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { MOODS } from '@/api/audius';
 import { lull } from '@/api/lull';
-import { MIXES } from '@/api/mixes';
 import { useData } from '@/api/useData';
 import { CardRail } from '@/components/Cards';
 import { TrackRow } from '@/components/TrackRow';
 import { C } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
-import { ListSkeleton, Offline, Press, Screen, SectionHead, Skeleton, T } from '@/ui/kit';
+import { Btn, ListSkeleton, Offline, Press, Screen, SectionHead, Skeleton, T } from '@/ui/kit';
 
 export default function Discover() {
   const charts = useData('charts', (s) => lull.charts(s));
   const home = useData('home', (s) => lull.home(undefined, s));
-  const indie = useData('mix:underground', MIXES.underground.load);
   const trending = charts.data?.find((x) => x.layout === 'tracks');
   const releases = charts.data?.find((x) => x.layout === 'cards' && x.items[0]?.kind === 'album');
   const pls = home.data?.filter((x) => x.layout === 'cards' && x.items[0]?.kind === 'playlist') ?? [];
@@ -52,7 +50,7 @@ export default function Discover() {
 
         <View>
           <SectionHead title="Независимые артисты" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'underground' } })} />
-          {indie.loading && !indie.data ? <ListSkeleton n={3} /> : (indie.data || []).slice(0, 4).map((t) => <TrackRow key={t.id} track={t} list={indie.data!} sub />)}
+          <Btn label="Открыть независимую музыку" kind="dark" onPress={()=>router.push({pathname:'/mix/[id]',params:{id:'underground'}})}/>
         </View>
       </View>
     </Screen>

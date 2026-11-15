@@ -120,6 +120,9 @@ export async function forYou(s: AbortSignal, seed = seedNow()): Promise<Track[]>
   const lib = useLibrary.getState();
   const scored = artistScores();
   if (!scored.length) {
+    const charts=await safe(lull.charts(s),[]);
+    const popular=charts.filter(section=>section.layout==='tracks').flatMap(section=>section.items).flatMap(card=>card.track ? [card.track] : []);
+    if(popular.length)return cleanup(popular);
     const home = await lull.home(undefined, s);
     return cleanup(mix(home.flatMap((x) => x.items).filter((c) => c.track).map((c) => c.track!), r));
   }
@@ -148,6 +151,18 @@ export async function forYou(s: AbortSignal, seed = seedNow()): Promise<Track[]>
     { list: discovery, w: (1 - f) * 0.8 },
     { list: mix(night, r), w: (1 - f) * 0.2 + 0.05 },
   ], 60));
+}
+
+/** Continue the listener's taste, rather than labeling an anonymous home feed as personal. */
+export async function recommended(s: AbortSignal): Promise<Track[]> {
+  const lib=useLibrary.getState();
+  const seed=lib.history[0]?.track || lib.liked[0];
+  if(seed?.source==='yt'){
+    const radio=await safe(lull.upNext(seed.id,s),[] as Track[]);
+    const next=cleanup(radio.filter(track=>track.id!==seed.id));
+    if(next.length)return next;
+  }
+  return forYou(s);
 }
 
 /* Микс исполнителя: его хиты вперемешку с похожими исполнителями */

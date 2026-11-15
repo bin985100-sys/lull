@@ -28,13 +28,13 @@ export default function Listen() {
   const cur = usePlayer((s) => currentTrack(s));
   const playing = usePlayer((s) => s.playing);
   const last = cur ?? history[0]?.track;
-  const trend = useData('mix:recommended', MIXES.recommended.load);
+  const recommendationSeed=history[0]?.track.artistId || history[0]?.track.id || 'new';
+  const trend = useData('mix:recommended:'+recommendationSeed, MIXES.recommended.load);
   useMixSeed((x) => x.n);
   const fy = getMix('foryou');
   const mix = useData('mix:' + fy.id, fy.load);
   const charts = useData('charts', (sg) => lull.charts(sg));
   const home = useData('home', (sg) => lull.home(undefined, sg));
-  const indie = useData('mix:underground', MIXES.underground.load);
   const trending = charts.data?.find((x) => x.layout === 'tracks');
   const trTracks = trending?.items.filter((c) => c.track).map((c) => c.track!) ?? [];
   const releases = charts.data?.filter((x) => x.layout === 'cards' && x.items.length) ?? [];
@@ -64,8 +64,6 @@ export default function Listen() {
           </View>
         ) : null}
 
-        <Insights />
-
         <Focus onPlayForYou={() => mix.data && player.play(mix.data)} />
 
         <View>
@@ -93,19 +91,13 @@ export default function Listen() {
 
         {shelves.length ? <Sections sections={shelves} max={4} /> : null}
 
-        {indie.data?.length ? (
-          <View>
-            <SectionHead title="Независимые артисты" more="Все" onMore={() => router.push({ pathname: '/mix/[id]', params: { id: 'underground' } })} />
-            {indie.data.slice(0, 4).map((t) => <TrackRow key={t.id} track={t} list={indie.data!} sub right="plus" />)}
-          </View>
-        ) : null}
-
         {recent.length >= 3 ? (
           <View>
             <SectionHead title="Ты недавно слушал" more="История" onMore={() => router.push('/history')} />
             <CardRail items={recent.map((t) => ({ kind: 'track' as const, id: t.id, title: t.title, subtitle: t.artist, image: t.artworkLarge || t.artwork, track: t }))} />
           </View>
         ) : null}
+        <Insights />
       </View>
     </Screen>
   );

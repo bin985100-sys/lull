@@ -346,7 +346,7 @@ export function Dock({ blurTarget }: { blurTarget?: GlassTarget }) {
       }]}
       pointerEvents={hidden ? 'none' : 'box-none'} aria-hidden={hidden} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}>
       <GlassSurface target={blurTarget} expanded={expanded}/>
-      {has && expanded ? <Tint uri={cover} strong={expanded} /> : null}
+      {has ? <Tint uri={cover} strong={expanded} /> : null}
       {has && (fullMounted||expanded) ? (
         <Animated.View pointerEvents={fullOn ? 'auto' : 'none'} aria-hidden={!fullOn} accessibilityElementsHidden={!fullOn} importantForAccessibility={fullOn ? 'auto' : 'no-hide-descendants'} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: DOCK.compact, opacity: fullOn ? 1 : 0, transform: [{ translateY: fullOn ? 0 : 24 }],
           transitionProperty: ['opacity', 'transform'], transitionDuration: reduced ? 0 : fullOn ? 420 : 240, transitionDelay: fullOn && !reduced ? 120 : 0, transitionTimingFunction: TR.transitionTimingFunction }}>
@@ -365,7 +365,7 @@ export function Dock({ blurTarget }: { blurTarget?: GlassTarget }) {
 }
 
 const st = StyleSheet.create({
-  dock: { position: 'absolute', overflow: 'hidden', borderWidth:1,borderColor:'rgba(202,225,255,0.20)',backgroundColor:'rgba(19,24,36,0.30)', shadowColor: '#07162e', shadowOpacity: 0.6, shadowRadius: 30, shadowOffset: { width: 0, height: 14 }, elevation: 24 },
+  dock: { position: 'absolute', overflow: 'hidden', borderWidth:1,borderColor:'rgba(255,255,255,0.16)',backgroundColor:'rgba(0,0,0,0.5)', shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 30, shadowOffset: { width: 0, height: 14 }, elevation: 24 },
   miniRow: { position: 'absolute', left: 0, right: 0, bottom: DOCK.compact, height: DOCK.mini-DOCK.compact, flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 14, paddingRight: 10 },
   ctl: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
   extra: { flex:1,minWidth:0,alignItems:'center',justifyContent:'center',gap:5,minHeight:62,paddingHorizontal:2 },

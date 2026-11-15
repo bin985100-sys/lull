@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
 import { lull } from '@/api/lull';
@@ -21,11 +21,25 @@ export default function Search() {
   const [debounced, setDebounced] = useState('');
   const [f, setF] = useState<Filter>('all');
   const recent = useLibrary((x) => x.recentSearches);
+  const history = useLibrary((x) => x.history);
+  const liked = useLibrary((x) => x.liked);
+  const playlists = useLibrary((x) => x.playlists);
+  const local = useMemo(() => {
+    const prefix=q.trim().normalize('NFKC').toLowerCase();
+    if(prefix.length<2 || (f!=='all' && f!=='tracks'))return [];
+    const seen=new Set<string>();
+    return [...history.map(h=>h.track),...liked,...playlists.flatMap(p=>p.tracks)].filter(t=>{
+      if(seen.has(t.id))return false;
+      seen.add(t.id);
+      return t.title.normalize('NFKC').toLowerCase().startsWith(prefix);
+    }).slice(0,4);
+  },[q,f,history,liked,playlists]);
   useEffect(() => { const t = setTimeout(() => setDebounced(q.trim()), 350); return () => clearTimeout(t); }, [q]);
   /* вкладки ищут отдельно (раньше просто фильтровали общую выдачу — в «Треках» оставалось 3–5 песен) */
   const sf = ({ all: 'all', tracks: 'songs', albums: 'albums', artists: 'artists' } as const)[f];
   const res = useData(debounced ? `lsearch:${sf}:${debounced.toLowerCase()}` : null, (sig) => lull.search(debounced, sig, sf));
-  const d = res.data;
+  const d = q.trim()===debounced && res.data?.query===debounced && res.data.filter===sf ? res.data : undefined;
+  const completions=d?.completions.filter(t=>!local.some(l=>l.id===t.id)) ?? [];
   const nothing = d && !d.tracks.length && !d.artists.length && !d.albums.length && !d.playlists.length;
   const show = (k: Filter) => f === 'all' || f === k;
   const collections = d ? [...d.albums, ...(f === 'albums' ? d.playlists : [])] : [];
@@ -44,6 +58,8 @@ export default function Search() {
       <View style={{ marginTop: 16, marginBottom: 20 }}>
         <Segmented label="Фильтр" value={f} onChange={setF} items={[['all', 'Всё'], ['tracks', 'Треки'], ['albums', 'Альбомы'], ['artists', 'Артисты']]} />
       </View>
+      {local.length ? <View style={{marginBottom:24}}><SectionHead title="Из вашей музыки"/>{local.map(t=><TrackRow key={t.id} track={t} list={local} sub noWarm/>)}</View> : null}
+      {completions.length ? <View style={{marginBottom:24}}><SectionHead title="Возможно, вы ищете"/>{completions.map(t=><TrackRow key={t.id} track={t} list={completions} sub noWarm/>)}</View> : null}
 
       {!debounced ? (
         recent.length ? (
@@ -85,7 +101,7 @@ export default function Search() {
                     <Press key={p.id} onPress={() => openPlaylist(p)} accessibilityRole="button" accessibilityLabel={p.title} outer={{ flexBasis: '47%', flexGrow: 1, maxWidth: '50%' }} style={{ gap: 8 }}>
                       <Cover uri={p.artwork} size="100%" radius={24} />
                       <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 16 }}>{p.title}</T>
-                      {p.artist ? <T v="small" numberOfLines={1} style={{ marginTop: -4 }}>{p.artist}</T> : null}
+                      {p.artist ? <T v="small" numberOfLines={1}>{p.artist}</T> : null}
                     </Press>
                   ))}
                 </View>

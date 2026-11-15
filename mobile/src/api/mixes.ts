@@ -1,4 +1,4 @@
-import { artistMix, forYou, seedNow } from '@/reco/engine';
+import { artistMix, forYou, recommended, seedNow } from '@/reco/engine';
 import { create } from 'zustand';
 import { audius, FOCUS_IMAGE, type Track } from './audius';
 import { lull } from './lull';
@@ -13,7 +13,7 @@ export const useMixSeed = create<{ n: number }>(() => ({ n: 0 }));
 
 export const MIXES: Record<string, Mix> = {
   foryou: { id: 'foryou', title: 'Для тебя', image: FOCUS_IMAGE, load: forYou },
-  recommended: { id: 'recommended', title: 'Дальше по звучанию', load: async (s) => tracksOf(await lull.home(undefined, s)) },
+  recommended: { id: 'recommended', title: 'Дальше по звучанию', load: recommended },
   trending: { id: 'trending', title: 'В тренде', load: async (s) => tracksOf((await lull.charts(s)).filter((x) => x.layout === 'tracks')) },
   underground: { id: 'underground', title: 'Независимые артисты', load: (s) => audius.underground(s) },
 };

@@ -92,6 +92,8 @@ export const lull = {
     const r = await get<Raw>(`search?q=${enc(q)}&f=${f}`, s);
     const top: Raw | undefined = r.top;
     return {
+      query:q, filter:f,
+      completions: (r.completions || []).map((t: Raw) => mapTrack(t)) as Track[],
       /* лучший результат YouTube Music: что человек скорее всего искал — трек, артист или альбом */
       top: !top ? undefined : top.kind === 'track' && top.track ? { kind: 'track' as const, track: mapTrack(top.track) as Track }
         : top.kind === 'artist' ? { kind: 'artist' as const, artist: cardArtist(mapCard(top)) as Artist }

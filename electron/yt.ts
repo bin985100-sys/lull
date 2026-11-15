@@ -436,12 +436,17 @@ export function search(query: string, filter: SearchFilter = 'all'): Promise<Sea
 }
 async function searchRaw(query: string, filter: SearchFilter): Promise<SearchResults> {
   const c = await yt();
-  const res = await c.music.search(query, filter === 'all' ? undefined : { type: filterMap[filter] });
+  const [res,primary] = await Promise.all([
+    c.music.search(query, filter === 'all' ? undefined : { type: filterMap[filter] }),
+    filter === 'artists' ? search(query,'all').then(r=>r.top).catch(()=>undefined) : Promise.resolve(undefined),
+  ]);
   const out: SearchResults = { query, tracks: [], albums: [], artists: [], playlists: [] };
+  let firstCard: Card | undefined;
 
   const take = (n: any) => {
     const card = safeCard(n);
     if (!card) return;
+    firstCard ??= card;
     if (card.kind === 'track' && card.track) out.tracks.push(card.track);
     else if (card.kind === 'album') out.albums.push(card);
     else if (card.kind === 'artist') out.artists.push(card);
@@ -475,11 +480,17 @@ async function searchRaw(query: string, filter: SearchFilter): Promise<SearchRes
     const [songs, albums] = await Promise.all([searchRaw(query, 'songs').catch(() => null), searchRaw(query, 'albums').catch(() => null)]);
     out.tracks = songs?.tracks ?? [];
     out.albums = albums?.albums ?? [];
+    out.top=songs?.top ?? albums?.top;
   }
   if (!out.top) {
-    const first = out.artists[0] ?? out.albums[0];
+    const first = firstCard ?? out.artists[0] ?? out.albums[0];
     if (first) out.top = first;
   }
+  // The best artist used to be absent from the Artists rail/filter: only the
+  // related, often obscure channels beneath the main card survived parsing.
+  if(primary?.kind==='artist')out.top=primary;
+  if(out.top?.kind==='artist')out.artists=[out.top,...out.artists.filter(a=>a.id!==out.top!.id)];
+  if(out.top?.kind==='track' && out.top.track)out.tracks=[out.top.track,...out.tracks.filter(t=>t.id!==out.top!.id)];
   return out;
 }
 
@@ -490,7 +501,10 @@ function topFromCardShelf(shelf: any): Card | undefined {
   const subtitle = txt(shelf.subtitle);
   const thumb = bestThumb(thumbsOfNode(shelf.thumbnail));
   if (payload.videoId) {
-    const track: Track = { id: payload.videoId, title, artists: [{ name: subtitle.split(' • ').slice(1, 2)[0] ?? subtitle }], thumb };
+    const credits=arr(shelf.subtitle?.runs).filter((run:any)=>run.endpoint?.payload?.browseId?.startsWith('UC')).map((run:any)=>({id:run.endpoint.payload.browseId,name:run.text}));
+    const durationText=subtitle.match(/(?:^|[\s•·])(\d+(?::[0-5]\d)+)\s*$/)?.[1];
+    const durationSec=durationText ? durationText.split(':').reduce((n,v)=>n*60+Number(v),0) : undefined;
+    const track: Track = { id: payload.videoId, title, artists: credits.length ? credits : [{ name: subtitle.split(' • ').slice(1, 2)[0] ?? subtitle }], thumb,durationSec };
     return { kind: 'track', id: payload.videoId, title, subtitle, thumb, track };
   }
   const browseId: string | undefined = payload.browseId;
