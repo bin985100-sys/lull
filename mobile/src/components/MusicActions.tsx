@@ -21,7 +21,7 @@ export async function saveTracks(tracks: Track[],progress?:(done:number)=>void) 
 export function OfflineSaveButton({tracks}:{tracks:Track[]}) {
   const [done,setDone]=useState<number | null>(null);
   const busy=useRef(false);
-  return <Btn label={done===null ? 'Скачать для офлайна' : `Скачиваем: ${done} из ${tracks.length}`} kind="dark" icon="download" disabled={done!==null} style={{marginTop:12}}
+  return <Btn label={done===null ? 'Скачать для офлайна' : `Скачиваем: ${done} из ${tracks.length}`} kind="dark" icon="download" disabled={done!==null} style={{marginTop:12,opacity:1}}
     onPress={()=>{if(busy.current)return;busy.current=true;setDone(0);void saveTracks(tracks,setDone).catch(()=>toast('Не удалось начать скачивание','info')).finally(()=>{busy.current=false;setDone(null);});}}/>;
 }
 export function SleepButton() {

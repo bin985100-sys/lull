@@ -98,7 +98,7 @@ export function Cover({ uri, size, radius = R.cover, style, source, label,fallba
   const reduced=useReducedMotion();
   const effective=[uri,fallbackUri].find((url):url is string=>!!url && !failed.includes(url));
   const show=effective || source;
-  const initial=label?.trim().slice(0,1).toUpperCase();
+  const initial=label ? Array.from(label.trim())[0]?.toUpperCase() : undefined;
   return (
     <View style={[{ width: size, aspectRatio: 1, borderRadius: radius, overflow: 'hidden', backgroundColor: C.s2 }, style]}>
       <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center',backgroundColor:initial ? '#202434' : C.s2 }]}>{initial ? <T style={{color:C.sky,fontSize:typeof size==='number' ? Math.max(20,size*.32) : 38}}>{initial}</T> : <Icon name="note" size={typeof size === 'number' ? size * 0.4 : 40} color={C.tx3}/>}</View>
