@@ -85,8 +85,8 @@ export function sameOfficialVideo(source:Song, original:Song | undefined, candid
   // The actual official video can name a guest missing from Music's credits.
   // Use that full title as the anchor; never infer guests from an unrelated hit.
   if(!source.artists.some(a=>a.name && canonical.includes(norm(a.name))) || !canonical.includes(title(source.title)))return false;
-  const actual=title(candidate.title).replace(new RegExp(' '+new Date().getFullYear()+'$'),'');
-  return actual===canonical;
+  const actual=title(candidate.title);
+  return actual===canonical || (actual.startsWith(canonical+' ') && /^(?:19|20)\d{2}$/.test(actual.slice(canonical.length+1)));
 }
 
 export async function alternatives(id: string): Promise<string[]> {

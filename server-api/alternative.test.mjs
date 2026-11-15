@@ -43,6 +43,7 @@ test('a guest absent from Music credits must be anchored to the actual verified 
  const original={...source,title:'MERO x Poizi - Olurmusun? [Official Video]',artists:[{name:'MERO и Poizi',verified:true}]};
  const upload={id:'7MgEsS68Dzs',title:'MERO x Poizi - Olurmusun '+new Date().getFullYear(),artists:[{name:'RMProMix'}],durationSec:187};
  assert.equal(sameOfficialVideo(source,original,upload),true);
+ assert.equal(sameOfficialVideo(source,original,{...upload,title:'MERO x Poizi - Olurmusun 2025'}),true);
  assert.equal(sameOfficialVideo(source,{...original,id:'wrong'},upload),false);
  assert.equal(sameOfficialVideo(source,{...original,artists:[{name:'MERO'}]},upload),false);
  assert.equal(sameOfficialVideo(source,original,{...upload,title:upload.title+' Remix'}),false);
