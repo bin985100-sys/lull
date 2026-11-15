@@ -111,9 +111,9 @@ export const audius = {
 /* Подборки «Под настроение» = жанровые чарты Audius. Картинки — свои. */
 /* Подборки «Под настроение»: настроения каталога Lull (chip) и запасной жанр Audius. Картинки — свои. */
 export const MOODS = [
-  { id: 'exhale', title: 'Выдохнуть', chip: 'Релакс', genre: 'Ambient', image: require('../../assets/moods/cover_exhale.webp') },
+  { id: 'exhale', title: 'Выдохнуть', chip: 'Релакс', genre: 'Ambient', image: require('../../assets/moods/winter_exhale.jpg') },
   { id: 'motion', title: 'В движении', chip: 'В дороге', genre: 'Electronic', image: require('../../assets/moods/cover_motion.webp') },
-  { id: 'focus', title: 'Сосредоточиться', chip: 'Концентрация', genre: 'Lo-Fi', image: require('../../assets/moods/cover_focus.webp') },
-  { id: 'night', title: 'Ночной город', chip: 'Вечеринка', genre: 'Hip-Hop/Rap', image: require('../../assets/moods/cover_night.webp') },
+  { id: 'focus', title: 'Сосредоточься', chip: 'Концентрация', genre: 'Lo-Fi', image: require('../../assets/moods/winter_focus.jpg') },
+  { id: 'night', title: 'Ночной город', chip: 'Вечеринка', genre: 'Hip-Hop/Rap', image: require('../../assets/moods/winter_night.jpg') },
 ] as const;
-export const FOCUS_IMAGE = require('../../assets/moods/cover_foryou.webp');
+export const FOCUS_IMAGE = require('../../assets/moods/winter_foryou.jpg');

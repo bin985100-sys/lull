@@ -1,12 +1,13 @@
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { type ComponentRef, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { MOODS } from '@/api/audius';
 import { lull } from '@/api/lull';
 import { getMix, MIXES, useMixSeed } from '@/api/mixes';
 import { CardRail, Sections } from '@/components/Cards';
+import { Banner } from '@/components/Banner';
 import { artistScores } from '@/reco/engine';
 import { useData } from '@/api/useData';
 import { Insights } from '@/components/Insights';
@@ -15,7 +16,7 @@ import { currentTrack, player, usePlayer } from '@/player/player';
 import { useLibrary } from '@/store/library';
 import { C, F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
-import { Cover, haptic, IconBtn, ListSkeleton, Offline, Press, Screen, SectionHead, T } from '@/ui/kit';
+import { Cover, haptic, IconBtn, ListSkeleton, Offline, Press, Reveal, Screen, SectionHead, T } from '@/ui/kit';
 import { PlayPause } from '@/ui/PlayPause';
 
 function greet() {
@@ -64,7 +65,7 @@ export default function Listen() {
           </View>
         ) : null}
 
-        <Focus onPlayForYou={() => mix.data && player.play(mix.data)} />
+        <Reveal step={1}><Focus loading={mix.loading} canPlay={!!mix.data?.length} onPlayForYou={() => mix.data && player.play(mix.data)} /></Reveal>
 
         <View>
           <Pressable onPress={() => router.push('/prefs')} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }}>
@@ -108,9 +109,13 @@ function moodNow() {
   const h = new Date().getHours();
   return h >= 23 || h < 6 ? 'exhale' : h < 11 ? 'motion' : h < 18 ? 'focus' : 'night';
 }
-function Focus({ onPlayForYou }: { onPlayForYou: () => void }) {
+function Focus({ onPlayForYou,loading,canPlay }: { onPlayForYou: () => void;loading:boolean;canPlay:boolean }) {
   const [w, setW] = useState(0);
   const [page, setPage] = useState(0);
+  const rail=useRef<ComponentRef<typeof ScrollView>>(null);
+  const reduced=useReducedMotion();
+  const rotation=useSharedValue(0);
+  const spin=useAnimatedStyle(()=>({transform:[{rotate:rotation.get()+'deg'}]}));
   const first = moodNow();
   const day = new Date().getDate();
   const others = MOODS.filter((m) => m.id !== first);
@@ -123,31 +128,36 @@ function Focus({ onPlayForYou }: { onPlayForYou: () => void }) {
     <View onLayout={(e) => setW(e.nativeEvent.layout.width)}>
       <SectionHead title="Сегодня в фокусе" />
       {w ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={w + 12} snapToAlignment="start"
+        <ScrollView ref={rail} horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={w + 12} snapToAlignment="start"
           onScroll={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / (w + 12)))} scrollEventThrottle={32}
-          style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}>
+          style={{height:w*9/16+60,flexGrow:0}} contentContainerStyle={{ gap: 12 }}>
           {cards.map((c) => (
-            <Press key={c.key} scaleTo={0.98} onPress={c.open} accessibilityRole="button" accessibilityLabel={`Открыть «${c.title}»`}
-              style={{ width: w, aspectRatio: 1.5, borderRadius: 30, overflow: 'hidden', backgroundColor: '#000', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine }}>
-              <Image source={c.image} style={StyleSheet.absoluteFill} contentFit="cover" />
-              {c.key === 'foryou' ? (
-                <View style={{ position: 'absolute', right: 16, bottom: 16, flexDirection: 'row', gap: 10 }}>
-                  <Pressable onPress={() => { haptic(); useMixSeed.setState((x) => ({ n: x.n + 1 })); }} accessibilityRole="button" accessibilityLabel="Обновить «Для тебя»"
-                    style={{ width: 48, height: 48, borderRadius: 18, backgroundColor: 'rgba(28,30,33,0.75)', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name="refresh" size={24} />
-                  </Pressable>
-                  <Pressable onPress={onPlayForYou} accessibilityRole="button" accessibilityLabel="Слушать «Для тебя»"
-                    style={{ width: 56, height: 48, borderRadius: 18, backgroundColor: 'rgba(28,30,33,0.75)', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name="play" size={26} />
-                  </Pressable>
-                </View>
-              ) : null}
-            </Press>
+            <View key={c.key} style={{width:w,gap:12}}>
+              <Press scaleTo={0.985} onPress={c.open} accessibilityRole="button" accessibilityLabel={`Открыть «${c.title}»`}>
+                <Banner source={c.image}/>
+              </Press>
+              <View style={{flexDirection:'row',alignItems:'center',gap:10,minHeight:48,paddingHorizontal:2}}>
+                <T v="small" numberOfLines={2} style={{flex:1,minWidth:0}}>{c.key==='foryou' ? 'Твой персональный микс' : c.title}</T>
+                {c.key==='foryou' ? <>
+                  <Press onPress={()=>{haptic();if(!reduced)rotation.set(withTiming(rotation.get()+360,{duration:420}));useMixSeed.setState(x=>({n:x.n+1}));}} accessibilityRole="button" accessibilityLabel="Обновить «Для тебя»"
+                    style={{width:48,height:48,borderRadius:24,backgroundColor:C.s2,alignItems:'center',justifyContent:'center'}}>
+                    <Animated.View style={spin}><Icon name="refresh" size={22}/></Animated.View>
+                  </Press>
+                  <Press onPress={onPlayForYou} disabled={loading || !canPlay} accessibilityRole="button" accessibilityLabel="Слушать «Для тебя»" accessibilityState={{disabled:loading || !canPlay,busy:loading}}
+                    style={{width:56,height:48,borderRadius:24,backgroundColor:C.tx,alignItems:'center',justifyContent:'center',opacity:canPlay || loading ? 1 : .45}}>
+                    {loading ? <ActivityIndicator color={C.bg}/> : <Icon name="play" size={24} color={C.bg}/>}
+                  </Press>
+                </> : <IconBtn name="arrowUR" label={`Открыть подборку «${c.title}»`} onPress={c.open}/>}
+              </View>
+            </View>
           ))}
         </ScrollView>
-      ) : <View style={{ width: '100%', aspectRatio: 1.5, borderRadius: 30, backgroundColor: C.s1 }} />}
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 12 }}>
-        {cards.map((c, i) => <View key={c.key} style={{ width: i === page ? 18 : 6, height: 6, borderRadius: 3, backgroundColor: i === page ? C.tx : C.s4 }} />)}
+      ) : <View style={{ width: '100%', aspectRatio: 16/9, borderRadius: 24, backgroundColor: C.s1 }} />}
+      <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 4 }}>
+        {cards.map((c, i) => <Pressable key={c.key} accessibilityRole="button" accessibilityLabel={`Показать «${c.title}»`} aria-pressed={i===page}
+          onPress={()=>rail.current?.scrollTo({x:i*(w+12),animated:!reduced})} style={{width:30,height:28,alignItems:'center',justifyContent:'center'}}>
+          <Animated.View style={{width:i===page ? 18 : 6,height:6,borderRadius:3,backgroundColor:i===page ? C.tx : C.s4,transitionProperty:['width','backgroundColor'],transitionDuration:reduced ? 0 : 220}}/>
+        </Pressable>)}
       </View>
     </View>
   );
@@ -185,8 +195,8 @@ function Moods() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}>
         {MOODS.map((m) => (
           <Press key={m.id} scaleTo={0.97} onPress={() => router.push({ pathname: '/mood/[id]', params: { id: m.id } })} accessibilityRole="button" accessibilityLabel={m.title}
-            style={{ width: 228, aspectRatio: 1.5, borderRadius: 22, overflow: 'hidden', backgroundColor: '#000', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine }}>
-            <Image source={m.image} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+            style={{ width: 268 }}>
+            <Banner source={m.image}/>
           </Press>
         ))}
       </ScrollView>

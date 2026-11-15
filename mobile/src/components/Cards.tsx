@@ -5,7 +5,7 @@ import type { Artist, Playlist } from '@/api/audius';
 import type { Card, Section } from '@/api/lull';
 import { player } from '@/player/player';
 import { F } from '@/theme/tokens';
-import { Cover, Press, SectionHead, T } from '@/ui/kit';
+import { Cover, Press, Reveal, SectionHead, T } from '@/ui/kit';
 import { TrackRow } from './TrackRow';
 
 export const openArtist = (a: { id: string; source?: string }) => router.push({ pathname: '/artist/[id]', params: { id: a.id, s: a.source === 'audius' ? 'audius' : 'yt' } });
@@ -34,14 +34,17 @@ export function CardItem({ c, w = 150 }: { c: Card; w?: number }) {
 
 export function CardRail({ items }: { items: Card[] }) {
   return (
+    <Reveal>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}>
       {items.map((c) => <CardItem key={c.kind + c.id} c={c} />)}
     </ScrollView>
+    </Reveal>
   );
 }
 
 export function ArtistRail({ items, size = 112 }: { items: Artist[]; size?: number }) {
   return (
+    <Reveal>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}>
       {items.map((a) => (
         <Press key={a.id} onPress={() => openArtist(a)} accessibilityRole="button" accessibilityLabel={a.name} style={{ width: size, alignItems: 'center', gap: 8 }}>
@@ -50,6 +53,7 @@ export function ArtistRail({ items, size = 112 }: { items: Artist[]; size?: numb
         </Press>
       ))}
     </ScrollView>
+    </Reveal>
   );
 }
 

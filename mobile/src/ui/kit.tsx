@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { type ReactNode, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, type PressableProps, ScrollView, type ScrollViewProps, StyleSheet, Text, type TextProps, useWindowDimensions, View, type ViewStyle } from 'react-native';
-import Animated, { cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, DOCK, EASE, F, R } from '@/theme/tokens';
@@ -14,6 +14,17 @@ import { slideIn } from './anim';
 import { usePlayer } from '@/player/player';
 
 export const haptic = () => { if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {}); };
+/** A short entrance on mount, with no perpetual animation or per-frame JS. */
+export function Reveal({children,step=0,style}:{children:ReactNode;step?:number;style?:ViewStyle}) {
+  const reduced=useReducedMotion();
+  const progress=useSharedValue(reduced ? 1 : 0);
+  useEffect(()=>{
+    progress.set(reduced ? 1 : withDelay(Math.min(3,Math.max(0,step))*45,withTiming(1,{duration:320})));
+    return ()=>cancelAnimation(progress);
+  },[reduced,step,progress]);
+  const motion=useAnimatedStyle(()=>({opacity:progress.get(),transform:[{translateY:(1-progress.get())*12}]}));
+  return <Animated.View style={[style,motion]}>{children}</Animated.View>;
+}
 
 /* ---------- текст ---------- */
 type V = 'xl' | 'h1' | 'h2' | 'h3' | 'title' | 'body' | 'sub' | 'small' | 'label';

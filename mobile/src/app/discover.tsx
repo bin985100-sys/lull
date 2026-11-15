@@ -1,11 +1,11 @@
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { MOODS } from '@/api/audius';
 import { lull } from '@/api/lull';
 import { useData } from '@/api/useData';
 import { CardRail } from '@/components/Cards';
+import { Banner } from '@/components/Banner';
 import { TrackRow } from '@/components/TrackRow';
 import { C } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
@@ -32,9 +32,9 @@ export default function Discover() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
             {MOODS.map((m) => (
               <Press key={m.id} scaleTo={0.97} onPress={() => router.push({ pathname: '/mood/[id]', params: { id: m.id } })} accessibilityRole="button" accessibilityLabel={m.title}
-                outer={{ flexBasis: '47%', flexGrow: 1 }} style={{ width: '100%', aspectRatio: 1.5, borderRadius: 22, overflow: 'hidden', backgroundColor: '#000', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine }}>
+                outer={{width:'100%'}} style={{ width: '100%' }}>
                 {/* название уже нарисовано на обложке */}
-                <Image source={m.image} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+                <Banner source={m.image}/>
               </Press>
             ))}
           </View>

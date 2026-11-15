@@ -82,7 +82,7 @@ function BigPlay({ playing, loading }: { playing: boolean; loading?: boolean }) 
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : 'Слушать'}
       onPress={() => { haptic(); if(!reduced) sc.set(withSequence(withTiming(0.9, { duration: 100 }), withSpring(1, { damping: 10, stiffness: 240 }))); player.toggle(); }}>
-      <Animated.View style={[{ width: 84, height: 84, borderRadius: 30, backgroundColor: C.tx, alignItems: 'center', justifyContent: 'center' }, a]}>
+      <Animated.View style={[{ width: 84, height: 84, borderRadius: 42, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }, a]}>
         {loading ? <ActivityIndicator color="#000" size="large" /> : <PlayPause playing={playing} size={46} color="#000" stroke={1.8} />}
       </Animated.View>
     </Pressable>

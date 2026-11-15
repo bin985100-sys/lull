@@ -10,6 +10,7 @@ import { Btn, IconBtn, ListSkeleton, Offline, Screen, Skeleton, T, TopBar } from
 import { saveTracks } from './MusicActions';
 import { TrackRow } from './TrackRow';
 import { Icon } from '@/ui/Icon';
+import { Banner } from './Banner';
 
 type Props = {
   title: string;
@@ -27,6 +28,7 @@ type Props = {
   sub2?: boolean;
   playlistId?: string;
 };
+const EMPTY_TRACKS:Track[]=[];
 
 export function CoverArt({ cover, size, radius = 34 }: { cover?: Props['cover']; size: number | '100%'; radius?: number }) {
   const col = (cover?.collage || []).filter(Boolean).slice(0, 3) as string[];
@@ -51,7 +53,7 @@ export function CoverArt({ cover, size, radius = 34 }: { cover?: Props['cover'];
 export function ListPage(p: Props) {
   const { width } = useWindowDimensions();
   const size = Math.min(270, width * 0.7);
-  const tracks = p.tracks || [];
+  const tracks = p.tracks ?? EMPTY_TRACKS;
   useEffect(() => { if (tracks.length) warm(tracks.slice(0, 2)); }, [tracks]);
   const playingHere = usePlayer((s) => s.playing && !!currentTrack(s) && tracks.some((t) => t.id === currentTrack(s)!.id));
   const disabled = !tracks.length;
@@ -59,9 +61,7 @@ export function ListPage(p: Props) {
     <Screen>
       <TopBar right={p.right} />
       <View style={{ marginTop: 4, marginBottom: 18 }}>{p.cover?.wide ? (
-        <View style={{ width: '100%', aspectRatio: 1.5, borderRadius: 30, overflow: 'hidden', backgroundColor: '#000', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine }}>
-          <Image source={p.cover.source} style={StyleSheet.absoluteFill} contentFit="cover" />
-        </View>
+        <Banner source={p.cover.source} label={p.title}/>
       ) : p.loading && !p.cover?.uri && !p.cover?.source ? <Skeleton h={size} w={size} r={34} style={{ alignSelf: 'center' }} /> : <CoverArt cover={p.cover} size={size} />}</View>
       <T v="h1" accessibilityRole="header">{p.title}</T>
       {p.sub ? <View style={{ marginTop: 6 }}>{p.sub}</View> : null}

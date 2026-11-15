@@ -9,7 +9,7 @@ import { TrackRow } from '@/components/TrackRow';
 import { useLibrary } from '@/store/library';
 import { C, F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
-import { Btn, Cover, Empty, IconBtn, ListSkeleton, Offline, Press, s, Screen, SectionHead, Segmented, T } from '@/ui/kit';
+import { Btn, Cover, Empty, IconBtn, ListSkeleton, Offline, Press, Reveal, s, Screen, SectionHead, Segmented, T } from '@/ui/kit';
 
 type Filter = 'all' | 'tracks' | 'albums' | 'artists';
 
@@ -79,7 +79,7 @@ export default function Search() {
             <Btn label="Очистить запрос" icon="close" kind="dark" onPress={() => setQ('')} />
           </Empty>
         ) : d ? (
-          <View style={{ gap: 28 }}>
+          <Reveal key={`${debounced}:${sf}`} style={{ gap: 28 }}>
             {f === 'all' && d.top ? <TopResult top={d.top} tracks={d.tracks} /> : null}
             {show('artists') && d.artists.length && !(f === 'all' && d.top?.kind === 'track') ? (
               <View>{f === 'all' ? <SectionHead title="Артисты" /> : null}<ArtistRail items={d.artists} size={104} /></View>
@@ -107,7 +107,7 @@ export default function Search() {
                 </View>
               </View>
             ) : null}
-          </View>
+          </Reveal>
         ) : null}
     </Screen>
   );

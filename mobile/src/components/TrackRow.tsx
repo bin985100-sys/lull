@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { memo, useEffect } from 'react';
 import { Platform, Pressable, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import type { Track } from '@/api/audius';
 import { warm, warmSoon } from '@/api/lull';
@@ -23,9 +23,10 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
   const isCur = usePlayer((s) => currentTrack(s)?.id === track.id);
   const playing = usePlayer((s) => s.playing && currentTrack(s)?.id === track.id);
   const lit = useSharedValue(0);
+  const reduced=useReducedMotion();
   /* у первых трёх треков списка сервер заранее берёт ссылку на звук (в поиске — нет: каждая буква давала новые запросы) */
   useEffect(() => { const i = list.indexOf(track); if (!noWarm && i >= 0 && i < 3) warmSoon(track); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (isCur) lit.set(withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 800 }))); }, [isCur, lit]);
+  useEffect(() => { if (isCur && !reduced) lit.set(withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 800 }))); else lit.set(0); }, [isCur, reduced, lit]);
   /* прозрачность пишем обычным числом: «6e-8» из конца анимации ронял приложение на новых Android */
   const bg = useAnimatedStyle(() => ({ backgroundColor: `rgba(255,255,255,${(Math.max(0, lit.get()) * 0.1).toFixed(3)})` }));
   const play = () => { haptic(); player.play(list, track.id); };
