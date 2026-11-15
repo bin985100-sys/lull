@@ -296,6 +296,7 @@ class Ladder:
 
 ladder = Ladder()
 API_LOCAL = os.environ.get("LULL_API_LOCAL", "http://127.0.0.1:8787")
+API_REGIONAL = os.environ.get("LULL_YT_FALLBACK_API", "").rstrip("/")
 # Выход в YouTube через Cloudflare WARP (socks5://127.0.0.1:40000): адрес сервера-датацентра YouTube режет.
 # Через прокси — и получение ссылки (yt-dlp), и сам файл: ссылка привязана к адресу, с которого её получили.
 YT_PROXY = os.environ.get("LULL_YT_PROXY", "")
@@ -325,19 +326,23 @@ async def read_audio_frame(reader):
     return meta, data
 
 
-async def resolve_innertube(vid: str) -> dict:
+async def resolve_innertube(vid: str, regional: str = "") -> dict:
     """Ссылка от каталога Lull (youtubei.js). Он сам проверяет начало и середину файла, поэтому повторно не проверяем."""
     assert session is not None
-    headers = {"Accept": AUDIO_FRAME} if prepare_audio.get() else {}
-    async with session.get(f"{API_LOCAL}/internal/stream/{vid}", headers=headers, timeout=ClientTimeout(total=15)) as r:
+    headers = {"Accept": AUDIO_FRAME} if prepare_audio.get() or regional else {}
+    async with session.get(f"{regional or API_LOCAL}/internal/stream/{vid}", headers=headers, timeout=ClientTimeout(total=4 if regional else 15)) as r:
         if r.status == 200 and r.content_type == AUDIO_FRAME:
             j, data = await read_audio_frame(r.content)
+            if regional and len(data) != int(j.get("size") or 0):
+                raise RuntimeError("regional audio must be complete")
             verified_audio[j["url"]] = data
             verified_audio.move_to_end(j["url"])
             while len(verified_audio) > 4:
                 verified_audio.popitem(last=False)
         else:
             j = await r.json(content_type=None)
+            if regional and r.status == 200:
+                raise RuntimeError("regional audio must be a prepared frame")
     if r.status != 200 or j.get("error") or not j.get("url"):
         raise RuntimeError(j.get("error") or f"innertube {r.status}")
     mime = (j.get("mime") or "audio/mp4").split(";")[0]
@@ -391,10 +396,10 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
         started = time.monotonic()
         target = media_id or vid
         try:
-            if client == "innertube":
+            if client in ("innertube", "regional"):
                 if fmt != "aac":
                     return
-                s = await resolve_innertube(target)
+                s = await resolve_innertube(target, API_REGIONAL) if client == "regional" else await resolve_innertube(target)
             else:
                 s = await resolve_worker(target, fmt, client)
             if not s.get("checked") and not await verify(s):
@@ -411,7 +416,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             return
         ladder.ok(client, time.monotonic() - started)
         s["method"] = client
-        if client != "innertube":
+        if client not in ("innertube", "regional"):
             s["client"] = client
         if media_id:
             s["mediaId"] = media_id
@@ -460,6 +465,8 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             if unavailable.is_set() and not alternate_started and len(pending) < RACE_WIDTH:
                 alternate_started = True
                 pending.add(asyncio.create_task(other_recording()))
+                if API_REGIONAL and fmt == "aac":
+                    order.insert(0, "regional")
             # A failure advances immediately; a slow attempt gets a bounded hedge.
             if order and len(pending) < RACE_WIDTH:
                 pending.add(asyncio.create_task(one(order.pop(0))))

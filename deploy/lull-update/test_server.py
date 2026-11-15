@@ -123,6 +123,35 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
                 await s.resolve_checked(VID, 'aac')
             self.assertLess(time.monotonic() - start, .2)
 
+    async def test_regional_audio_races_only_after_unavailable_and_preserves_client(self):
+        class Reply:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *args): pass
+            async def json(self): return {'ids': []}
+        class Session:
+            def get(self, *args, **kwargs): return Reply()
+        async def worker(*args): raise RuntimeError('Video unavailable in your country')
+        async def inner(vid, base):
+            self.assertEqual(base, 'http://region.invalid')
+            return {'checked': True, 'client': 'TV-SAMSUNG', 'mediaId': vid}
+        with patch.object(s, 'API_REGIONAL', 'http://region.invalid'), patch.object(s.ladder, 'order', side_effect=lambda: ['mweb']), patch.object(s, 'resolve_worker', worker), patch.object(s, 'resolve_innertube', inner), patch.object(s, 'session', Session()):
+            result = await s.resolve_checked(VID, 'aac')
+        self.assertEqual(result['method'], 'regional')
+        self.assertEqual(result['client'], 'TV-SAMSUNG')
+
+    async def test_regional_url_without_full_audio_is_rejected(self):
+        class Reply:
+            status = 200
+            content_type = 'application/json'
+            async def __aenter__(self): return self
+            async def __aexit__(self, *args): pass
+            async def json(self, **kwargs): return {'url': 'https://example.invalid/audio', 'size': 100}
+        class Session:
+            def get(self, *args, **kwargs): return Reply()
+        with patch.object(s, 'session', Session()):
+            with self.assertRaisesRegex(RuntimeError, 'prepared frame'):
+                await s.resolve_innertube(VID, 'http://region.invalid')
+
     async def test_alternate_does_not_stop_after_three_region_blocked_uploads(self):
         candidates = ['aaaaaaaaaaa', 'bbbbbbbbbbb', 'ccccccccccc', 'ddddddddddd']
         class Reply:

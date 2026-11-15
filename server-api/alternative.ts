@@ -78,6 +78,17 @@ export function sameRecording(a: Song, b: Song) {
   return !!title(a.title) && exactTitle;
 }
 
+export function sameOfficialVideo(source:Song, original:Song | undefined, candidate:Song) {
+  if(!original || original.id!==source.id || !original.artists.some(a=>a.verified) || candidate.id===source.id || !valid(candidate.id))return false;
+  if(!source.durationSec || !candidate.durationSec || Math.abs(source.durationSec-candidate.durationSec)>3)return false;
+  const canonical=title(original.title);
+  // The actual official video can name a guest missing from Music's credits.
+  // Use that full title as the anchor; never infer guests from an unrelated hit.
+  if(!source.artists.some(a=>a.name && canonical.includes(norm(a.name))) || !canonical.includes(title(source.title)))return false;
+  const actual=title(candidate.title).replace(new RegExp(' '+new Date().getFullYear()+'$'),'');
+  return actual===canonical;
+}
+
 export async function alternatives(id: string): Promise<string[]> {
   const hit = pairs.get(id);
   if (hit && hit.until > Date.now()) return hit.ids;
@@ -102,7 +113,8 @@ export async function alternatives(id: string): Promise<string[]> {
     const general = await c.search(q,{type:'video'}).then(videoCandidates).catch(()=>[]);
     const candidates=[...primary,...videos,...general,...songs];
     if(process.env.LULL_ALT_DEBUG==='1')console.info('[alternate candidates]',JSON.stringify({id,source,general,candidates:candidates.slice(0,8).map(({id,title,artists,durationSec})=>({id,title,artists,durationSec}))}));
-    const matched=candidates.filter(candidate=>sameRecording(source!,candidate));
+    const original=general.find(candidate=>candidate.id===id);
+    const matched=candidates.filter(candidate=>sameRecording(source!,candidate) || sameOfficialVideo(source!,original,candidate));
     // An audio upload closest to the album duration beats a video with an intro.
     const official=(track:Song)=>track.artists.some(x=>x.verified || source!.artists.some(y=>(y.id || y.channel_id) && (x.id || x.channel_id)===(y.id || y.channel_id)));
     matched.sort((a,b)=>{

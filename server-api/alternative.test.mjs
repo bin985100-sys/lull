@@ -37,6 +37,17 @@ test('collaborations accept complete credited subtitle uploads, never remixes or
  assert.equal(sameRecording(russian,{id:'GXQI82X4Mmw',title:'fallen777angel – пускают стрелы |Текст|',artists:[{name:'死手'}],durationSec:121}),true);
  assert.equal(sameRecording(russian,{id:'RPDmRyh59TE',title:'fallen777angel - пускают стрелы (текст песни)',artists:[{name:'Hаise'}],durationSec:121}),true);
 });
+test('a guest absent from Music credits must be anchored to the actual verified original video',async()=>{
+ const {sameOfficialVideo}=await load();
+ const source={id:'ncDkosGdvRw',title:'Olurmusun?',artists:[{name:'MERO'}],durationSec:187};
+ const original={...source,title:'MERO x Poizi - Olurmusun? [Official Video]',artists:[{name:'MERO и Poizi',verified:true}]};
+ const upload={id:'7MgEsS68Dzs',title:'MERO x Poizi - Olurmusun '+new Date().getFullYear(),artists:[{name:'RMProMix'}],durationSec:187};
+ assert.equal(sameOfficialVideo(source,original,upload),true);
+ assert.equal(sameOfficialVideo(source,{...original,id:'wrong'},upload),false);
+ assert.equal(sameOfficialVideo(source,{...original,artists:[{name:'MERO'}]},upload),false);
+ assert.equal(sameOfficialVideo(source,original,{...upload,title:upload.title+' Remix'}),false);
+ assert.equal(sameOfficialVideo(source,original,{...upload,durationSec:204}),false);
+});
 test('a partial catalog snapshot does not erase known duration or artist identity',async()=>{
  const m=await load();m.rememberTracks({...a,durationSec:149});m.rememberTracks({...a,artists:[{name:a.artists[0].name}]});
  globalThis.catalog={music:{getUpNext:async()=>{throw Error('unavailable');},search:async()=>({contents:[]})},search:async()=>({videos:[]})};

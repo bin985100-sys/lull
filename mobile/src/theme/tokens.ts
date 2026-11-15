@@ -23,7 +23,7 @@ export const F = {
   heavy: 'Montserrat_800ExtraBold',
 } as const;
 
-export const DOCK = { compact: 84, mini: 164, side: 12 } as const;
+export const DOCK = { compact: 78, mini: 152, side: 12 } as const;
 
 /* Плавности как в прототипе: cubic-bezier(.22,.8,.2,1) */
 export const EASE = [0.22, 0.8, 0.2, 1] as const;

@@ -4,7 +4,7 @@ import { router, usePathname } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import Animated, {
-  cancelAnimation, cubicBezier, Easing, FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
+  cubicBezier, Easing, FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
@@ -12,7 +12,7 @@ import { create } from 'zustand';
 import { currentTrack, player, usePlayer, useProgress } from '@/player/player';
 import { useLibrary } from '@/store/library';
 import { C, DOCK, EASE, F } from '@/theme/tokens';
-import { Icon } from '@/ui/Icon';
+import { Icon, type IconName } from '@/ui/Icon';
 import { haptic, T } from '@/ui/kit';
 import { PlayPause } from '@/ui/PlayPause';
 import { slideIn } from '@/ui/anim';
@@ -22,8 +22,6 @@ import { TintLayer } from './TintLayer';
 import { likeWithUndo, openSelectPlaylist } from './TrackRow';
 import { SleepButton } from './MusicActions';
 import { openWave } from './Wave';
-import { GlassSurface, type GlassTarget } from './GlassSurface';
-import { GlassNav } from './GlassNav';
 
 const ease = Easing.bezier(...EASE);
 const fmt = (s: number) => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -250,18 +248,7 @@ function useTrackSwipe(onDown?: () => void) {
 }
 
 /* ---------- мини-строка ---------- */
-function MeterBar({ playing, beat }: { playing: boolean; beat: number }) {
-  const reduced=useReducedMotion();
-  const level=useSharedValue(.35);
-  useEffect(()=>{
-    level.set(playing && !reduced ? withRepeat(withSequence(withTiming(1,{duration:240+beat*90}),withTiming(.25,{duration:340+beat*70})),-1,true) : .35);
-    return ()=>cancelAnimation(level);
-  },[playing,reduced,beat,level]);
-  const motion=useAnimatedStyle(()=>({transform:[{scaleY:level.get()}]}));
-  return <Animated.View style={[{width:3,height:14,borderRadius:2,backgroundColor:'#a8e6ff'},motion]}/>;
-}
-
-function Mini({ active }: { active: boolean }) {
+function Mini() {
   const s = usePlayer();
   const loading = useProgress((x) => s.buffering && x.time < 0.5);
   const t = currentTrack(s)!;
@@ -277,7 +264,6 @@ function Mini({ active }: { active: boolean }) {
           <View style={{flex:1,minWidth:0,gap:2}}>
             <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 15 }}>{t.title}</T>
             <View style={{flexDirection:'row',alignItems:'center',gap:6}}>
-              <View accessible={false} style={{flexDirection:'row',alignItems:'center',gap:2,height:14}}>{[0,1,2].map(beat=><MeterBar key={beat} beat={beat} playing={s.playing&&active&&!loading}/>)}</View>
               <T v="small" numberOfLines={1} style={{flex:1,minWidth:0,fontSize:11.5,color:'#b3bfd2'}}>{t.artist}</T>
             </View>
           </View>
@@ -296,7 +282,18 @@ function Mini({ active }: { active: boolean }) {
    на Android/iOS — UI-поток. JS не трогает каждый кадр, поэтому раскрытие не тормозит. */
 const TR = { transitionDuration: 560, transitionTimingFunction: cubicBezier(EASE[0], EASE[1], EASE[2], EASE[3]) } as const;
 
-export function Dock({ blurTarget }: { blurTarget?: GlassTarget }) {
+function Nav({active}:{active:Tab | null}) {
+  const items:[Tab,IconName,string][]=[['listen','navListen','Слушать'],['discover','navDiscover','Открывать'],['collection','navCollection','Коллекция']];
+  return <View accessibilityRole="tablist" accessibilityLabel="Основная навигация" style={st.nav}>
+    {items.map(([key,icon,label])=><Pressable key={key} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{selected:key===active}} aria-selected={key===active}
+      style={st.navBtn} onPress={()=>{haptic();player.expand(false);useTab.setState({tab:key});resetTo(`/${key}` as '/listen');}}>
+      <Icon name={icon} size={27} color={key===active ? '#fff' : C.tx2}/>
+      <T v="label" numberOfLines={1} style={{color:key===active ? '#fff' : C.tx2}}>{label}</T>
+    </Pressable>)}
+  </View>;
+}
+
+export function Dock() {
   const path = usePathname();
   const ins = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
@@ -312,21 +309,17 @@ export function Dock({ blurTarget }: { blurTarget?: GlassTarget }) {
   const [fullMounted, setFullMounted] = useState(false);
   const [fullReady, setFullReady] = useState(false);
   const fullOn=expanded&&fullReady;
-  /* монтируем заранее, в простое после старта трека, чтобы раскрытие не ждало отрисовки */
-  useEffect(() => {
-    const t = setTimeout(() => setFullMounted(has), has ? 400 : 0);
-    return () => clearTimeout(t);
-  }, [has]);
   useEffect(() => {
     if (!expanded) {
       closeLyrics();
       const r=requestAnimationFrame(()=>setFullReady(false));
-      return ()=>cancelAnimationFrame(r);
+      const timer=setTimeout(()=>setFullMounted(false),reduced ? 0 : 240);
+      return ()=>{cancelAnimationFrame(r);clearTimeout(timer);};
     }
     let second=0;
-    const first=requestAnimationFrame(()=>{second=requestAnimationFrame(()=>setFullReady(true));});
+    const first=requestAnimationFrame(()=>{setFullMounted(true);second=requestAnimationFrame(()=>setFullReady(true));});
     return ()=>{cancelAnimationFrame(first);if(second)cancelAnimationFrame(second);};
-  }, [expanded]);
+  }, [expanded,reduced]);
 
   /* на планшете и в горизонтали капсула не растягивается во всю ширину */
   const maxW = 560;
@@ -345,7 +338,7 @@ export function Dock({ blurTarget }: { blurTarget?: GlassTarget }) {
         transitionProperty: ['height', 'left', 'right', 'bottom', 'borderRadius', 'opacity', 'transform'], transitionDuration: dur, transitionTimingFunction: TR.transitionTimingFunction,
       }]}
       pointerEvents={hidden ? 'none' : 'box-none'} aria-hidden={hidden} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}>
-      <GlassSurface target={blurTarget} expanded={expanded}/>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill,{backgroundColor:C.glass}]}/>
       {has ? <Tint uri={cover} strong={expanded} /> : null}
       {has && (fullMounted||expanded) ? (
         <Animated.View pointerEvents={fullOn ? 'auto' : 'none'} aria-hidden={!fullOn} accessibilityElementsHidden={!fullOn} importantForAccessibility={fullOn ? 'auto' : 'no-hide-descendants'} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: DOCK.compact, opacity: fullOn ? 1 : 0, transform: [{ translateY: fullOn ? 0 : 24 }],
@@ -356,15 +349,17 @@ export function Dock({ blurTarget }: { blurTarget?: GlassTarget }) {
       {has ? (
         <Animated.View pointerEvents={expanded ? 'none' : 'box-none'} aria-hidden={expanded} accessibilityElementsHidden={expanded} importantForAccessibility={expanded ? 'no-hide-descendants' : 'auto'} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: DOCK.mini, opacity: expanded ? 0 : 1, transform: [{ translateY: expanded ? -20 : 0 }],
           transitionProperty: ['opacity', 'transform'], transitionDuration: reduced ? 0 : 300, transitionDelay: !expanded && !reduced ? 160 : 0, transitionTimingFunction: TR.transitionTimingFunction }}>
-          <Mini active={!expanded&&!hidden}/><MiniProgress />
+          <Mini/><MiniProgress />
         </Animated.View>
       ) : null}
-      <GlassNav blurTarget={blurTarget} active={expanded ? null : tab} onSelect={key=>{player.expand(false);useTab.setState({tab:key});resetTo(`/${key}` as '/listen');}}/>
+      <Nav active={expanded ? null : tab}/>
     </Animated.View>
   );
 }
 
 const st = StyleSheet.create({
+  nav:{position:'absolute',left:0,right:0,bottom:0,height:DOCK.compact,flexDirection:'row',paddingHorizontal:6},
+  navBtn:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center',gap:5},
   dock: { position: 'absolute', overflow: 'hidden', borderWidth:1,borderColor:'rgba(255,255,255,0.16)',backgroundColor:'rgba(0,0,0,0.5)', shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 30, shadowOffset: { width: 0, height: 14 }, elevation: 24 },
   miniRow: { position: 'absolute', left: 0, right: 0, bottom: DOCK.compact, height: DOCK.mini-DOCK.compact, flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 14, paddingRight: 10 },
   ctl: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },

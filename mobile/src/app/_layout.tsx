@@ -3,8 +3,7 @@ import { DarkTheme, router, ThemeProvider } from 'expo-router';
 import { Stack } from 'expo-router/stack';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { BlurTargetView } from 'expo-blur';
-import { type ComponentRef, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PanResponder, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -30,7 +29,6 @@ function EdgeBack() {
 const theme = { ...DarkTheme, colors: { ...DarkTheme.colors, background: C.bg, card: C.bg, text: C.tx, border: 'transparent', primary: C.tx } };
 
 export default function Root() {
-  const blurTarget=useRef<ComponentRef<typeof View> | null>(null);
   const [fonts] = useFonts({ Montserrat_500Medium, Montserrat_600SemiBold, Montserrat_700Bold, Montserrat_800ExtraBold });
   const [hydrated, setHydrated] = useState(useLibrary.persist.hasHydrated());
   useEffect(() => useLibrary.persist.onFinishHydration(() => setHydrated(true)), []);
@@ -43,7 +41,6 @@ export default function Root() {
       <ThemeProvider value={theme}>
         <StatusBar style="light" />
         <View style={{ flex: 1, backgroundColor: C.bg }}>
-          <BlurTargetView ref={blurTarget} style={{flex:1}}>
           <Guard name="screens">
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: 'slide_from_right' }}>
             <Stack.Screen name="index" options={{ animation: 'none' }} />
@@ -54,8 +51,7 @@ export default function Root() {
           </Stack>
           </Guard>
           {Platform.OS === 'web' ? <EdgeBack /> : null}
-          </BlurTargetView>
-          <Guard name="dock" quiet><Dock blurTarget={blurTarget}/></Guard>
+          <Guard name="dock" quiet><Dock /></Guard>
           <Guard name="overlays" quiet><Overlays /></Guard>
           <CrashBanner />
         </View>
