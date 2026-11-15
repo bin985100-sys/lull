@@ -25,6 +25,18 @@ test('new video lockups retain actual channel identity and duration; playlists a
  assert.equal(candidates.length,1);assert.equal(candidates[0].artists[0].id,'UCofficial');
  assert.equal(sameRecording({...a,artists:[{name:a.artists[0].name,id:'UCofficial'}],durationSec:133},candidates[0]),true);
 });
+test('collaborations accept complete credited subtitle uploads, never remixes or short edits',async()=>{
+ const {sameRecording}=await load();
+ const source={id:'fgGTimY1rYc',title:'OCG',artists:[{name:'FRIENDLY THUG 52 NGG'},{name:'SaintPrince 52'}],durationSec:141};
+ const upload={id:'_uDvfU7K-6E',title:'FRIENDLY THUG 52 NGG & SaintPrince 52 — OCG (English Subtitles)',artists:[{name:'KILL ME, V1SA'}],durationSec:141};
+ assert.equal(sameRecording(source,upload),true);
+ assert.equal(sameRecording(source,{...upload,title:upload.title+' Remix'}),false);
+ assert.equal(sameRecording(source,{...upload,durationSec:96}),false);
+ assert.equal(sameRecording(source,{...upload,title:'FRIENDLY THUG 52 NGG — OCG (English Subtitles)'}),false);
+ const russian={id:'tsVRBUDIeEU',title:'пускают стрелы',artists:[{name:'fallen777angel'}],durationSec:120};
+ assert.equal(sameRecording(russian,{id:'GXQI82X4Mmw',title:'fallen777angel – пускают стрелы |Текст|',artists:[{name:'死手'}],durationSec:121}),true);
+ assert.equal(sameRecording(russian,{id:'RPDmRyh59TE',title:'fallen777angel - пускают стрелы (текст песни)',artists:[{name:'Hаise'}],durationSec:121}),true);
+});
 test('a partial catalog snapshot does not erase known duration or artist identity',async()=>{
  const m=await load();m.rememberTracks({...a,durationSec:149});m.rememberTracks({...a,artists:[{name:a.artists[0].name}]});
  globalThis.catalog={music:{getUpNext:async()=>{throw Error('unavailable');},search:async()=>({contents:[]})},search:async()=>({videos:[]})};

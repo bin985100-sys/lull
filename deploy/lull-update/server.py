@@ -424,7 +424,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             assert session is not None
             async with session.get(f"{API_LOCAL}/internal/stream/{vid}?alternatives=1", timeout=ClientTimeout(total=4)) as response:
                 result = await response.json()
-            ids = [x for x in result.get("ids", []) if valid_vid(x) and x != vid][:3]
+            ids = [x for x in result.get("ids", []) if valid_vid(x) and x != vid][:5]
             clients = [x for x in ladder.order() if x != "innertube"][:2]
             for candidate in ids:
                 for client in clients:

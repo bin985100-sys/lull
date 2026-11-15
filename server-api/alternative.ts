@@ -6,6 +6,23 @@ const pairs = new Map<string, { ids: string[]; until: number }>();
 const valid = (id: unknown): id is string => typeof id === 'string' && /^[\w-]{11}$/.test(id);
 const norm = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const title = (s: string) => norm(s.replace(/[([](?:official (?:music )?video|official audio|официальный клип)[)\]]/gi,''));
+function creditedTitle(source:Song, candidate:Song) {
+  let text=norm(candidate.title
+    .replace(/[([](?:english subtitles|русские субтитры|lyrics|lyric video|текст(?: песни)?|official (?:music |lyric )?video|official audio)[)\]]/gi,'')
+    .replace(/\|\s*(?:lyrics|текст(?: песни)?)\s*\|\s*$/gi,''));
+  if(!source.artists.length)return false;
+  // Collaborative uploads put both credits in the title, with &, feat. or commas.
+  // Remove only the actual source credits; remix/live/speed edits remain and fail.
+  for(const artist of source.artists) {
+    if(!artist.name)return false;
+    const words=norm(artist.name).split(' ').map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+    const pattern=new RegExp('(?:^| )'+words.join('\\s*')+'(?= |$)','iu');
+    if(!pattern.test(text))return false;
+    text=text.replace(pattern,' ').trim();
+  }
+  text=text.replace(/\b(?:feat|ft|featuring|and|with)\b/gi,' ').replace(/\s+/g,' ').trim();
+  return text===title(source.title);
+}
 export const alternativeHint=(id:string)=>tracks.get(id);
 /** YouTube now returns LockupView beside legacy Video nodes. */
 export function videoCandidates(result:any): Song[] {
@@ -46,19 +63,19 @@ export function sameRecording(a: Song, b: Song) {
   const artist = a.artists.some(x => x.name && b.artists.some(y => y.name && norm(x.name!) === norm(y.name)));
   const inTitle = a.artists.some(x => x.name && [norm(x.name)+' '+title(a.title), title(a.title)+' '+norm(x.name)].includes(title(b.title)));
   const stableCredit=a.artists.some(x=>b.artists.some(y=>((x.id || x.channel_id) && (y.id || y.channel_id)===(x.id || x.channel_id)) || (y.verified && x.name && y.name && norm(x.name)===norm(y.name))));
+  const exactTitle=title(a.title)===title(b.title) || inTitle || creditedTitle(a,b);
   if (!a.durationSec || !b.durationSec) {
     // An official upload with the same artist channel and exact title is safe
     // even when Music omits duration. Never accept a cover by name alone here.
-    return stableCredit && (title(a.title)===title(b.title) || inTitle);
+    return stableCredit && exactTitle;
   }
   if(Math.abs(a.durationSec-b.durationSec)>12){
     // Official music videos may add a short intro/outro to the album audio.
     // This wider window is exclusive to the same stable artist channel/title.
-    return stableCredit && (title(a.title)===title(b.title) || inTitle) && Math.abs(a.durationSec-b.durationSec)<=Math.min(30,a.durationSec*.18);
+    return stableCredit && exactTitle && Math.abs(a.durationSec-b.durationSec)<=Math.min(30,a.durationSec*.18);
   }
-  if (!artist) return inTitle && Math.abs(a.durationSec-b.durationSec) <= 3;
-  const expected = title(a.title), actual = title(b.title);
-  return !!expected && (actual === expected || a.artists.some(x => x.name && actual === norm(x.name)+' '+expected));
+  if (!artist) return (inTitle || creditedTitle(a,b)) && Math.abs(a.durationSec-b.durationSec) <= 3;
+  return !!title(a.title) && exactTitle;
 }
 
 export async function alternatives(id: string): Promise<string[]> {
@@ -85,7 +102,16 @@ export async function alternatives(id: string): Promise<string[]> {
     const general = await c.search(q,{type:'video'}).then(videoCandidates).catch(()=>[]);
     const candidates=[...primary,...videos,...general,...songs];
     if(process.env.LULL_ALT_DEBUG==='1')console.info('[alternate candidates]',JSON.stringify({id,source,general,candidates:candidates.slice(0,8).map(({id,title,artists,durationSec})=>({id,title,artists,durationSec}))}));
-    for (const candidate of candidates) if (sameRecording(source,candidate)) ids.push(candidate.id);
+    const matched=candidates.filter(candidate=>sameRecording(source!,candidate));
+    // An audio upload closest to the album duration beats a video with an intro.
+    const official=(track:Song)=>track.artists.some(x=>x.verified || source!.artists.some(y=>(y.id || y.channel_id) && (x.id || x.channel_id)===(y.id || y.channel_id)));
+    matched.sort((a,b)=>{
+      return Number(official(b))-Number(official(a)) || Math.abs((a.durationSec || source!.durationSec || 0)-(source!.durationSec || 0))-Math.abs((b.durationSec || source!.durationSec || 0)-(source!.durationSec || 0));
+    });
+    const trusted=matched.filter(official), independent=matched.filter(track=>!official(track));
+    // Several label uploads can share one regional restriction. Try a separate
+    // matching upload after the best official recording, before more label copies.
+    ids.unshift(...[...trusted.slice(0,1),...independent,...trusted.slice(1)].map(candidate=>candidate.id));
   }
   const unique = [...new Set(ids)].slice(0,5);
   if (unique.length || source) {

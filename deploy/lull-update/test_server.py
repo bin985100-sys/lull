@@ -123,6 +123,20 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
                 await s.resolve_checked(VID, 'aac')
             self.assertLess(time.monotonic() - start, .2)
 
+    async def test_alternate_does_not_stop_after_three_region_blocked_uploads(self):
+        candidates = ['aaaaaaaaaaa', 'bbbbbbbbbbb', 'ccccccccccc', 'ddddddddddd']
+        class Reply:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *args): pass
+            async def json(self): return {'ids': candidates}
+        class Session:
+            def get(self, *args, **kwargs): return Reply()
+        async def worker(vid, fmt, client):
+            if vid != candidates[-1]: raise RuntimeError('Video unavailable in your country')
+            return {'checked': True}
+        with patch.object(s.ladder, 'order', side_effect=lambda: ['mweb']), patch.object(s, 'resolve_worker', worker), patch.object(s, 'session', Session()):
+            self.assertEqual((await s.resolve_checked(VID, 'aac'))['mediaId'], candidates[-1])
+
     async def test_partial_file_is_not_ready_or_evicted(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(s, 'PREP', Path(folder)), patch.object(s, 'PREP_MAX', 0):
             part = Path(folder) / f'aac-{VID}.part.m4a'; part.write_bytes(b'partial')
