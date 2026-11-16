@@ -60,8 +60,8 @@ const MAX_INLINE = 8 * 1024 * 1024;
 async function probe(url: string, len: number, prepare: boolean): Promise<Buffer | undefined> {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 5500);
-  async function read(start: number, end: number) {
-    const response = await fetch(url + '&range=' + start + '-' + end, { signal: abort.signal });
+  async function read(start: number, end: number, whole = false) {
+    const response = await fetch(whole ? url : url + '&range=' + start + '-' + end, { signal: abort.signal });
     const expected = end - start + 1;
     if (!response.ok) throw Error(response.status + ' на ' + start);
     const count = response.headers.get('content-length');
@@ -71,6 +71,7 @@ async function probe(url: string, len: number, prepare: boolean): Promise<Buffer
     return data;
   }
   try {
+    if (prepare && len <= MAX_INLINE) return await read(0,len-1,true);
     const bytes = prepare && len <= MAX_INLINE ? len : Math.min(len, FIRST + CHUNK);
     const reads = [read(0, Math.min(bytes, FIRST) - 1)];
     for (let start = FIRST; start < bytes; start += CHUNK)

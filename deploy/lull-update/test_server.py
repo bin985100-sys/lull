@@ -3,6 +3,7 @@ import asyncio
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import time
@@ -12,6 +13,7 @@ from unittest.mock import patch
 tmp = tempfile.TemporaryDirectory()
 os.environ['LULL_DATA'] = tmp.name
 os.environ['LULL_YT_COOKIES'] = str(Path(tmp.name) / 'absent')
+os.environ['LULL_CATALOG_WARM'] = '0'
 spec = importlib.util.spec_from_file_location('relay', Path(__file__).with_name('server.py'))
 s = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(s)
@@ -22,12 +24,172 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         s.cache.clear(); s.inflight.clear(); s.prep_inflight.clear()
         s.ladder = s.Ladder()
+        s.warm_queue.clear();s.warm_event.clear()
+
+    def test_public_chart_warm_is_bounded_and_coalesces_tracks_only(self):
+        snapshot=[{'items':[{'kind':'track','track':{'id':VID}},{'kind':'track','id':VID},{'kind':'artist','id':'aaaaaaaaaaa'}]}]
+        with patch.object(s,'prep_find',return_value=None):
+            self.assertEqual(s.warm_catalog_snapshot(snapshot),1)
+            self.assertEqual(s.warm_catalog_snapshot(snapshot),0)
+        self.assertEqual(list(s.warm_queue),['aac:'+VID])
+        self.assertTrue(s.warm_queue['aac:'+VID][2])
+
+    def test_ready_chart_file_does_not_trigger_a_new_source_request(self):
+        with patch.object(s,'prep_find',return_value=Path('ready.m4a')):
+            self.assertEqual(s.warm_catalog_snapshot([{'items':[{'kind':'track','id':VID}]}]),0)
+        self.assertFalse(s.warm_queue)
 
     def test_audio_download_uses_the_same_exit_as_resolution(self):
         primary, fallback = object(), object()
         with patch.object(s, 'yt_session', primary), patch.object(s, 'fallback_yt_session', fallback):
             self.assertIs(s.audio_session({}), primary)
             self.assertIs(s.audio_session({'exit': 'fallback'}), fallback)
+
+    async def test_forbidden_audio_falls_back_to_same_video_progressive_format(self):
+        async def worker(*args):
+            return {'url':'https://fixture.invalid/audio','exit':'fallback','alternateFormats':[{'url':'https://fixture.invalid/muxed','formatId':'18','muxed':True}]}
+        async def verify(stream):
+            self.assertEqual(stream['exit'],'fallback')
+            stream['contentLength']=1024
+            return stream['url'].endswith('/muxed')
+        with patch.object(s.ladder,'order',return_value=['fixture']), patch.object(s,'resolve_worker',worker), patch.object(s,'verify',verify):
+            result=await s.resolve_checked(VID,'aac')
+        self.assertEqual(result['formatId'],'18')
+        self.assertNotIn('alternateFormats',result)
+
+    async def test_newly_issued_url_gets_one_bounded_retry_without_extracting_again(self):
+        calls=0; extractions=0
+        async def worker(*args):
+            nonlocal extractions
+            extractions+=1
+            return {'url':'https://fixture.invalid/audio','retryAfter':time.monotonic()+.02}
+        async def verify(stream):
+            nonlocal calls
+            calls+=1
+            stream['_probe403']=True
+            return calls==2
+        with patch.object(s.ladder,'order',return_value=['fixture']), patch.object(s,'resolve_worker',worker), patch.object(s,'verify',verify):
+            start=time.monotonic();await s.resolve_checked(VID,'aac')
+        self.assertEqual(extractions,1);self.assertEqual(calls,2)
+        self.assertLess(time.monotonic()-start,.2)
+
+    async def test_declared_source_availability_extends_only_that_race(self):
+        ready=time.time()+.04
+        async def worker(*args):return {'url':'https://fixture.invalid/audio','availableAt':ready}
+        async def verify(stream):
+            self.assertGreaterEqual(time.time(),ready)
+            return True
+        with patch.object(s.ladder,'order',return_value=['fixture']),patch.object(s,'resolve_worker',worker),patch.object(s,'verify',verify),patch.object(s,'RESOLVE_TIMEOUT',.01):
+            self.assertEqual((await s.resolve_checked(VID,'aac'))['method'],'fixture')
+
+    async def test_prepared_cache_access_preserves_range_etag_timestamp(self):
+        with tempfile.TemporaryDirectory(dir=tmp.name) as root,patch.object(s,'PREP',Path(root)):
+            path=Path(root)/f'aac-{VID}.m4a';path.write_bytes(b'complete')
+            modified=path.stat().st_mtime_ns
+            os.utime(path,ns=(1,modified))
+            self.assertEqual(s.prep_find(VID,'aac'),path)
+            self.assertEqual(await s.prepared(VID,'aac'),path)
+            self.assertEqual(path.stat().st_mtime_ns,modified)
+            self.assertGreater(path.stat().st_atime_ns,1)
+
+    def test_cache_eviction_uses_actual_access_not_creation_order(self):
+        with tempfile.TemporaryDirectory(dir=tmp.name) as root,patch.object(s,'PREP',Path(root)),patch.object(s,'PREP_MAX',10):
+            cold=Path(root)/'cold.m4a';hot=Path(root)/'hot.m4a'
+            cold.write_bytes(b'1234567890');hot.write_bytes(b'1234567890')
+            os.utime(cold,ns=(1,200));os.utime(hot,ns=(200,1))
+            s.prep_cleanup()
+            self.assertFalse(cold.exists());self.assertTrue(hot.exists())
+
+    async def test_version_change_restarts_whole_preparation_once(self):
+        calls=0
+        async def prepare(*args):
+            nonlocal calls
+            calls+=1
+            if calls==1:raise s.AudioVersionChanged('changed')
+            return Path('complete.m4a')
+        with patch.object(s,'_prepare_once',prepare):
+            self.assertEqual(await s._prepare(VID,'aac'),Path('complete.m4a'))
+        self.assertEqual(calls,2)
+
+    async def test_failed_chunk_cancels_old_downloads_before_restart(self):
+        cancelled=asyncio.Event()
+        async def get(span):
+            if span==0:
+                await asyncio.sleep(.01)
+                raise s.AudioVersionChanged('changed')
+            try:await asyncio.sleep(30)
+            finally:cancelled.set()
+        with self.assertRaises(s.AudioVersionChanged):
+            await s.read_chunks(get,[0,1])
+        self.assertTrue(cancelled.is_set())
+
+    async def test_whole_download_checks_length_and_removes_partial_files(self):
+        class Content:
+            async def iter_chunked(self,size):
+                yield b'abc'
+        class Reply:
+            status=200; content=Content()
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):pass
+        class Session:
+            def get(self,url,**kwargs):
+                return Reply()
+        with tempfile.TemporaryDirectory(dir=tmp.name) as root, patch.object(s,'audio_session',return_value=Session()):
+            path=Path(root)/'audio.raw'
+            await s.download_whole({'url':'https://fixture.invalid/file','headers':{}},path,3)
+            self.assertEqual(path.read_bytes(),b'abc')
+            with self.assertRaisesRegex(RuntimeError,'incomplete'):
+                await s.download_whole({'url':'https://fixture.invalid/file','headers':{}},path,4)
+            self.assertFalse(path.exists())
+
+    async def test_large_range_download_writes_in_order_with_four_bounded_workers(self):
+        active=0;peak=0;data=bytes(range(30))
+        async def get(span):
+            nonlocal active,peak
+            active+=1;peak=max(peak,active)
+            try:
+                await asyncio.sleep(.001*(span[0]%3))
+                return data[span[0]:span[1]+1]
+            finally:active-=1
+        with tempfile.TemporaryDirectory(dir=tmp.name) as root,patch.object(s,'CHUNK',3):
+            path=Path(root)/'large.raw'
+            await s.download_ranges(get,path,data[:2],len(data))
+            self.assertEqual(path.read_bytes(),data)
+            self.assertLessEqual(peak,4)
+
+    @unittest.skipUnless(s.FFMPEG, 'ffmpeg required')
+    async def test_aac_request_converts_opus_into_real_aac_m4a(self):
+        with tempfile.TemporaryDirectory(dir=tmp.name) as root:
+            source=Path(root)/'source.webm'
+            subprocess.run([s.FFMPEG,'-y','-v','error','-f','lavfi','-i','sine=frequency=440:duration=2','-c:a','libopus',str(source)],check=True)
+            data=source.read_bytes();url='https://fixture.invalid/opus'
+            s.verified_audio[url]=data
+            async def stream(*args):
+                return {'url':url,'headers':{},'mime':'audio/webm','contentLength':len(data)}
+            with patch.object(s,'PREP',Path(root)/'prep'), patch.object(s,'get_stream',stream):
+                result=await s._prepare_once(VID,'aac')
+            self.assertEqual(result.suffix,'.m4a')
+            codecs=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','stream=codec_name','-of','json',str(result)]))
+            self.assertEqual(codecs['streams'][0]['codec_name'],'aac')
+
+    def test_progressive_fallback_is_taken_from_original_extraction(self):
+        info={'url':'https://fixture.invalid/audio','format_id':'140','ext':'m4a','duration':88,'formats':[{'url':'https://fixture.invalid/muxed','format_id':'18','ext':'mp4'}]}
+        class Extractor:
+            def extract_info(self,*args,**kwargs): return info
+        with patch.object(s,'ydl_for',return_value=Extractor()):
+            result=s.resolve_sync(VID,'aac')
+        self.assertEqual(result['alternateFormats'][0]['formatId'],'18')
+        self.assertTrue(result['alternateFormats'][0]['muxed'])
+
+    async def test_oversized_progressive_fallback_is_rejected(self):
+        async def worker(*args):
+            return {'url':'https://fixture.invalid/audio','alternateFormats':[{'url':'https://fixture.invalid/muxed','formatId':'18','muxed':True}]}
+        async def verify(stream):
+            stream['contentLength']=s.MAX_MUXED_BYTES+1
+            return stream['url'].endswith('/muxed')
+        with patch.object(s.ladder,'order',return_value=['fixture']), patch.object(s,'resolve_worker',worker), patch.object(s,'verify',verify):
+            with self.assertRaisesRegex(RuntimeError,'incomplete audio probe'):
+                await s.resolve_checked(VID,'aac')
 
     async def test_regional_ytdlp_binds_verification_to_its_proxy(self):
         async def worker(vid, fmt, client, proxy):

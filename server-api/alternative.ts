@@ -5,10 +5,21 @@ const tracks = new Map<string, Song>();
 const pairs = new Map<string, { ids: string[]; until: number }>();
 const valid = (id: unknown): id is string => typeof id === 'string' && /^[\w-]{11}$/.test(id);
 const norm = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-const title = (s: string) => norm(s.replace(/[([](?:official (?:music )?video|official audio|официальный клип)[)\]]/gi,''));
+const title = (s: string) => norm(s.replace(/[([](?:official (?:music )?video|official audio|visualizer|официальный клип)[)\]]/gi,''));
+/** Lyric-video uploaders are not the performing artist. Use explicit title credits. */
+export function canonicalRecording(source: Song): Song {
+  if (/\b(?:remix|live|cover|karaoke|slowed|reverb|sped|instrumental)\b/i.test(source.title)) return source;
+  const marker=/\s*[([](?:lyrics|lyric video|official lyric video|official audio|official music video|visualizer|текст(?: песни)?)[)\]]\s*$/i;
+  if(!marker.test(source.title))return source;
+  const match=source.title.replace(marker,'').match(/^(.+?)\s+[—–-]\s*(.+)$/);
+  if(!match || !match[1].trim() || !match[2].trim())return source;
+  const credit=match[1].trim();
+  const known=source.artists.filter(a=>a.name && norm(a.name)===norm(credit));
+  return {...source,title:match[2].trim(),artists:known.length ? known : [{name:credit}]};
+}
 function creditedTitle(source:Song, candidate:Song) {
   let text=norm(candidate.title
-    .replace(/[([](?:english subtitles|русские субтитры|lyrics|lyric video|текст(?: песни)?|official (?:music |lyric )?video|official audio)[)\]]/gi,'')
+    .replace(/[([](?:english subtitles|русские субтитры|lyrics|lyric video|visualizer|текст(?: песни)?|official (?:music |lyric )?video|official audio)[)\]]/gi,'')
     .replace(/[([](?:128|192|256|320)\s*k(?:b(?:it)?ps|bps|бит[ /]?с)[)\]]/gi,'')
     .replace(/(?:\+|\|)\s*(?:lyrics|текст(?: песни)?)\s*\|?\s*$/gi,''));
   if(!source.artists.length)return false;
@@ -109,6 +120,7 @@ export async function alternatives(id: string): Promise<string[]> {
     }
   } catch {}
   if (source) {
+    source=canonicalRecording(source);
     rememberTracks(source);
     const q = source.artists.map(x => x.name).filter(Boolean).join(' ') + ' ' + source.title;
     const [songs,videos,primary] = await Promise.all([search(q,'songs').then(r=>r.tracks).catch(()=>[]), c.music.search(q,{type:'video'}).then(r => (r.contents || []).flatMap((s:any) => (s.contents || []).map((v:any) => ({id:v.id,title:v.title || '',artists:v.artists || v.authors || [],durationSec:v.duration?.seconds})))).catch(()=>[]),search(q,'all').then(r=>r.top?.track ? [r.top.track] : []).catch(()=>[])]);

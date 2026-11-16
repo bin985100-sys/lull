@@ -22,17 +22,18 @@ test('alternate recording tries MWEB when TV cannot play it',async()=>{
   b.onResolve({filter:/^(youtubei\.js|\.\/potoken|\.\/alternative|\.\/stream-client|.*electron\/yt)$/},a=>({path:a.path,namespace:'fixture'}));
   b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='youtubei.js' ? 'export const Innertube={create:async()=>globalThis.audioFixture};' : a.path.includes('electron/yt') ? 'export const yt=async()=>globalThis.audioFixture;' : a.path==='./potoken' ? "export const mint=async()=> 'fixture';export const potState=()=>({});export const resetMinter=()=>{};export const warmMinter=()=>{};" : a.path==='./alternative' ? "export const alternatives=async()=>['alternate01'];" : 'export const streamFetch=f=>f;'}));
  }}]});
- const calls=[];const oldFetch=globalThis.fetch;
+ const calls=[],requests=[];const oldFetch=globalThis.fetch;
  globalThis.audioFixture={session:{context:{client:{visitorData:'fixture'}},player:{}},getBasicInfo:async(id,opts)=>{
   calls.push([id,opts.client]);
   if(id!=='alternate01' || opts.client==='TV')throw Error('unavailable');
   return {playability_status:{status:'OK'},streaming_data:{adaptive_formats:[{has_audio:true,has_video:false,mime_type:'audio/mp4; codecs="mp4a.40.2"',content_length:16,bitrate:128000,decipher:async()=> 'https://fixture.invalid/audio?x=1'}]}};
  }};
- globalThis.fetch=async()=>new Response(new Uint8Array(16),{headers:{'content-length':'16'}});
+ globalThis.fetch=async(url)=>{requests.push(String(url));return new Response(new Uint8Array(16),{headers:{'content-length':'16'}});};
  try {
   const {fastStream}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
   const found=await fastStream('original001',true);
   assert.equal(found.mediaId,'alternate01');assert.equal(found.prefix.length,16);
+  assert.equal(new URL(requests[0]).searchParams.has('range'),false);
   assert.deepEqual(calls.slice(0,4),[['original001','TV'],['alternate01','TV'],['original001','MWEB'],['alternate01','MWEB']]);
  } finally {globalThis.fetch=oldFetch;delete globalThis.audioFixture;}
 });
@@ -43,6 +44,18 @@ const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('./alternati
 const load=()=>import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64')+'#'+Math.random());
 const a={id:'k7Coe5G-l74',title:'AIST',artists:[{id:'official',name:'FRIENDLY THUG 52 NGG'}]};
 const b={id:'toyY9NScPMc',title:'AIST',artists:[{id:'official',name:'FRIENDLY THUG 52 NGG'}],durationSec:149};
+
+test('lyric uploader is replaced only by explicit performing credits in the title',async()=>{
+ const {canonicalRecording,sameRecording}=await load();
+ const upload={id:'tJuDoXDYPkE',title:'Don Toliver - New Drop (Lyrics)',artists:[{name:'Lost Panda'}],durationSec:218};
+ const source=canonicalRecording(upload);
+ assert.equal(source.title,'New Drop');assert.equal(source.artists[0].name,'Don Toliver');
+ assert.equal(sameRecording(source,{id:'N1cL8kc-YQg',title:'NEW DROP',artists:[{name:'Don Toliver'}],durationSec:218}),true);
+ assert.equal(sameRecording(source,{id:'yn2h2wr2ACg',title:'Don Toliver - NEW DROP (Visualizer)',artists:[{name:'Lost Elephant'}],durationSec:218}),true);
+ for(const suffix of [' Remix',' (live)',' cover',' karaoke'])
+  assert.equal(canonicalRecording({...upload,title:'Don Toliver - New Drop'+suffix+' (Lyrics)'}).artists[0].name,'Lost Panda');
+ assert.equal(canonicalRecording({...upload,title:'New Drop'}).artists[0].name,'Lost Panda');
+});
 
 test('missing duration permits the exact official channel, never a same-name impersonator',async()=>{
  const {sameRecording}=await load();assert.equal(sameRecording(a,b),true);

@@ -236,6 +236,7 @@ def to_stream(j: dict) -> dict:
         "mime": mime, "bitrate": round((f.get("abr") or f.get("tbr") or 128) * 1000),
         "contentLength": f.get("filesize") or 0, "durationSec": round(j.get("duration") or 0),
         "formatId": str(f.get("format_id") or ""),
+        "availableAt": float(f.get("available_at") or j.get("available_at") or 0),
     }
 
 
@@ -243,6 +244,18 @@ def resolve_sync(vid: str, fmt: str, client: str = "", proxy: str | None = None)
     t0 = time.monotonic()
     j = ydl_for(fmt, client, proxy).extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)
     s = to_stream(j)
+    if str(s.get("formatId")) == "18":
+        s["muxed"] = True
+    # Audio-only itag 140 can be forbidden while the SAME video's progressive
+    # itag 18 remains playable. Reuse the already deciphered format list.
+    muxed = next((f for f in j.get("formats", []) if str(f.get("format_id")) == "18" and f.get("url")), None)
+    if muxed and str(s.get("formatId")) != "18":
+        variant = {k: v for k, v in j.items() if k != "requested_formats"}
+        variant.update(muxed)
+        alternative = to_stream(variant)
+        alternative["muxed"] = True
+        s["alternateFormats"] = [alternative]
+    s["retryAfter"] = time.monotonic() + 5
     log.info("resolve %s %s %.1fs", vid, client or "default", time.monotonic() - t0)
     return s
 
@@ -255,6 +268,7 @@ FALLBACK_CLIENTS = ("innertube", "", "mweb", "web_embedded", "web_safari", "tv",
 STEP = max(0.05, float(os.environ.get("LULL_RACE_STEP", "0.35")))
 RACE_WIDTH = max(1, int(os.environ.get("LULL_RACE_WIDTH", "2")))
 RESOLVE_TIMEOUT = max(1, float(os.environ.get("LULL_RESOLVE_TIMEOUT", "18")))
+MAX_MUXED_BYTES = 32 * 1024 * 1024
 BOT_COOLDOWN = 120
 
 
@@ -370,17 +384,41 @@ async def verify(s: dict) -> bool:
     """Ссылка реально отдаёт звук так, как его берёт раздача: первые байты (заодно узнаём размер)
     и следующий кусок в 2 МБ — без нужного токена YouTube отдаёт начало, а дальше 403."""
     assert yt_session is not None
+    s.pop("_probe403", None)
     try:
+        known = int(s.get("contentLength") or 0)
+        if prepare_audio.get() and 0 < known <= MAX_INLINE:
+            async with audio_session(s).get(s["url"], headers=s["headers"], timeout=ClientTimeout(total=12)) as r:
+                if r.status not in (200, 206):
+                    if r.status == 403:
+                        s["_probe403"] = True
+                    return False
+                data = await r.content.readexactly(known)
+                if await r.content.read(1):
+                    return False
+                verified_audio[s["url"]] = data
+                verified_audio.move_to_end(s["url"])
+                while len(verified_audio) > 4:
+                    verified_audio.popitem(last=False)
+                return True
         async with audio_session(s).get(s["url"], headers={**s["headers"], "Range": "bytes=0-1"}) as r:
             if r.status not in (200, 206):
+                if r.status == 403:
+                    s["_probe403"] = True
                 return False
             total = r.headers.get("Content-Range", "").rpartition("/")[2]
+            if not total.isdigit() and r.status == 200:
+                total = r.headers.get("Content-Length", "")
             if total.isdigit():
                 s["contentLength"] = int(total)
         n = int(s.get("contentLength") or 0)
         if n > FIRST_CHUNK + 1:
             await fetch_range(s, FIRST_CHUNK, min(n - 1, FIRST_CHUNK + CHUNK - 1))
         return True
+    except PermissionError as e:
+        if "403" in str(e):
+            s["_probe403"] = True
+        return False
     except Exception:
         return False
 
@@ -426,9 +464,12 @@ async def resolve_regional(vid: str) -> dict:
 async def resolve_checked(vid: str, fmt: str) -> dict:
     """Bounded hedged race: advance on failure, cancel losers, cap total latency."""
     errors: list[str] = []
+    t0 = time.monotonic()
+    deadline = t0 + RESOLVE_TIMEOUT
     unavailable = asyncio.Event()
     route_failed = asyncio.Event()
     async def one(client: str, media_id: str | None = None):
+        nonlocal deadline
         started = time.monotonic()
         target = media_id or vid
         try:
@@ -441,8 +482,39 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 s["exit"] = "fallback"
             else:
                 s = await resolve_worker(target, fmt, client)
-            if not s.get("checked") and not await verify(s):
+            retry_after = s.pop("retryAfter", 0)
+            candidates = [s, *s.pop("alternateFormats", [])]
+            candidates.sort(key=lambda candidate:max(time.time(),float(candidate.get("availableAt") or 0)))
+            selected = None
+            for attempt in range(2):
+                for candidate in candidates:
+                    if s.get("exit"):
+                        candidate["exit"] = s["exit"]
+                    wait = max(0,float(candidate.get("availableAt") or 0)+.5-time.time())
+                    if wait:
+                        if wait > 35:
+                            continue
+                        deadline = max(deadline,min(t0+50,time.monotonic()+wait+12))
+                        log.info("audio_source_wait video=%s route=%s seconds=%.2f",vid,client or "default",wait)
+                        await asyncio.sleep(wait)
+                    if candidate.get("checked") or await verify(candidate):
+                        if candidate.get("muxed") and int(candidate.get("contentLength") or 0) > MAX_MUXED_BYTES:
+                            continue
+                        selected = candidate
+                        break
+                if selected:
+                    break
+                if attempt or not retry_after or not any(x.get("_probe403") for x in candidates):
+                    break
+                delay = min(5, max(0, retry_after-time.monotonic()))
+                log.info("audio_url_wait video=%s route=%s seconds=%.2f", vid, client or "default", delay)
+                await asyncio.sleep(delay)
+            if selected is None:
                 raise RuntimeError("403 or incomplete audio probe")
+            if selected is not s:
+                log.info("audio_format_fallback video=%s route=%s format=%s", vid, client or "default", selected.get("formatId"))
+            s = selected
+            s.pop("_probe403", None)
         except Exception as e:
             msg = str(e).replace("ERROR: ", "")
             # «недоступно» запасной клиент (tv и др.) пишет и про нормальные видео — решает только итог по всем
@@ -483,7 +555,6 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
         except Exception as e:
             errors.append(f"alternate: {e}")
 
-    t0 = time.monotonic()
     order = ladder.order()
     regional_started = False
     regional_methods = (["regional"] if API_REGIONAL else []) + (["regional_ytdlp"] if YT_FALLBACK_PROXY else [])
@@ -499,7 +570,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
     alternate_started = False
     try:
         while order or pending:
-            remaining = RESOLVE_TIMEOUT - (time.monotonic() - t0)
+            remaining = deadline - time.monotonic()
             if remaining <= 0:
                 errors.append("resolve deadline exceeded")
                 break
@@ -603,6 +674,39 @@ async def warm_worker():
             _, args = warm_queue.popitem(last=False)
             await _warm(*args)
         warm_event.clear()
+
+
+def warm_catalog_snapshot(snapshot) -> int:
+    queued=0;seen=set()
+    for section in snapshot if isinstance(snapshot,list) else []:
+        for item in section.get('items',[]) if isinstance(section,dict) else []:
+            if not isinstance(item,dict) or item.get('kind')!='track':continue
+            track=item.get('track') or item
+            vid=track.get('id') if isinstance(track,dict) else None
+            if not isinstance(vid,str) or not valid_vid(vid) or vid in seen:continue
+            seen.add(vid)
+            key=f'aac:{vid}'
+            if prep_find(vid,'aac') or key in prep_inflight or key in warm_queue:continue
+            if len(warm_queue)>=32 or queued>=24:break
+            warm_queue[key]=(vid,'aac',True);queued+=1
+    if queued:warm_event.set()
+    return queued
+
+
+async def catalog_warm_worker():
+    # Prepare the small public chart before a listener opens it. Existing files
+    # cause no YouTube requests; user searches never enqueue audio here.
+    await asyncio.sleep(15)
+    while True:
+        try:
+            assert session is not None
+            async with session.get(f'{NODE_API}/api/charts',timeout=ClientTimeout(total=15)) as response:
+                if response.status==200:
+                    queued=warm_catalog_snapshot(await response.json())
+                    if queued:log.info('catalog_warm queued=%d',queued)
+        except Exception as e:
+            log.info('catalog_warm unavailable: %s',type(e).__name__)
+        await asyncio.sleep(900)
 
 
 async def get_stream(vid: str, fmt: str, fresh: bool = False) -> dict:
@@ -725,9 +829,15 @@ async def on_start(app: web.Application):
     if YT_FALLBACK_PROXY:
         from aiohttp_socks import ProxyConnector
         fallback_yt_session = ClientSession(timeout=ClientTimeout(total=None, sock_connect=10, sock_read=20), connector=ProxyConnector.from_url(YT_FALLBACK_PROXY, rdns=True, limit=4), auto_decompress=False)
+    if os.environ.get('LULL_CATALOG_WARM','1')!='0':
+        app['catalog_warm_worker']=asyncio.create_task(catalog_warm_worker())
 
 
 async def on_stop(app: web.Application):
+    catalog_worker=app.get('catalog_warm_worker')
+    if catalog_worker:
+        catalog_worker.cancel()
+        await asyncio.gather(catalog_worker,return_exceptions=True)
     worker = app.get("warm_worker")
     if worker:
         worker.cancel()
@@ -773,6 +883,10 @@ async def fetch_range(s: dict, a: int, b: int) -> bytes:
     raise RuntimeError(f"кусок {a}-{b}: {last}")
 
 
+class AudioVersionChanged(RuntimeError):
+    pass
+
+
 def range_getter(vid: str, fmt: str, s: dict):
     """Загрузчик кусков файла: при 403 одна новая ссылка на всех (остальные куски ждут и повторяют с ней)."""
     state = {"s": s, "refreshes": 0}
@@ -794,7 +908,7 @@ def range_getter(vid: str, fmt: str, s: dict):
                         if (renewed.get("mediaId", vid) != cur.get("mediaId", vid) or
                                 renewed.get("contentLength") != cur.get("contentLength") or
                                 renewed.get("formatId") != cur.get("formatId")):
-                            raise RuntimeError("Версия файла изменилась при обновлении ссылки")
+                            raise AudioVersionChanged("Версия файла изменилась при обновлении ссылки")
                         state["s"] = renewed
         raise RuntimeError("ссылка не отдаёт файл")
     return get
@@ -815,13 +929,20 @@ def prep_find(vid: str, fmt: str) -> "Path | None":
     for ext in (".m4a", ".webm", ".mp4"):
         p = PREP / f"{fmt}-{vid}{ext}"
         if p.is_file() and p.stat().st_size > 0:
+            stat=p.stat()
+            if time.time()-stat.st_atime>60:
+                # Preserve mtime exactly: FileResponse uses it for Range/ETag.
+                try:
+                    os.utime(p,ns=(time.time_ns(),stat.st_mtime_ns))
+                except OSError:
+                    pass
             return p
     return None
 
 
 def prep_cleanup():
     try:
-        files = sorted((p for p in PREP.iterdir() if p.is_file() and p.suffix in (".m4a", ".webm", ".mp4") and ".part." not in p.name), key=lambda p: p.stat().st_mtime)
+        files = sorted((p for p in PREP.iterdir() if p.is_file() and p.suffix in (".m4a", ".webm", ".mp4") and ".part." not in p.name), key=lambda p: p.stat().st_atime)
         total = sum(p.stat().st_size for p in files)
         for p in files:
             if total <= PREP_MAX:
@@ -833,6 +954,70 @@ def prep_cleanup():
 
 
 async def _prepare(vid: str, fmt: str) -> Path:
+    try:
+        return await _prepare_once(vid, fmt)
+    except AudioVersionChanged:
+        # A refreshed URL may select another valid format/recording. Start the
+        # complete file again; never concatenate bytes from different versions.
+        log.info("prepare_restart video=%s reason=version_changed", vid)
+        return await _prepare_once(vid, fmt)
+
+
+async def read_chunks(get, spans):
+    tasks = [asyncio.create_task(get(span)) for span in spans]
+    try:
+        return await asyncio.gather(*tasks)
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def download_whole(stream: dict, path: Path, total: int):
+    received = 0
+    try:
+        async with audio_session(stream).get(stream["url"], headers=stream["headers"], timeout=ClientTimeout(total=20, sock_read=8)) as response:
+            if response.status in (403,410):
+                raise PermissionError(str(response.status))
+            if response.status not in (200,206):
+                raise RuntimeError(f"full download HTTP {response.status}")
+            with path.open("wb") as output:
+                async for chunk in response.content.iter_chunked(64*1024):
+                    received += len(chunk)
+                    if received > total:
+                        raise RuntimeError("oversized full audio response")
+                    output.write(chunk)
+        if received != total:
+            raise RuntimeError(f"incomplete full audio response {received}/{total}")
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+
+async def download_ranges(get, path: Path, prefix: bytes, total: int):
+    spans=iter((a,min(a+CHUNK-1,total-1)) for a in range(len(prefix),total,CHUNK))
+    with path.open('wb') as output:
+        output.write(prefix)
+        async def worker():
+            for a,b in spans:
+                data=await get((a,b))
+                if len(data)!=b-a+1:
+                    raise RuntimeError('incomplete audio range')
+                output.seek(a);output.write(data)
+        tasks=[asyncio.create_task(worker()) for _ in range(4)]
+        try:
+            await asyncio.gather(*tasks)
+        except BaseException:
+            path.unlink(missing_ok=True)
+            raise
+        finally:
+            for task in tasks:
+                if not task.done():task.cancel()
+            await asyncio.gather(*tasks,return_exceptions=True)
+
+
+async def _prepare_once(vid: str, fmt: str) -> Path:
     async with prep_sem:
         t0 = time.monotonic()
         flag = prepare_audio.set(READ_AHEAD)
@@ -845,24 +1030,33 @@ async def _prepare(vid: str, fmt: str) -> Path:
         total = int(s.get("contentLength") or 0)
         if not total:
             raise RuntimeError("нет размера файла")
-        get = range_getter(vid, fmt, s)
         prefix = verified_audio.pop(s["url"], b"")
-        spans, pos = [], len(prefix)
-        while pos < total:
-            spans.append((pos, min(pos + CHUNK - 1, total - 1)))
-            pos += CHUNK
-        parts = [prefix, *await asyncio.gather(*(get(x) for x in spans))]
-        t1 = time.monotonic()
         PREP.mkdir(parents=True, exist_ok=True)
         mime = s.get("mime") or "audio/mp4"
-        ext = ".webm" if "webm" in mime else ".m4a"
+        ext = ".m4a" if fmt == "aac" and FFMPEG else ".webm" if "webm" in mime else ".m4a"
         raw = PREP / f"{fmt}-{vid}.raw"
         out = PREP / f"{fmt}-{vid}{ext}"
-        raw.write_bytes(b"".join(parts))
+        reused = len(prefix) if len(prefix) == total else 0
+        if reused:
+            raw.write_bytes(prefix)
+        elif prefix and total > MAX_INLINE:
+            # A large catalog response has already verified range downloads.
+            # Keep that fast route, but bound memory to four chunks per file.
+            await download_ranges(range_getter(vid,fmt,s),raw,prefix,total)
+            reused=len(prefix)
+        else:
+            try:
+                await download_whole(s,raw,total)
+            except PermissionError:
+                await stream_forbidden(s)
+                await get_stream(vid,fmt,fresh=True)
+                raise AudioVersionChanged("Full download requires a renewed source")
+        t1 = time.monotonic()
         if FFMPEG and ext == ".m4a":
             tmp = PREP / f"{fmt}-{vid}.part.m4a"
+            codec = ["-c:a", "aac", "-b:a", "128k", "-threads", "1"] if "webm" in mime or "opus" in mime else ["-c:a", "copy"]
             proc = await asyncio.create_subprocess_exec(
-                FFMPEG, "-y", "-v", "error", "-i", str(raw), "-map", "0:a:0", "-vn", "-c:a", "copy",
+                FFMPEG, "-y", "-v", "error", "-i", str(raw), "-map", "0:a:0", "-vn", *codec,
                 "-movflags", "+faststart", "-f", "ipod", str(tmp),
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
             _, err = await proc.communicate()
@@ -870,12 +1064,12 @@ async def _prepare(vid: str, fmt: str) -> Path:
                 tmp.replace(out)
                 raw.unlink(missing_ok=True)
             else:
-                log.warning("ffmpeg %s: %s — отдаю как есть", vid, (err or b"").decode(errors="ignore")[:200])
                 tmp.unlink(missing_ok=True)
-                raw.replace(out)
+                raw.unlink(missing_ok=True)
+                raise RuntimeError("audio container preparation failed: " + (err or b"").decode(errors="ignore")[:160])
         else:
             raw.replace(out)
-        log.info("prepare %s: %d КБ, без повторной загрузки %d КБ, скачано за %.1fs, всего %.1fs", vid, total // 1024, len(prefix) // 1024, t1 - t0, time.monotonic() - t0)
+        log.info("prepare %s: %d КБ, без повторной загрузки %d КБ, скачано за %.1fs, всего %.1fs", vid, total // 1024, reused // 1024, t1 - t0, time.monotonic() - t0)
         prep_cleanup()
         return out
 
@@ -887,10 +1081,6 @@ async def prepared(vid: str, fmt: str) -> Path:
     fmt = fmt if fmt in FORMATS else "auto"
     p = prep_find(vid, fmt)
     if p:
-        try:
-            os.utime(p)
-        except OSError:
-            pass
         return p
     key = f"{fmt}:{vid}"
     fut = prep_inflight.get(key)
@@ -911,7 +1101,7 @@ async def api_stream(request: web.Request) -> web.StreamResponse:
     try:
         started = time.monotonic()
         cached = prep_find(vid, fmt) is not None
-        path = await asyncio.wait_for(prepared(vid, fmt), timeout=25)
+        path = await asyncio.wait_for(prepared(vid, fmt), timeout=60)
         r = web.FileResponse(path, headers={"Content-Type": "audio/webm" if path.suffix == ".webm" else "audio/mp4",
                                             "Cache-Control": "no-store",
                                             "X-Lull-Cache": "hit" if cached else "miss",
@@ -919,6 +1109,8 @@ async def api_stream(request: web.Request) -> web.StreamResponse:
         return cors(request, r)
     except Exception as e:
         log.warning("prepare failed %s: %s", vid, str(e)[:200])
+        if fmt == "aac":
+            return cors(request, stream_error(e))
         # If there is no playable URL, rerunning the same full race here doubles
         # latency and consumes workers needed for the next tap.
         hit = cache.get(f"{fmt}:{vid}")
