@@ -2,8 +2,9 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
+import { useLayout } from './layout';
 import { type ReactNode, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, type PressableProps, ScrollView, type ScrollViewProps, StyleSheet, Text, type TextProps, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, type PressableProps, ScrollView, type ScrollViewProps, StyleSheet, Text, type TextProps, View, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -117,9 +118,8 @@ function Ambient() {
 export function Screen({ children, dock = true, scroll = true, style, ...p }: ScrollViewProps & { dock?: boolean; scroll?: boolean; children?: ReactNode }) {
   const reduced=useReducedMotion();
   const ins = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  /* на планшете колонка контента не шире 720, в горизонтали учитываем вырез сбоку */
-  const side = Math.max(20, (width - 720) / 2, ins.left + 12, ins.right + 12);
+  const layout=useLayout();
+  const side = Math.max(layout.side, ins.left + 12, ins.right + 12);
   const hasTrack = usePlayer((x) => x.index >= 0);
   const pb = dock ? (hasTrack ? DOCK.mini : DOCK.compact) + Math.max(ins.bottom, 14) + 30 : Math.max(ins.bottom, 14) + 24;
   const pad = { paddingTop: Math.max(ins.top, 18) + 14, paddingBottom: pb, paddingHorizontal: side };

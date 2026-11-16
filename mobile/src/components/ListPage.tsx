@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { type ReactNode, useEffect } from 'react';
-import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
+import { useLayout } from '@/ui/layout';
 
 import type { Track } from '@/api/audius';
 import { warm } from '@/api/lull';
@@ -51,8 +52,9 @@ export function CoverArt({ cover, size, radius = 34 }: { cover?: Props['cover'];
 }
 
 export function ListPage(p: Props) {
-  const { width } = useWindowDimensions();
-  const size = Math.min(270, width * 0.7);
+  const layout=useLayout();
+  const size = Math.min(270, layout.content * 0.7);
+  const wide=layout.content>=680;
   const tracks = p.tracks ?? EMPTY_TRACKS;
   useEffect(() => { if (tracks.length) warm(tracks.slice(0, 2)); }, [tracks]);
   const playingHere = usePlayer((s) => s.playing && !!currentTrack(s) && tracks.some((t) => t.id === currentTrack(s)!.id));
@@ -60,9 +62,11 @@ export function ListPage(p: Props) {
   return (
     <Screen>
       <TopBar right={p.right} />
-      <View style={{ marginTop: 4, marginBottom: 18 }}>{p.cover?.wide ? (
+      <View style={{flexDirection:wide ? 'row' : 'column',alignItems:wide ? 'center' : 'stretch',gap:wide ? 28 : 0}}>
+      <View style={{ marginTop: 4, marginBottom: 18, width:wide ? 270 : undefined }}>{p.cover?.wide ? (
         <Banner source={p.cover.source} label={p.title}/>
       ) : p.loading && !p.cover?.uri && !p.cover?.source ? <Skeleton h={size} w={size} r={34} style={{ alignSelf: 'center' }} /> : <CoverArt cover={p.cover} size={size} />}</View>
+      <View style={{flex:wide ? 1 : undefined,minWidth:0}}>
       <T v="h1" accessibilityRole="header">{p.title}</T>
       {p.sub ? <View style={{ marginTop: 6 }}>{p.sub}</View> : null}
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
@@ -72,6 +76,8 @@ export function ListPage(p: Props) {
         {p.extraBtn}
       </View>
       {Platform.OS !== 'web' && tracks.length > 0 && <OfflineSaveButton tracks={tracks}/>}
+      </View>
+      </View>
       {p.below}
       <View style={{ height: 18 }} />
       {p.error && !tracks.length ? <Offline onRetry={p.onRetry || (() => {})} /> : p.loading && !tracks.length ? <ListSkeleton n={6} /> : !tracks.length ? p.empty : (

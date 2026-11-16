@@ -9,11 +9,13 @@ import { TrackRow } from '@/components/TrackRow';
 import { useLibrary } from '@/store/library';
 import { C, F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
+import { useLayout } from '@/ui/layout';
 import { Btn, Cover, Empty, IconBtn, ListSkeleton, Offline, Press, Reveal, s, Screen, SectionHead, Segmented, T } from '@/ui/kit';
 
 type Filter = 'all' | 'tracks' | 'albums' | 'artists';
 
 export default function Search() {
+  const layout=useLayout();
   /* фокус после анимации входа экрана, иначе браузер его теряет */
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 340); return () => clearTimeout(t); }, []);
@@ -98,7 +100,7 @@ export default function Search() {
                 {f === 'all' ? <SectionHead title="Альбомы" /> : null}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, rowGap: 18 }}>
                   {collections.slice(0, f === 'all' ? 4 : 20).map((p) => (
-                    <Press key={p.id} onPress={() => openPlaylist(p)} accessibilityRole="button" accessibilityLabel={p.title} outer={{ flexBasis: '47%', flexGrow: 1, maxWidth: '50%' }} style={{ gap: 8 }}>
+                    <Press key={p.id} onPress={() => openPlaylist(p)} accessibilityRole="button" accessibilityLabel={p.title} outer={{ width:layout.card }} style={{ gap: 8 }}>
                       <Cover uri={p.artwork} size="100%" radius={24} />
                       <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 16 }}>{p.title}</T>
                       {p.artist ? <T v="small" numberOfLines={1}>{p.artist}</T> : null}

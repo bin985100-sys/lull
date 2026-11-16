@@ -17,6 +17,7 @@ import { haptic, T } from '@/ui/kit';
 import { PlayPause } from '@/ui/PlayPause';
 import { slideIn } from '@/ui/anim';
 import { resetTo } from '@/nav';
+import { useLayout } from '@/ui/layout';
 import { closeLyrics, LyricsCard, LyricsFull, useLyricsUi } from './Lyrics';
 import { TintLayer } from './TintLayer';
 import { likeWithUndo, openSelectPlaylist } from './TrackRow';
@@ -75,14 +76,14 @@ function SkipBtn({ dir, size = 28, box = 48 }: { dir: 'next' | 'prev'; size?: nu
 }
 
 /* ---------- кнопка запуска с упругим нажатием ---------- */
-function BigPlay({ playing, loading }: { playing: boolean; loading?: boolean }) {
+function BigPlay({ playing, loading, size=84 }: { playing: boolean; loading?: boolean; size?: number }) {
   const reduced=useReducedMotion();
   const sc = useSharedValue(1);
   const a = useAnimatedStyle(() => ({ transform: [{ scale: sc.get() }] }));
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : 'Слушать'}
       onPress={() => { haptic(); if(!reduced) sc.set(withSequence(withTiming(0.9, { duration: 100 }), withSpring(1, { damping: 10, stiffness: 240 }))); player.toggle(); }}>
-      <Animated.View style={[{ width: 84, height: 84, borderRadius: 42, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }, a]}>
+      <Animated.View style={[{ width: size, height: size, borderRadius: size/2, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }, a]}>
         {loading ? <ActivityIndicator color="#000" size="large" /> : <PlayPause playing={playing} size={46} color="#000" stroke={1.8} />}
       </Animated.View>
     </Pressable>
@@ -90,11 +91,11 @@ function BigPlay({ playing, loading }: { playing: boolean; loading?: boolean }) 
 }
 
 /* ---------- прогресс ---------- */
-function MiniProgress() {
+function MiniProgress({navHeight=DOCK.compact}:{navHeight?:number}) {
   const { time, duration } = useProgress();
   const p = duration ? Math.min(1, time / duration) : 0;
   return (
-    <View style={{ position: 'absolute', left: 22, right: 22, bottom: DOCK.compact + 2, height: 2, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.10)' }}>
+    <View style={{ position: 'absolute', left: 22, right: 22, bottom: navHeight + 2, height: 2, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.10)' }}>
       <View style={{ width: `${p * 100}%`, height: 2, borderRadius: 2, backgroundColor: '#b4eaff' }} />
     </View>
   );
@@ -147,6 +148,8 @@ function Full({ h, active }: { h: number; active: boolean }) {
   const liked = useLibrary((x) => x.liked.some((y) => y.id === t.id));
   const reduced = useReducedMotion();
   const { width: ww } = useWindowDimensions();
+  const playSize=ww<350 ? 64 : 84;
+  const controlSize=Math.max(28,Math.min(56,(Math.min(680,ww-16)-44-playSize)/4));
   const coverSize = Math.max(130, Math.min(ww - 60, ww > 700 ? 480 : 360, h - DOCK.compact - 450));
   const enter = reduced ? undefined : slideIn(s.lastDir === 'next' ? 60 : -60, 0.9, 500);
   const close = () => player.expand(false);
@@ -184,11 +187,11 @@ function Full({ h, active }: { h: number; active: boolean }) {
       {s.error && <Pressable accessibilityRole="button" onPress={() => player.toggle()}><T v="sub">{s.error} · Повторить</T></Pressable>}
       <Seek active={active} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
-        <Pressable onPress={() => { haptic(); player.toggleShuffle(); }} accessibilityRole="button" accessibilityLabel="Перемешивать" accessibilityState={{ selected: s.shuffle }} style={st.ctl}><Icon name="shuffle" size={28} color={s.shuffle ? C.tx : C.tx3} /></Pressable>
-        <SkipBtn dir="prev" size={32} box={56} />
-        <BigPlay playing={s.playing} loading={loading} />
-        <SkipBtn dir="next" size={32} box={56} />
-        <Pressable onPress={() => { haptic(); player.cycleRepeat(); }} accessibilityRole="button" accessibilityLabel={`Повтор: ${{ off: 'выключен', all: 'все', one: 'трек' }[s.repeat]}`} style={st.ctl}>
+        <Pressable onPress={() => { haptic(); player.toggleShuffle(); }} accessibilityRole="button" accessibilityLabel="Перемешивать" accessibilityState={{ selected: s.shuffle }} style={[st.ctl,{width:controlSize}]}><Icon name="shuffle" size={28} color={s.shuffle ? C.tx : C.tx3} /></Pressable>
+        <SkipBtn dir="prev" size={28} box={controlSize} />
+        <BigPlay playing={s.playing} loading={loading} size={playSize} />
+        <SkipBtn dir="next" size={28} box={controlSize} />
+        <Pressable onPress={() => { haptic(); player.cycleRepeat(); }} accessibilityRole="button" accessibilityLabel={`Повтор: ${{ off: 'выключен', all: 'все', one: 'трек' }[s.repeat]}`} style={[st.ctl,{width:controlSize}]}>
           <Icon name={s.repeat === 'one' ? 'repeatOne' : 'repeat'} size={28} color={s.repeat === 'off' ? C.tx3 : C.tx} />
         </Pressable>
       </View>
@@ -248,7 +251,7 @@ function useTrackSwipe(onDown?: () => void) {
 }
 
 /* ---------- мини-строка ---------- */
-function Mini() {
+function Mini({navHeight=DOCK.compact}:{navHeight?:number}) {
   const s = usePlayer();
   const loading = useProgress((x) => s.buffering && x.time < 0.5);
   const t = currentTrack(s)!;
@@ -256,7 +259,7 @@ function Mini() {
   const enter = reduced ? undefined : slideIn(s.lastDir === 'next' ? 28 : -28, 1, 420);
   const swipe = useTrackSwipe();
   return (
-    <View style={st.miniRow}>
+    <View style={[st.miniRow,{bottom:navHeight}]}>
       <Animated.View {...swipe.handlers} style={[{ flex: 1, minWidth: 0 }, swipe.style]}>
       <Pressable onPress={() => { haptic(); player.expand(true); }} accessibilityRole="button" accessibilityLabel={`Открыть плеер: ${t.title}. Свайп влево — следующий трек, вправо — предыдущий`} style={{ flex: 1, minWidth: 0, height: 60 }}>
         <Animated.View key={t.id} entering={enter} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -284,27 +287,31 @@ const TR = { transitionDuration: 560, transitionTimingFunction: cubicBezier(EASE
 
 function Nav({active}:{active:Tab | null}) {
   const reduced=useReducedMotion();
+  const layout=useLayout();
   const items:[Tab,IconName,string][]=[['listen','navListen','Слушать'],['discover','navDiscover','Открывать'],['collection','navCollection','Коллекция']];
   return <View accessibilityRole="tablist" accessibilityLabel="Основная навигация" style={st.nav}>
     {items.map(([key,icon,label])=><Pressable key={key} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{selected:key===active}} aria-selected={key===active}
       style={st.navBtn} onPress={()=>{haptic();player.expand(false);useTab.setState({tab:key});resetTo(`/${key}` as '/listen');}}>
       <Animated.View style={{transform:[{scale:key===active && !reduced ? 1.06 : 1}],transitionProperty:'transform',transitionDuration:reduced ? 0 : 180}}><Icon name={icon} size={27} color={key===active ? C.sky : C.tx2}/></Animated.View>
-      <T v="label" numberOfLines={1} style={{color:key===active ? '#fff' : C.tx2}}>{label}</T>
+      <T v="label" numberOfLines={1} style={{fontSize:layout.available<300 ? 10 : undefined,color:key===active ? '#fff' : C.tx2}}>{label}</T>
     </Pressable>)}
   </View>;
 }
 
 export function Dock() {
+  const layout=useLayout();
   const path = usePathname();
   const ins = useSafeAreaInsets();
-  const { height, width } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const has = usePlayer((s) => s.index >= 0);
   const expanded = usePlayer((s) => s.expanded);
   const cover = usePlayer((s) => currentTrack(s)?.artwork);
   const tab = useTab((s) => s.tab);
   const reduced = useReducedMotion();
   useEffect(() => { const t = path.startsWith('/my/') ? 'collection' : ROOT[path]; if (t && t !== useTab.getState().tab) useTab.setState({ tab: t }); }, [path]);
-  const hidden = HIDDEN.includes(path);
+  const hidden = HIDDEN.includes(path) || !!layout.rail && !has;
+  const navHeight=layout.rail ? 4 : DOCK.compact;
+  const miniHeight=DOCK.mini-DOCK.compact+navHeight;
 
   /* полный плеер монтируется при раскрытии и уходит после анимации сворачивания */
   const [fullMounted, setFullMounted] = useState(false);
@@ -324,17 +331,17 @@ export function Dock() {
 
   /* на планшете и в горизонтали капсула не растягивается во всю ширину */
   const maxW = 560;
-  const side = width > maxW + 2 * DOCK.side ? (width - maxW) / 2 : DOCK.side;
-  const fullSide = width > 760 ? (width - 680) / 2 : 8;
+  const side = layout.available > maxW + 2 * DOCK.side ? (layout.available - maxW) / 2 : DOCK.side;
+  const fullSide = layout.available > 760 ? (layout.available - 680) / 2 : 8;
   const bottomGap = Math.max(ins.bottom, 14) - 2;
   const fullH = height - Math.max(ins.top, 18) - 2 - 8;
-  const h = !has ? DOCK.compact : expanded ? fullH : DOCK.mini;
+  const h = !has ? DOCK.compact : expanded ? fullH : miniHeight;
   const dur = reduced ? 0 : TR.transitionDuration;
 
   return (
     <Animated.View
       style={[st.dock, {
-        height: h, left: expanded ? fullSide : side, right: expanded ? fullSide : side, bottom: expanded ? 8 : bottomGap, borderRadius: expanded ? 44 : has ? 34 : 44,
+        height: h, left: layout.rail + (expanded ? fullSide : side), right: expanded ? fullSide : side, bottom: expanded ? 8 : bottomGap, borderRadius: expanded ? 44 : has ? 34 : 44,
         opacity: hidden ? 0 : 1, transform: [{ translateY: hidden ? 160 : 0 }],
         transitionProperty: ['height', 'left', 'right', 'bottom', 'borderRadius', 'opacity', 'transform'], transitionDuration: dur, transitionTimingFunction: TR.transitionTimingFunction,
       }]}
@@ -342,18 +349,18 @@ export function Dock() {
       <View pointerEvents="none" style={[StyleSheet.absoluteFill,{backgroundColor:C.s1}]}/>
       {has ? <Tint uri={cover} strong={expanded} /> : null}
       {has && (fullMounted||expanded) ? (
-        <Animated.View pointerEvents={fullOn ? 'auto' : 'none'} aria-hidden={!fullOn} accessibilityElementsHidden={!fullOn} importantForAccessibility={fullOn ? 'auto' : 'no-hide-descendants'} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: DOCK.compact, opacity: fullOn ? 1 : 0, transform: [{ translateY: fullOn ? 0 : 24 }],
+        <Animated.View pointerEvents={fullOn ? 'auto' : 'none'} aria-hidden={!fullOn} accessibilityElementsHidden={!fullOn} importantForAccessibility={fullOn ? 'auto' : 'no-hide-descendants'} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: navHeight, opacity: fullOn ? 1 : 0, transform: [{ translateY: fullOn ? 0 : 24 }],
           transitionProperty: ['opacity', 'transform'], transitionDuration: reduced ? 0 : fullOn ? 420 : 240, transitionDelay: fullOn && !reduced ? 120 : 0, transitionTimingFunction: TR.transitionTimingFunction }}>
           <Full h={fullH} active={fullOn} />
         </Animated.View>
       ) : null}
       {has ? (
-        <Animated.View pointerEvents={expanded ? 'none' : 'box-none'} aria-hidden={expanded} accessibilityElementsHidden={expanded} importantForAccessibility={expanded ? 'no-hide-descendants' : 'auto'} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: DOCK.mini, opacity: expanded ? 0 : 1, transform: [{ translateY: expanded ? -20 : 0 }],
+        <Animated.View pointerEvents={expanded ? 'none' : 'box-none'} aria-hidden={expanded} accessibilityElementsHidden={expanded} importantForAccessibility={expanded ? 'no-hide-descendants' : 'auto'} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: miniHeight, opacity: expanded ? 0 : 1, transform: [{ translateY: expanded ? -20 : 0 }],
           transitionProperty: ['opacity', 'transform'], transitionDuration: reduced ? 0 : 300, transitionDelay: !expanded && !reduced ? 160 : 0, transitionTimingFunction: TR.transitionTimingFunction }}>
-          <Mini/><MiniProgress />
+          <Mini navHeight={navHeight}/><MiniProgress navHeight={navHeight} />
         </Animated.View>
       ) : null}
-      <Nav active={expanded ? null : tab}/>
+      {!layout.rail && <Nav active={expanded ? null : tab}/>}
     </Animated.View>
   );
 }

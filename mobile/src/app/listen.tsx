@@ -126,7 +126,7 @@ function Focus({ onPlayForYou,loading,canPlay }: { onPlayForYou: () => void;load
     ...moods.map((m) => ({ key: m.id, title: m.title, image: m.image, open: () => router.push({ pathname: '/mood/[id]', params: { id: m.id } }) })),
   ];
   return (
-    <View onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+    <View onLayout={(e) => setW(e.nativeEvent.layout.width)} style={{width:'100%',maxWidth:720}}>
       <SectionHead title="Сегодня в фокусе" />
       {w ? (
         <ScrollView ref={rail} horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={w + 12} snapToAlignment="start"

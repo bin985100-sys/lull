@@ -9,18 +9,20 @@ import { CoverArt } from '@/components/ListPage';
 import { useLibrary } from '@/store/library';
 import { C, F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
+import { useLayout } from '@/ui/layout';
 import { Btn, Cover, Empty, IconBtn, Press, s, Screen, SectionHead, Segmented, T } from '@/ui/kit';
 
 type Tab = 'pl' | 'saved' | 'ar';
 
 export default function Collection() {
+  const layout=useLayout();
   const lib = useLibrary();
   const [tab, setTab] = useState<Tab>('pl');
   const [q, setQ] = useState('');
   const m = (x: string) => !q.trim() || x.toLowerCase().includes(q.trim().toLowerCase());
   const empty = !lib.playlists.length && !lib.liked.length && !lib.savedPlaylists.length && !lib.favArtists.length;
   const head = (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10, marginBottom: 18 }}>
+    <View style={{ flexDirection: layout.content<320 ? 'column' : 'row', gap:12, alignItems: layout.content<320 ? 'stretch' : 'flex-end', justifyContent: 'space-between', marginTop: 10, marginBottom: 18 }}>
       <T v="h1" accessibilityRole="header" style={{ flex: 1, minWidth: 0, marginRight: 12 }}>Коллекция</T>
       <View style={{ flexDirection: 'row', gap: 10, flexShrink: 0 }}>
 
@@ -42,7 +44,7 @@ export default function Collection() {
   const grid = (items: { key: string; title: string; cover: any; onPress: () => void; round?: boolean }[]) => (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, rowGap: 18 }}>
       {items.map((it) => (
-        <Press key={it.key} onPress={it.onPress} accessibilityRole="button" accessibilityLabel={it.title} outer={{ width: '47%', flexGrow: 1, maxWidth: '50%' }} style={{ gap: 10, alignItems: it.round ? 'center' : 'stretch' }}>
+        <Press key={it.key} onPress={it.onPress} accessibilityRole="button" accessibilityLabel={it.title} outer={{ width: layout.card }} style={{ gap: 10, alignItems: it.round ? 'center' : 'stretch' }}>
           {it.round ? <Cover uri={it.cover} fallbackUri={artistPhoto(it.key)} label={it.title} size="100%" radius={999} /> : it.cover}
           <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 16 }}>{it.title}</T>
         </Press>
