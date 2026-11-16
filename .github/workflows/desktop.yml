@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
           - {os: windows-latest, platform: win}
-          - {os: macos-14, platform: mac}
+          - {os: macos-latest, platform: mac}
           - {os: ubuntu-latest, platform: linux}
     runs-on: ${{ matrix.os }}
     steps:
