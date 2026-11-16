@@ -23,6 +23,33 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
         s.cache.clear(); s.inflight.clear(); s.prep_inflight.clear()
         s.ladder = s.Ladder()
 
+    def test_audio_download_uses_the_same_exit_as_resolution(self):
+        primary, fallback = object(), object()
+        with patch.object(s, 'yt_session', primary), patch.object(s, 'fallback_yt_session', fallback):
+            self.assertIs(s.audio_session({}), primary)
+            self.assertIs(s.audio_session({'exit': 'fallback'}), fallback)
+
+    async def test_regional_ytdlp_binds_verification_to_its_proxy(self):
+        async def worker(vid, fmt, client, proxy):
+            self.assertEqual(client, 'mweb')
+            self.assertEqual(proxy, 'socks5://fallback.invalid:1234')
+            return {'url': 'https://example.invalid/audio'}
+        async def verify(stream):
+            self.assertEqual(stream['exit'], 'fallback')
+            return True
+        with patch.object(s, 'YT_FALLBACK_PROXY', 'socks5://fallback.invalid:1234'), patch.object(s, 'API_REGIONAL', ''), patch.object(s.ladder, 'order', return_value=[]), patch.object(s, 'resolve_worker', worker), patch.object(s, 'verify', verify):
+            self.assertEqual((await s.resolve_checked(VID,'aac'))['method'], 'regional_ytdlp')
+
+    def test_worker_keeps_only_three_extractor_instances(self):
+        with patch.object(s._local, 'ydl', {}, create=True), patch.object(s.yt_dlp, 'YoutubeDL', side_effect=lambda opts: object()):
+            for client in ['mweb', 'tv', 'web_embedded', 'web_safari']:
+                s.ydl_for('aac',client)
+            self.assertEqual(len(s._local.ydl),3)
+
+    def test_transient_error_does_not_mark_track_permanently_missing(self):
+        self.assertEqual(s.stream_error(RuntimeError('unavailable; regional: 403')).status,502)
+        self.assertEqual(s.stream_error(RuntimeError('Video unavailable')).status,404)
+
     def test_all_paused_methods_stay_paused(self):
         for client in s.FALLBACK_CLIENTS:
             s.ladder.fail(client, 'Sign in to confirm you are not a bot')

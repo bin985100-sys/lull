@@ -3,6 +3,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 APP=/opt/lull-relay
 PY="$APP/venv/bin/python"
+if [ -f "$HERE/resources.sh" ]; then bash "$HERE/resources.sh"; fi
+if [ -f "$HERE/pot-provider-install.sh" ]; then bash "$HERE/pot-provider-install.sh"; fi
 BACKUP="$APP/backups/audio-$(date -u +%Y%m%dT%H%M%SZ)"
 echo 'Checking Python, Node and offline regression tests'
 "$PY" -m py_compile "$HERE/server.py"

@@ -66,6 +66,8 @@ chown lull:lull "$ENVF" && chmod 600 "$ENVF"
 [ -f "$DATA/yt-cookies.txt" ] && chown lull:lull "$DATA/yt-cookies.txt" && chmod 600 "$DATA/yt-cookies.txt"
 grep -q "EnvironmentFile=-$ENVF" "$UNIT" || sed -i "s#^ExecStart=#EnvironmentFile=-$ENVF\nExecStart=#" "$UNIT"
 systemctl daemon-reload
+if [ -f "$HERE/resources.sh" ]; then bash "$HERE/resources.sh"; fi
+if [ -f "$HERE/pot-provider-install.sh" ]; then bash "$HERE/pot-provider-install.sh"; fi
 systemctl restart lull-api
 if systemctl is-active --quiet lull-region-api; then systemctl restart lull-region-api; fi
 if systemctl is-active --quiet lull-us-api; then systemctl restart lull-us-api; fi

@@ -9,7 +9,8 @@ const title = (s: string) => norm(s.replace(/[([](?:official (?:music )?video|of
 function creditedTitle(source:Song, candidate:Song) {
   let text=norm(candidate.title
     .replace(/[([](?:english subtitles|русские субтитры|lyrics|lyric video|текст(?: песни)?|official (?:music |lyric )?video|official audio)[)\]]/gi,'')
-    .replace(/\|\s*(?:lyrics|текст(?: песни)?)\s*\|\s*$/gi,''));
+    .replace(/[([](?:128|192|256|320)\s*k(?:b(?:it)?ps|bps|бит[ /]?с)[)\]]/gi,'')
+    .replace(/(?:\+|\|)\s*(?:lyrics|текст(?: песни)?)\s*\|?\s*$/gi,''));
   if(!source.artists.length)return false;
   // Collaborative uploads put both credits in the title, with &, feat. or commas.
   // Remove only the actual source credits; remix/live/speed edits remain and fail.
@@ -24,6 +25,7 @@ function creditedTitle(source:Song, candidate:Song) {
   return text===title(source.title);
 }
 export const alternativeHint=(id:string)=>tracks.get(id);
+export const recordingHints=()=>[...tracks.values()];
 /** YouTube now returns LockupView beside legacy Video nodes. */
 export function videoCandidates(result:any): Song[] {
   const found=new Map<string,Song>();

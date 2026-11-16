@@ -4,7 +4,7 @@
  * Слушает 127.0.0.1:8787; наружу его отдаёт Python-часть Lull Relay по /api/*.
  */
 import './proxy';
-import { alternativeHint, alternatives, rememberTracks } from './alternative';
+import { alternativeHint, alternatives, rememberTracks, recordingHints } from './alternative';
 import dns from 'node:dns';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -44,7 +44,20 @@ try {
 /* Телефонам нужен AAC (m4a) — он играет везде и начинается быстрее */
 storeSet('settings', { ...(storeGet<Record<string, unknown>>('settings') ?? {}), quality: 'aac' });
 const cache = new Map<string, { t: number; body: string }>();
+let cacheBytes = 0;
+function cacheResponse(key: string, body: string) {
+  const previous=cache.get(key);
+  if(previous) {cacheBytes-=previous.body.length*2;cache.delete(key);}
+  if(body.length*2 > 16*1024*1024)return;
+  cache.set(key,{t:Date.now(),body});cacheBytes+=body.length*2;
+  while(cacheBytes>16*1024*1024 || cache.size>5000) {
+    const oldest=cache.keys().next().value!;
+    cacheBytes-=cache.get(oldest)!.body.length*2;cache.delete(oldest);
+  }
+}
 const prefixes = new SearchPrefixes(storeGet<Track[]>('catalog-search-prefixes') ?? []);
+rememberTracks(storeGet('catalog-recordings-v1') ?? []);
+rememberTracks(prefixes.snapshot());
 const TTL: Record<string, number> = { home: 10, chips: 60, charts: 30, search: 10, suggest: 30, 'suggest-rich': 30, album: 60, playlist: 15, artist: 30, upnext: 30, lyrics: 24 * 60 };
 
 async function route(name: string, arg: string, q: URLSearchParams, body: string): Promise<unknown> {
@@ -133,6 +146,7 @@ http
         if (url.searchParams.has('alternatives')) {
           const id=String(rest[0]);
           const ids=await alternatives(id);
+          storeSet('catalog-recordings-v1', recordingHints());
           return json(res,url.searchParams.has('details') ? {ids,track:alternativeHint(id)} : {ids});
         }
         if (url.searchParams.has('state')) return json(res, streamState());
@@ -183,10 +197,10 @@ http
       else {
         const result = await route(name, decodeURIComponent(rest.join('/')), url.searchParams, body);
         rememberTracks(result);
+        storeSet('catalog-recordings-v1', recordingHints());
         out = JSON.stringify(result);
         if (ttl) {
-          cache.set(key, { t: Date.now(), body: out });
-          if (cache.size > 5000) cache.delete(cache.keys().next().value as string);
+          cacheResponse(key,out);
         }
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': ttl ? `public, max-age=${Math.min(ttl / 1000, 600)}` : 'no-store' });

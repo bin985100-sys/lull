@@ -179,7 +179,7 @@ async def forward(request: web.Request) -> web.StreamResponse:
 
 
 # ---------- yt-dlp: прогретый экземпляр и кэш ссылок ----------
-WORKERS = max(1, int(os.environ.get("LULL_WORKERS", "8")))
+WORKERS = max(1, int(os.environ.get("LULL_WORKERS", "2")))
 pool = ThreadPoolExecutor(max_workers=WORKERS)
 resolve_slots = asyncio.Semaphore(WORKERS)
 cache: "OrderedDict[str, tuple[float, dict]]" = OrderedDict()
@@ -195,7 +195,7 @@ _local = threading.local()
 COOKIES = Path(os.environ.get("LULL_YT_COOKIES", str(DATA / "yt-cookies.txt")))
 
 
-def ydl_for(fmt: str, client: str = "") -> yt_dlp.YoutubeDL:
+def ydl_for(fmt: str, client: str = "", proxy: str | None = None) -> yt_dlp.YoutubeDL:
     # Свой экземпляр на поток, формат и клиент (yt-dlp не потокобезопасен): плеер YouTube и разгадка
     # подписи кэшируются внутри — следующие треки быстрее.
     # source_address 0.0.0.0 = только IPv4: ссылка googlevideo привязана к адресу, с которого её получили,
@@ -203,7 +203,8 @@ def ydl_for(fmt: str, client: str = "") -> yt_dlp.YoutubeDL:
     _ydl = getattr(_local, "ydl", None)
     if _ydl is None:
         _ydl = _local.ydl = {}
-    k = f"{fmt}:{client}"
+    proxy = YT_PROXY if proxy is None else proxy
+    k = f"{proxy}:{fmt}:{client}"
     if k not in _ydl:
         yt_args = {"skip": ["hls", "dash", "translated_subs"]}
         if client:
@@ -215,12 +216,14 @@ def ydl_for(fmt: str, client: str = "") -> yt_dlp.YoutubeDL:
             "quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True,
             "format": FORMATS[fmt], "socket_timeout": 10, "cachedir": str(DATA / "yt-dlp-cache"),
             "source_address": "0.0.0.0", "extractor_args": {"youtube": yt_args},
-            **({"proxy": YT_PROXY} if YT_PROXY else {}),
+            **({"proxy": proxy} if proxy else {}),
             "js_runtimes": {"node": {}},
             # Аккаунт YouTube для треков с ограничениями (18+, «войдите, чтобы подтвердить…»):
             # файл cookies в формате Netscape кладёт владелец сервера, в репозиторий он не попадает.
             **({"cookiefile": str(COOKIES)} if os.environ.get("LULL_YT_USE_COOKIES") == "1" and COOKIES.is_file() else {}),
         })
+    while len(_ydl) > 3:
+        _ydl.pop(next(iter(_ydl)))
     return _ydl[k]
 
 
@@ -236,9 +239,9 @@ def to_stream(j: dict) -> dict:
     }
 
 
-def resolve_sync(vid: str, fmt: str, client: str = "") -> dict:
+def resolve_sync(vid: str, fmt: str, client: str = "", proxy: str | None = None) -> dict:
     t0 = time.monotonic()
-    j = ydl_for(fmt, client).extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)
+    j = ydl_for(fmt, client, proxy).extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)
     s = to_stream(j)
     log.info("resolve %s %s %.1fs", vid, client or "default", time.monotonic() - t0)
     return s
@@ -300,7 +303,18 @@ API_REGIONAL = os.environ.get("LULL_YT_FALLBACK_API", "").rstrip("/")
 # Выход в YouTube через Cloudflare WARP (socks5://127.0.0.1:40000): адрес сервера-датацентра YouTube режет.
 # Через прокси — и получение ссылки (yt-dlp), и сам файл: ссылка привязана к адресу, с которого её получили.
 YT_PROXY = os.environ.get("LULL_YT_PROXY", "")
+YT_FALLBACK_PROXY = os.environ.get("LULL_YT_FALLBACK_PROXY", "")
 yt_session: "ClientSession | None" = None
+fallback_yt_session: "ClientSession | None" = None
+
+
+def audio_session(s: dict):
+    if s.get("exit") == "fallback":
+        if fallback_yt_session is None:
+            raise RuntimeError("fallback audio connection unavailable")
+        return fallback_yt_session
+    assert yt_session is not None
+    return yt_session
 
 
 # Only preparation requests ask the catalog for bytes. Link-only API clients keep JSON.
@@ -357,7 +371,7 @@ async def verify(s: dict) -> bool:
     и следующий кусок в 2 МБ — без нужного токена YouTube отдаёт начало, а дальше 403."""
     assert yt_session is not None
     try:
-        async with yt_session.get(s["url"], headers={**s["headers"], "Range": "bytes=0-1"}) as r:
+        async with audio_session(s).get(s["url"], headers={**s["headers"], "Range": "bytes=0-1"}) as r:
             if r.status not in (200, 206):
                 return False
             total = r.headers.get("Content-Range", "").rpartition("/")[2]
@@ -371,12 +385,12 @@ async def verify(s: dict) -> bool:
         return False
 
 
-async def resolve_worker(vid: str, fmt: str, client: str) -> dict:
+async def resolve_worker(vid: str, fmt: str, client: str, proxy: str | None = None) -> dict:
     # Cancelling asyncio cannot stop a running Python thread. Keep its slot occupied
     # until extraction really finishes, and never enqueue unlimited executor work.
     await resolve_slots.acquire()
     try:
-        fut = asyncio.get_running_loop().run_in_executor(pool, resolve_sync, vid, fmt, client)
+        fut = asyncio.get_running_loop().run_in_executor(pool, resolve_sync, vid, fmt, client, proxy)
     except BaseException:
         resolve_slots.release()
         raise
@@ -422,6 +436,9 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 if fmt != "aac":
                     return
                 s = await resolve_regional(target) if client == "regional" else await resolve_innertube(target)
+            elif client == "regional_ytdlp":
+                s = await resolve_worker(target, fmt, "mweb", YT_FALLBACK_PROXY)
+                s["exit"] = "fallback"
             else:
                 s = await resolve_worker(target, fmt, client)
             if not s.get("checked") and not await verify(s):
@@ -431,11 +448,13 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             # «недоступно» запасной клиент (tv и др.) пишет и про нормальные видео — решает только итог по всем
             errors.append(f"{client or 'default'}: {msg}")
             low = msg.lower()
+            reason = "bot" if "bot" in low or "sign in to confirm" in low else "forbidden" if "403" in low else "timeout" if "timeout" in low or "нет ответа" in low else "unavailable" if "unavailable" in low or "not available" in low or "недоступно" in low else "other"
+            log.info("audio_failure video=%s route=%s reason=%s", vid, client or "default", reason)
             if media_id is None and client != "regional":
                 route_failed.set()
             if media_id is None and any(x in low for x in ("unavailable", "not available", "country", "claimed content")):
                 unavailable.set()
-            if client != "regional" and "unavailable" not in low and "not available" not in low and "claimed content" not in low:
+            if client not in ("regional", "regional_ytdlp") and "unavailable" not in low and "not available" not in low and "claimed content" not in low:
                 ladder.fail(client, msg)
             return
         ladder.ok(client, time.monotonic() - started)
@@ -454,7 +473,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             async with session.get(f"{API_LOCAL}/internal/stream/{vid}?alternatives=1", timeout=ClientTimeout(total=4)) as response:
                 result = await response.json()
             ids = [x for x in result.get("ids", []) if valid_vid(x) and x != vid][:5]
-            clients = [x for x in ladder.order() if x != "innertube"][:2]
+            clients = ((["regional_ytdlp"] if YT_FALLBACK_PROXY and fmt == "aac" else []) + [x for x in ladder.order() if x != "innertube"])[:2]
             for candidate in ids:
                 for client in clients:
                     found = await one(client, candidate)
@@ -467,10 +486,12 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
     t0 = time.monotonic()
     order = ladder.order()
     regional_started = False
-    regional_ready = API_REGIONAL and fmt == "aac" and ladder.blocked_until.get("regional", 0) < time.time()
+    regional_methods = (["regional"] if API_REGIONAL else []) + (["regional_ytdlp"] if YT_FALLBACK_PROXY else [])
+    regional_methods.sort(key=lambda c: -ladder.last_ok.get(c, 0))
+    regional_ready = bool(regional_methods) and fmt == "aac"
     # A working independent exit must remain available while primary clients cool down.
-    if regional_ready and (not order or ladder.last_ok.get("regional", 0) > max(ladder.last_ok.get(c, 0) for c in FALLBACK_CLIENTS)):
-        order.insert(0, "regional")
+    if regional_ready and (not order or max(ladder.last_ok.get(c, 0) for c in regional_methods) > max(ladder.last_ok.get(c, 0) for c in FALLBACK_CLIENTS)):
+        order = regional_methods + order
         regional_started = True
     if fmt != "aac" and "innertube" in order:
         order.remove("innertube")
@@ -494,7 +515,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                     return s
             if route_failed.is_set() and regional_ready and not regional_started:
                 regional_started = True
-                order.insert(0, "regional")
+                order = regional_methods + order
             if unavailable.is_set() and not alternate_started and len(pending) < RACE_WIDTH:
                 alternate_started = True
                 pending.add(asyncio.create_task(other_recording()))
@@ -616,7 +637,9 @@ async def get_stream(vid: str, fmt: str, fresh: bool = False) -> dict:
 def stream_error(e: Exception) -> web.Response:
     msg = str(e).replace("ERROR: ", "")
     low = msg.lower()
-    return web.json_response({"error": msg}, status=404 if ("unavailable" in low or "not available" in low) and "format" not in low else 502)
+    transient = any(x in low for x in ("403", "bot", "timeout", "deadline", "incomplete", "connection", "нет ответа"))
+    missing = ("unavailable" in low or "not available" in low) and "format" not in low and not transient
+    return web.json_response({"error": msg, "reason": "not_available" if missing else "upstream_unavailable"}, status=404 if missing else 502)
 
 
 async def resolve(request: web.Request) -> web.Response:
@@ -688,7 +711,7 @@ async def health(_: web.Request) -> web.Response:
 
 
 async def on_start(app: web.Application):
-    global session, yt_session
+    global session, yt_session, fallback_yt_session
     app["warm_worker"] = asyncio.create_task(warm_worker())
     session = ClientSession(timeout=ClientTimeout(total=None, sock_connect=10, sock_read=60), connector=TCPConnector(limit=0, ttl_dns_cache=300, family=socket.AF_INET), auto_decompress=False)
     yt_session = session
@@ -699,6 +722,9 @@ async def on_start(app: web.Application):
             log.info("YouTube через прокси %s", YT_PROXY)
         except Exception as e:
             log.warning("прокси для YouTube не подключился: %s", e)
+    if YT_FALLBACK_PROXY:
+        from aiohttp_socks import ProxyConnector
+        fallback_yt_session = ClientSession(timeout=ClientTimeout(total=None, sock_connect=10, sock_read=20), connector=ProxyConnector.from_url(YT_FALLBACK_PROXY, rdns=True, limit=4), auto_decompress=False)
 
 
 async def on_stop(app: web.Application):
@@ -708,6 +734,8 @@ async def on_stop(app: web.Application):
         await asyncio.gather(worker, return_exceptions=True)
     if yt_session and yt_session is not session:
         await yt_session.close()
+    if fallback_yt_session:
+        await fallback_yt_session.close()
     if session:
         await session.close()
 
@@ -728,7 +756,7 @@ async def fetch_range(s: dict, a: int, b: int) -> bytes:
     for _ in range(3):
         try:
             sep = "&" if "?" in s["url"] else "?"
-            async with yt_session.get(f"{s['url']}{sep}range={a}-{b}", headers=s["headers"], timeout=ClientTimeout(total=20, sock_read=10)) as r:
+            async with audio_session(s).get(f"{s['url']}{sep}range={a}-{b}", headers=s["headers"], timeout=ClientTimeout(total=20, sock_read=10)) as r:
                 if r.status in (403, 410):
                     raise PermissionError(f"{r.status}")
                 if r.status not in (200, 206):

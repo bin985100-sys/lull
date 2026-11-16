@@ -9,6 +9,8 @@ import { yt } from '../electron/yt';
 import { mint, potState, resetMinter, warmMinter } from './potoken';
 import { alternatives } from './alternative';
 import { streamFetch } from './stream-client';
+import { StreamGate } from './stream-gate';
+const audioGate = new StreamGate(2,8);
 
 type Way = { name: string; client: Types.InnerTubeClient; pot: '' | 'video' | 'visitor'; playerPot?: boolean; anonymous?: boolean };
 // pot — токен в ссылке на файл: привязан к id видео (так сейчас делает сайт YouTube) или к сессии (как раньше).
@@ -40,7 +42,7 @@ async function anon(): Promise<Innertube> {
 export function warmStream() {
   anon().catch(() => {});
 }
-export const streamState = () => ({ ready: !!anonClient && Date.now() - anonAt < 6 * 3600_000, best });
+export const streamState = () => ({ ready: !!anonClient && Date.now() - anonAt < 6 * 3600_000, best, ...audioGate.state() });
 
 async function timeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -133,10 +135,15 @@ export function markBad(name: string) {
   if (name.includes('токен')) resetMinter();
 }
 
-export async function fastStream(id: string, prepare = false) {
+export function fastStream(id: string, prepare = false) {
+  return audioGate.run(id+':'+prepare, () => fastStreamOnce(id,prepare));
+}
+
+async function fastStreamOnce(id: string, prepare: boolean) {
   const order = best ? [WAYS.find((w) => w.name === best)!, ...WAYS.filter((w) => w.name !== best)] : WAYS;
   const errors: string[] = [];
   const started = Date.now();
+  let candidates: string[] | undefined;
   for (const w of order) {
     if (Date.now() - started > 14000) break; // дальше пусть работает yt-dlp — гонка на звуковом сервере уже идёт
     const t0 = Date.now();
@@ -147,11 +154,12 @@ export async function fastStream(id: string, prepare = false) {
     } catch (e) {
       if (best === w.name) best = null;
       errors.push(`${w.name}: ${(e as Error).message} (${Date.now() - t0} мс)`);
-      if (w === order[0]) {
-        const candidates = await timeout(alternatives(id), 3000, 'поиск версии').catch(() => []);
+      if (!candidates) candidates = await timeout(alternatives(id), 3000, 'поиск версии').catch(() => []);
+      {
         for (const candidate of candidates.slice(0,3)) {
+          if (Date.now()-started > 14000) break;
           try {
-            const alt = await timeout(tryWay(candidate,WAYS[0],prepare), 4000,'аудио версии');
+            const alt = await tryWay(candidate,w,prepare);
             console.log('[stream] alternate', id, candidate);
             return {...alt, mediaId:candidate, ms:Date.now()-started};
           } catch {}
