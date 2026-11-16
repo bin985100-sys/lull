@@ -17,6 +17,7 @@ rollback() {
   cp "$BACKUP/lull-api.mjs" "$APP/lull-api.mjs"
   systemctl restart lull-api lull-relay
   if systemctl is-active --quiet lull-region-api; then systemctl restart lull-region-api; fi
+  if systemctl is-active --quiet lull-us-api; then systemctl restart lull-us-api; fi
 }
 trap 'rollback' ERR
 install -m 644 "$HERE/server.py" "$APP/server.py.new"
@@ -25,6 +26,7 @@ mv "$APP/server.py.new" "$APP/server.py"
 mv "$APP/lull-api.mjs.new" "$APP/lull-api.mjs"
 systemctl restart lull-api lull-relay
 if systemctl is-active --quiet lull-region-api; then systemctl restart lull-region-api; fi
+if systemctl is-active --quiet lull-us-api; then systemctl restart lull-us-api; fi
 ready=0
 for n in $(seq 1 15); do
   if curl -fsS --max-time 2 http://127.0.0.1:8787/api/health >/dev/null 2>&1 && curl -fsS --max-time 2 http://127.0.0.1:8480/health >/dev/null 2>&1; then ready=1; break; fi

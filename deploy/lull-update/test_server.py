@@ -23,6 +23,51 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
         s.cache.clear(); s.inflight.clear(); s.prep_inflight.clear()
         s.ladder = s.Ladder()
 
+    def test_all_paused_methods_stay_paused(self):
+        for client in s.FALLBACK_CLIENTS:
+            s.ladder.fail(client, 'Sign in to confirm you are not a bot')
+        self.assertEqual(s.ladder.order(), [])
+
+    async def test_bot_failure_uses_independent_exit(self):
+        calls = []
+        async def resolve(vid, regional=''):
+            calls.append(regional)
+            if not regional:
+                raise RuntimeError('Sign in to confirm you are not a bot')
+            return {'checked': True}
+        with patch.object(s.ladder, 'order', return_value=['innertube']), patch.object(s, 'API_REGIONAL', 'http://fallback'), patch.object(s, 'resolve_innertube', resolve):
+            self.assertEqual((await s.resolve_checked(VID, 'aac'))['method'], 'regional')
+        self.assertEqual(calls, ['', 'http://fallback'])
+
+    async def test_primary_cooldown_does_not_disable_regional_exit(self):
+        async def resolve(vid, regional=''):
+            self.assertEqual(regional, 'http://fallback')
+            return {'checked': True}
+        with patch.object(s.ladder, 'order', return_value=[]), patch.object(s, 'API_REGIONAL', 'http://fallback'), patch.object(s, 'resolve_innertube', resolve):
+            self.assertEqual((await s.resolve_checked(VID, 'aac'))['method'], 'regional')
+
+    async def test_failed_exit_does_not_hide_healthy_exit(self):
+        async def resolve(vid, base):
+            if base.endswith('bad'):
+                raise RuntimeError('403')
+            await asyncio.sleep(.01)
+            return {'checked': True}
+        with patch.object(s, 'API_REGIONAL', 'http://bad,http://good'), patch.object(s, 'resolve_innertube', resolve):
+            self.assertTrue((await s.resolve_regional(VID))['checked'])
+
+    async def test_regional_failure_is_track_specific(self):
+        calls = 0
+        async def resolve(vid, base=''):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError('403 on 262144')
+            return {'checked': True}
+        with patch.object(s, 'API_REGIONAL', 'http://good'), patch.object(s.ladder, 'order', return_value=[]), patch.object(s, 'resolve_innertube', resolve):
+            with self.assertRaises(RuntimeError):
+                await s.resolve_checked(VID, 'aac')
+            self.assertEqual((await s.resolve_checked('aaaaaaaaaaa', 'aac'))['method'], 'regional')
+
     async def test_verified_frame_rejects_partial_and_extra_audio(self):
         metadata = json.dumps({"size": 7, "url": "https://example.invalid/audio"}).encode()
         header = len(metadata).to_bytes(4, "big") + metadata

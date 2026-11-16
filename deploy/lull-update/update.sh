@@ -68,6 +68,7 @@ grep -q "EnvironmentFile=-$ENVF" "$UNIT" || sed -i "s#^ExecStart=#EnvironmentFil
 systemctl daemon-reload
 systemctl restart lull-api
 if systemctl is-active --quiet lull-region-api; then systemctl restart lull-region-api; fi
+if systemctl is-active --quiet lull-us-api; then systemctl restart lull-us-api; fi
 sleep 2
 curl -fsS http://127.0.0.1:8787/api/health >/dev/null && echo "  каталог работает"
 journalctl -u lull-api -n 30 --no-pager 2>/dev/null | grep -o "YouTube через прокси.*\|прокси для YouTube не подключился.*" | tail -1 | sed "s/^/  /" || true

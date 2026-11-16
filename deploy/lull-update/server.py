@@ -272,7 +272,7 @@ class Ladder:
         def key(c: str):
             fresh = now - self.last_ok.get(c, 0) < 600
             return (0 if fresh else 1, self.fails.get(c, 0), self.avg.get(c, 9.0) if fresh else base[c])
-        return sorted(live, key=key) or list(FALLBACK_CLIENTS)
+        return sorted(live, key=key)
 
     def ok(self, c: str, secs: float):
         self.last_ok[c] = time.time()
@@ -330,7 +330,7 @@ async def resolve_innertube(vid: str, regional: str = "") -> dict:
     """Ссылка от каталога Lull (youtubei.js). Он сам проверяет начало и середину файла, поэтому повторно не проверяем."""
     assert session is not None
     headers = {"Accept": AUDIO_FRAME} if prepare_audio.get() or regional else {}
-    async with session.get(f"{regional or API_LOCAL}/internal/stream/{vid}", headers=headers, timeout=ClientTimeout(total=5 if regional else 15)) as r:
+    async with session.get(f"{regional or API_LOCAL}/internal/stream/{vid}", headers=headers, timeout=ClientTimeout(total=8 if regional else 15)) as r:
         if r.status == 200 and r.content_type == AUDIO_FRAME:
             j, data = await read_audio_frame(r.content)
             if regional and len(data) != int(j.get("size") or 0):
@@ -388,10 +388,32 @@ async def resolve_worker(vid: str, fmt: str, client: str) -> dict:
     return await asyncio.shield(fut)
 
 
+async def resolve_regional(vid: str) -> dict:
+    """Independent exits race full audio, never hand a foreign-IP URL to WARP."""
+    endpoints = list(dict.fromkeys(x.strip() for x in API_REGIONAL.split(',') if x.strip()))[:3]
+    tasks = {asyncio.create_task(resolve_innertube(vid, base)) for base in endpoints}
+    errors = []
+    try:
+        while tasks:
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                tasks.remove(task)
+                try:
+                    return task.result()
+                except Exception as e:
+                    errors.append(str(e))
+        raise RuntimeError('; '.join(errors) or 'no regional exit')
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def resolve_checked(vid: str, fmt: str) -> dict:
     """Bounded hedged race: advance on failure, cancel losers, cap total latency."""
     errors: list[str] = []
     unavailable = asyncio.Event()
+    route_failed = asyncio.Event()
     async def one(client: str, media_id: str | None = None):
         started = time.monotonic()
         target = media_id or vid
@@ -399,7 +421,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             if client in ("innertube", "regional"):
                 if fmt != "aac":
                     return
-                s = await resolve_innertube(target, API_REGIONAL) if client == "regional" else await resolve_innertube(target)
+                s = await resolve_regional(target) if client == "regional" else await resolve_innertube(target)
             else:
                 s = await resolve_worker(target, fmt, client)
             if not s.get("checked") and not await verify(s):
@@ -409,9 +431,11 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             # «недоступно» запасной клиент (tv и др.) пишет и про нормальные видео — решает только итог по всем
             errors.append(f"{client or 'default'}: {msg}")
             low = msg.lower()
+            if media_id is None and client != "regional":
+                route_failed.set()
             if media_id is None and any(x in low for x in ("unavailable", "not available", "country", "claimed content")):
                 unavailable.set()
-            if "unavailable" not in low and "not available" not in low and "claimed content" not in low:
+            if client != "regional" and "unavailable" not in low and "not available" not in low and "claimed content" not in low:
                 ladder.fail(client, msg)
             return
         ladder.ok(client, time.monotonic() - started)
@@ -442,6 +466,12 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
 
     t0 = time.monotonic()
     order = ladder.order()
+    regional_started = False
+    regional_ready = API_REGIONAL and fmt == "aac" and ladder.blocked_until.get("regional", 0) < time.time()
+    # A working independent exit must remain available while primary clients cool down.
+    if regional_ready and (not order or ladder.last_ok.get("regional", 0) > max(ladder.last_ok.get(c, 0) for c in FALLBACK_CLIENTS)):
+        order.insert(0, "regional")
+        regional_started = True
     if fmt != "aac" and "innertube" in order:
         order.remove("innertube")
     pending = set()
@@ -462,11 +492,12 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 if s:
                     log.info("race %s: %s %.2fs", vid, s.get("method") or "default", time.monotonic() - t0)
                     return s
+            if route_failed.is_set() and regional_ready and not regional_started:
+                regional_started = True
+                order.insert(0, "regional")
             if unavailable.is_set() and not alternate_started and len(pending) < RACE_WIDTH:
                 alternate_started = True
                 pending.add(asyncio.create_task(other_recording()))
-                if API_REGIONAL and fmt == "aac":
-                    order.insert(0, "regional")
             # A failure advances immediately; a slow attempt gets a bounded hedge.
             if order and len(pending) < RACE_WIDTH:
                 pending.add(asyncio.create_task(one(order.pop(0))))
