@@ -254,7 +254,7 @@ function prime(t: Track | undefined): Promise<boolean> {
   const run = (async () => {
     {
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 20000);
+      const timer = setTimeout(() => ac.abort(), 65000);
       try {
         const r = await fetch(streamUrlYt(t.id), { headers: { Range: 'bytes=0-1' }, signal: ac.signal });
         if (r.ok) { primed.set(t.id, Date.now()); return true; }
