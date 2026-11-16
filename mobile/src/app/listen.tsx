@@ -108,7 +108,7 @@ export default function Listen() {
 /* «Сегодня в фокусе»: листаются «Для тебя» и подборки под время дня; «Для тебя» обновляется кнопкой */
 function moodNow() {
   const h = new Date().getHours();
-  return h >= 23 || h < 6 ? 'exhale' : h < 11 ? 'motion' : h < 18 ? 'focus' : 'night';
+  return h < 11 || h >= 23 ? 'exhale' : h < 18 ? 'focus' : 'night';
 }
 function Focus({ onPlayForYou,loading,canPlay }: { onPlayForYou: () => void;loading:boolean;canPlay:boolean }) {
   const [w, setW] = useState(0);
