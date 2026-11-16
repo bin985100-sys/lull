@@ -1,0 +1,9 @@
+{
+  "name": "lull-desktop",
+  "productName": "Lull",
+  "version": "1.1.0",
+  "description": "Lull — музыка на компьютере",
+  "author": {"name":"Coffee","email":"bin985100@gmail.com"},
+  "main": "main.cjs",
+  "private": true
+}

@@ -1,0 +1,35 @@
+name: Lull Desktop
+on:
+  workflow_dispatch:
+  push:
+    branches: [mobile]
+    paths: ['desktop/**', '.github/workflows/desktop.yml']
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: windows-latest, platform: win}
+          - {os: macos-14, platform: mac}
+          - {os: ubuntu-latest, platform: linux}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci --ignore-scripts
+      - run: node --check desktop/main.cjs
+      - run: node node_modules/electron-builder/out/cli/cli.js --projectDir desktop --config electron-builder.yml --${{ matrix.platform }} --x64 --arm64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lull-Desktop-${{ matrix.platform }}
+          path: |
+            release-desktop/*.exe
+            release-desktop/*.dmg
+            release-desktop/*.AppImage
+          if-no-files-found: error

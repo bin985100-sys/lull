@@ -1,0 +1,30 @@
+appId: website.lull.app
+productName: Lull
+electronVersion: 45.0.0
+directories:
+  output: ../release-desktop
+  buildResources: ../build
+files:
+  - main.cjs
+  - offline.html
+  - package.json
+asar: true
+npmRebuild: false
+win:
+  icon: ../build/icon.ico
+  target: nsis
+nsis:
+  oneClick: true
+  perMachine: false
+  deleteAppDataOnUninstall: false
+  artifactName: Lull-Setup-${arch}.${ext}
+mac:
+  icon: ../build/icon.png
+  category: public.app-category.music
+  target: dmg
+  artifactName: Lull-mac-${arch}.${ext}
+linux:
+  icon: ../build/icon.png
+  target: AppImage
+  category: Audio
+  artifactName: Lull-linux-${arch}.${ext}
