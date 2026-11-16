@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { GlassSwitch as Switch } from '@/ui/GlassSwitch';
 import { useAppearance, useTheme, type ThemeMode } from '@/theme/state';
 import { router } from 'expo-router';
@@ -99,7 +100,7 @@ export default function Settings() {
       <Group title="О приложении">
         <Row icon="doc" label="Политика конфиденциальности" onPress={() => Linking.openURL('https://lull.website/privacy.html')} />
         <Row icon="info" label="Музыка — каталог Lull и Audius" />
-        <Row icon="doc" label="Версия 0.1 · ранняя сборка" />
+        <Row icon="doc" label={`Версия ${Constants.expoConfig?.version ?? '0.2.0'}`} />
         <Row icon="doc" label="Журнал — отправить разработчику" onPress={() => router.push('/log')} />
         <Row icon="info" label="Показать последнюю ошибку" onPress={async () => { const e = await lastError(); if (e) useCrash.setState({ error: e }); else toast('Ошибок не было', 'check'); }} />
       </Group>
