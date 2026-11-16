@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
@@ -11,7 +12,7 @@ import { ArtistRail, Sections } from '@/components/Cards';
 import { TrackRow } from '@/components/TrackRow';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { useLibrary } from '@/store/library';
-import { C } from '@/theme/tokens';
+
 import { Btn,Cover, IconBtn, ListSkeleton, Offline, Screen, SectionHead, T } from '@/ui/kit';
 import { toast } from '@/ui/overlay';
 
@@ -24,6 +25,7 @@ async function loadAudius(id: string, s: AbortSignal): Promise<Page> {
 }
 
 export default function ArtistScreen() {
+  const {colors:C}=useTheme();
   const { id, s: src } = useLocalSearchParams<{ id: string; s?: string }>();
   const isAudius = src === 'audius';
   const ins = useSafeAreaInsets();
@@ -38,9 +40,9 @@ export default function ArtistScreen() {
       <View style={{ height: 400, marginHorizontal: -20, backgroundColor: C.s1 }}>
         <Cover uri={art?.cover || art?.avatar} fallbackUri={art?.avatar} label={art?.name} size="100%" radius={0} style={{height:'100%',aspectRatio:undefined}}/>
         {/* плавное затемнение к низу, чтобы имя читалось, а обложка не резалась полосой */}
-        <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.55)', '#000']} locations={[0, 0.22, 0.5, 0.8, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <LinearGradient colors={['rgba(0,0,0,.12)', 'transparent', 'transparent', C.bg+'dd', C.bg]} locations={[0, 0.22, 0.5, 0.8, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={{ position: 'absolute', top: Math.max(ins.top, 18) + 14, left: 20 }}>
-          <IconBtn name="back" label="Назад" onPress={() => router.back()} style={{ backgroundColor: 'rgba(20,21,23,0.6)' }} />
+          <IconBtn name="back" label="Назад" onPress={() => router.back()} />
         </View>
         <View style={{ position: 'absolute', left: 20, right: 20, bottom: 14, gap: 4 }}>
           <T v="h1" numberOfLines={2} style={{ fontSize: 40, lineHeight: 44 }} accessibilityRole="header">{art?.name ?? ' '}</T>

@@ -1,14 +1,16 @@
+import { useTheme } from '@/theme/state';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 
 import { player } from '@/player/player';
 import { useLibrary } from '@/store/library';
-import { C } from '@/theme/tokens';
+
 import { T } from '@/ui/kit';
 
 /* Служебный вход для автопроверки сборки: lull://debug?play=<id> или lull://debug?artist=<id> */
 export default function Debug() {
+  const {colors:C}=useTheme();
   const { play, artist } = useLocalSearchParams<{ play?: string; artist?: string }>();
   useEffect(() => {
     useLibrary.getState().setOnboarded(true);

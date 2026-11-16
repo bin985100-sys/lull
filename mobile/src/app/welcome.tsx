@@ -1,22 +1,25 @@
+import { resolveThemeValues, themeValues, useTheme } from '@/theme/state';
 import { finishLogin, useSession } from '@/api/session';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { cancelLogin, login, openAuthUrl, useAuthWait, type Provider } from '@/api/auth';
 import { useLibrary } from '@/store/library';
-import { C } from '@/theme/tokens';
+
 import { Logo } from '@/ui/Icon';
 import { Btn, Screen, T } from '@/ui/kit';
 import { toast } from '@/ui/overlay';
 
 /* Две стеклянные рамки из знака: медленно покачиваются навстречу друг другу */
 function Mark() {
+  const {colors:C}=useTheme();
+ const st=resolveThemeValues(stThemeTable,C);
   const t = useSharedValue(0);
   const reduced = useReducedMotion();
-  useEffect(() => { if (!reduced) t.value = withRepeat(withTiming(1, { duration: 3500, easing: Easing.inOut(Easing.sin) }), -1, true); }, [reduced, t]);
-  const a = useAnimatedStyle(() => ({ transform: [{ translateX: t.value * 4 }, { translateY: t.value * -4 }, { rotate: `${t.value * 1.5}deg` }] }));
-  const b = useAnimatedStyle(() => ({ transform: [{ translateX: t.value * -4 }, { translateY: t.value * 4 }, { rotate: `${t.value * -1.5}deg` }] }));
+  useEffect(() => { t.set(reduced ? 0 : withRepeat(withTiming(1, { duration: 3500, easing: Easing.inOut(Easing.sin) }), -1, true));return()=>cancelAnimation(t); }, [reduced, t]);
+  const a = useAnimatedStyle(() => ({ transform: [{ translateX: t.get() * 4 }, { translateY: t.get() * -4 }, { rotate: `${t.get() * 1.5}deg` }] }));
+  const b = useAnimatedStyle(() => ({ transform: [{ translateX: t.get() * -4 }, { translateY: t.get() * 4 }, { rotate: `${t.get() * -1.5}deg` }] }));
   return (
     <View style={{ width: 250, height: 250, alignSelf: 'center', marginTop: 34, marginBottom: 30 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Animated.View style={[st.g, { left: 0, bottom: 0 }, a]} />
@@ -29,6 +32,7 @@ function Mark() {
 export const afterLogin = () => finishLogin();
 
 export default function Welcome() {
+  const {colors:C}=useTheme();
   const { wait, error } = useAuthWait();
   const session = useSession();
   const signedIn = useLibrary((s) => !!s.account.token);
@@ -80,6 +84,8 @@ export default function Welcome() {
   );
 }
 
-const st = StyleSheet.create({
-  g: { position: 'absolute', width: '64%', height: '64%', borderRadius: 48, borderWidth: 26, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: 'rgba(255,255,255,0.03)' },
-});
+const st = themeValues(C=>StyleSheet.create({
+  g: { position: 'absolute', width: '64%', height: '64%', borderRadius: 48, borderWidth: 26, borderColor:C.glassLine, backgroundColor:C.glass },
+}));
+
+const stThemeTable=st;

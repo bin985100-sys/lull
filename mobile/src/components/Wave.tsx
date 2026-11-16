@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
@@ -5,7 +6,7 @@ import type { Track } from '@/api/audius';
 import { player, usePlayer } from '@/player/player';
 import { buildWave, WAVE_MODES } from '@/reco/engine';
 import { useTaste, type WaveMode } from '@/store/taste';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
 import { Btn, Cover, haptic, Segmented, T } from '@/ui/kit';
 import { closeSheet, openSheet, toast } from '@/ui/overlay';
@@ -25,6 +26,7 @@ export async function launchWave(seed: Track, mode?: WaveMode) {
 }
 
 function WaveSheet({ seed }: { seed: Track }) {
+  const {colors:C}=useTheme();
   const reco = useTaste((s) => s.reco);
   const [busy, setBusy] = useState(false);
   return (

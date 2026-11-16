@@ -1,22 +1,27 @@
+import { resolveThemeValues , useTheme, themeValues } from '@/theme/state';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useLayout } from './layout';
-import { type ReactNode, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, type PressableProps, ScrollView, type ScrollViewProps, StyleSheet, Text, type TextProps, View, type ViewStyle } from 'react-native';
-import Animated, { cancelAnimation, cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, type PressableProps, type ScrollViewProps, StyleSheet, Text, type TextProps, View, type ViewStyle } from 'react-native';
+import Animated, { cancelAnimation, cubicBezier, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { C, DOCK, EASE, F, R } from '@/theme/tokens';
+import { DOCK, EASE, F, R } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
 import { PlayPause } from './PlayPause';
 import { slideIn } from './anim';
 import { usePlayer } from '@/player/player';
+import { Glass } from './Glass';
+import { setChromeCollapsed } from './chrome';
 
 export const haptic = () => { if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {}); };
 /** A short entrance on mount, with no perpetual animation or per-frame JS. */
 export function Reveal({children,step=0,style}:{children:ReactNode;step?:number;style?:ViewStyle}) {
+
   const reduced=useReducedMotion();
   const progress=useSharedValue(reduced ? 1 : 0);
   useEffect(()=>{
@@ -29,7 +34,7 @@ export function Reveal({children,step=0,style}:{children:ReactNode;step?:number;
 
 /* ---------- текст ---------- */
 type V = 'xl' | 'h1' | 'h2' | 'h3' | 'title' | 'body' | 'sub' | 'small' | 'label';
-const TV: Record<V, any> = {
+const TV: Record<V, any> = themeValues((C) => ({
   xl: { fontFamily: F.bold, fontSize: 46, lineHeight: 48, letterSpacing: -1.6 },
   h1: { fontFamily: F.bold, fontSize: 32, lineHeight: 36, letterSpacing: -1 },
   h2: { fontFamily: F.bold, fontSize: 22, lineHeight: 27, letterSpacing: -0.4 },
@@ -39,8 +44,10 @@ const TV: Record<V, any> = {
   sub: { fontFamily: F.semi, fontSize: 15, lineHeight: 20, color: C.tx2 },
   small: { fontFamily: F.semi, fontSize: 13, lineHeight: 17, color: C.tx2 },
   label: { fontFamily: F.semi, fontSize: 12.5, lineHeight: 15, color: C.tx2 },
-};
+}));
 export function T({ v = 'title', style, ...p }: TextProps & { v?: V }) {
+  const {colors:C}=useTheme();
+ const TV=resolveThemeValues(TVThemeTable,C);
   const custom = StyleSheet.flatten(style);
   const fontSize = custom?.fontSize ?? TV[v].fontSize;
   // Larger titles must reserve their own line box instead of inheriting the
@@ -52,6 +59,7 @@ export function T({ v = 'title', style, ...p }: TextProps & { v?: V }) {
 /* ---------- нажатие: лёгкое сжатие через CSS-переход, без работы JS на каждом кадре ---------- */
 const PRESS_EASE = cubicBezier(EASE[0], EASE[1], EASE[2], EASE[3]);
 export function Press({ style, outer, children, scaleTo = 0.96, onPress, ...p }: PressableProps & { style?: any; outer?: any; scaleTo?: number; children?: ReactNode }) {
+
   const [down, setDown] = useState(false);
   const reduced=useReducedMotion();
   const visual={...StyleSheet.flatten(style)};
@@ -75,19 +83,24 @@ export function Press({ style, outer, children, scaleTo = 0.96, onPress, ...p }:
 }
 
 export function IconBtn({ name, onPress, label, size = 48, iconSize = 24, ghost, style, color }: { name: IconName; onPress?: () => void; label: string; size?: number; iconSize?: number; ghost?: boolean; style?: ViewStyle; color?: string }) {
+
   return (
     <Press accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={6}
-      style={[{ width: size, height: size, borderRadius: size * 0.375, alignItems: 'center', justifyContent: 'center', backgroundColor: ghost ? 'transparent' : C.s2 }, style]}>
+      style={[{ width: size, height: size, borderRadius: size/2, alignItems: 'center', justifyContent: 'center' }, style]}>
+      {!ghost&&<Glass pointerEvents="none" radius={size/2} blur={false} style={StyleSheet.absoluteFill}/>}
       <Icon name={name} size={iconSize} color={color} />
     </Press>
   );
 }
 
 export function Btn({ label, icon, kind = 'white', onPress, disabled, small, style, playing }: { label: string; icon?: IconName | 'playpause'; kind?: 'white' | 'dark' | 'flat'; onPress?: () => void; disabled?: boolean; small?: boolean; style?: ViewStyle; playing?: boolean }) {
-  const fg = kind === 'white' ? '#000' : C.tx;
+  const {colors:C}=useTheme();
+ const s=resolveThemeValues(sThemeTable,C);
+  const fg = kind === 'white' ? C.inverse : C.tx;
   return (
     <Press accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
       style={[s.btn, { minHeight: small ? 48 : 58,paddingVertical:12, backgroundColor: kind === 'white' ? C.tx : kind === 'dark' ? C.s2 : C.s1, opacity: disabled ? 0.32 : 1 }, style]}>
+      {kind!=='white'&&<Glass pointerEvents="none" blur={false} radius={999} style={StyleSheet.absoluteFill}/>}
       <T v="title" style={{ color: fg, fontFamily: F.bold, fontSize: small ? 15.5 : 17, flexShrink: 1 }} numberOfLines={2}>{label}</T>
       {icon === 'playpause' ? <PlayPause playing={!!playing} size={22} color={fg} /> : icon ? <Icon name={icon} size={24} color={kind==='white' ? fg : undefined} /> : null}
     </Press>
@@ -95,6 +108,7 @@ export function Btn({ label, icon, kind = 'white', onPress, disabled, small, sty
 }
 
 export function Cover({ uri, size, radius = R.cover, style, source, label,fallbackUri }: { uri?: string; size: number | `${number}%`; radius?: number; style?: any; source?: any;label?:string;fallbackUri?:string }) {
+  const {colors:C}=useTheme();
   const [failed,setFailed]=useState<string[]>([]);
   const reduced=useReducedMotion();
   const effective=[uri,fallbackUri].find((url):url is string=>!!url && !failed.includes(url));
@@ -112,29 +126,48 @@ export function Cover({ uri, size, radius = R.cover, style, source, label,fallba
 /* В браузере стек экранов без анимации переходов — добавляем свою: экран мягко въезжает */
 const WEB_ENTER = Platform.OS === 'web' ? slideIn(0, 1, 220) : undefined;
 function Ambient() {
+
   return <LinearGradient pointerEvents="none" colors={['rgba(42,65,106,0.28)','rgba(23,30,55,0.10)','transparent']}
     start={{x:0,y:0}} end={{x:1,y:1}} style={{position:'absolute',top:0,left:0,right:0,height:380}}/>;
 }
 export function Screen({ children, dock = true, scroll = true, style, ...p }: ScrollViewProps & { dock?: boolean; scroll?: boolean; children?: ReactNode }) {
+  const {colors:C}=useTheme();
   const reduced=useReducedMotion();
   const ins = useSafeAreaInsets();
   const layout=useLayout();
   const side = Math.max(layout.side, ins.left + 12, ins.right + 12);
   const hasTrack = usePlayer((x) => x.index >= 0);
+  const lastY=useSharedValue(0),travel=useSharedValue(0),direction=useSharedValue(0),collapsed=useSharedValue(false);
+  const externalScroll=p.onScroll;
+  const notifyScroll=useCallback((event:unknown)=>externalScroll?.({nativeEvent:event} as Parameters<NonNullable<ScrollViewProps['onScroll']>>[0]),[externalScroll]);
+  const hasExternal=!!externalScroll;
+  const trackScroll=useAnimatedScrollHandler(event=>{
+    const y=Math.max(0,event.contentOffset.y),delta=y-lastY.get();lastY.set(y);
+    if(Math.abs(delta)>.2){
+      const sign=delta>0 ? 1 : -1;
+      if(sign!==direction.get()){travel.set(0);direction.set(sign);}
+      travel.set(travel.get()+delta);
+      const next=y<24 ? false : travel.get()>36 ? true : travel.get()<-18 ? false : collapsed.get();
+      if(next!==collapsed.get()){collapsed.set(next);scheduleOnRN(setChromeCollapsed,next);}
+    }
+    if(hasExternal)scheduleOnRN(notifyScroll,event);
+  });
   const pb = dock ? (hasTrack ? DOCK.mini : DOCK.compact) + Math.max(ins.bottom, 14) + 30 : Math.max(ins.bottom, 14) + 24;
   const pad = { paddingTop: Math.max(ins.top, 18) + 14, paddingBottom: pb, paddingHorizontal: side };
   if (!scroll) return <Animated.View entering={reduced ? undefined : WEB_ENTER} style={[{ flex: 1, backgroundColor: C.bg }, pad, style as any]}><Ambient/>{children}</Animated.View>;
   return (
     <Animated.View entering={reduced ? undefined : WEB_ENTER} style={{ flex: 1, backgroundColor: C.bg }}>
       <Ambient/>
-      <ScrollView {...p} style={{ flex: 1 }} contentContainerStyle={[pad, style as any]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <Animated.ScrollView {...p} onScroll={trackScroll} scrollEventThrottle={16} style={{ flex: 1 }} contentContainerStyle={[pad, style as any]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {children}
-      </ScrollView>
+      </Animated.ScrollView>
     </Animated.View>
   );
 }
 
 export function TopBar({ title, right, onBack, close }: { title?: string; right?: ReactNode; onBack?: () => void; close?: boolean }) {
+  const {colors:C}=useTheme();
+ const s=resolveThemeValues(sThemeTable,C);
   return (
     <View style={s.top}>
       <IconBtn name={close ? 'close' : 'back'} label={close ? 'Закрыть' : 'Назад'} onPress={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/listen')))} />
@@ -145,6 +178,8 @@ export function TopBar({ title, right, onBack, close }: { title?: string; right?
 }
 
 export function SectionHead({ title, more, onMore }: { title: string; more?: string; onMore?: () => void }) {
+  const {colors:C}=useTheme();
+ const s=resolveThemeValues(sThemeTable,C);
   return (
     <View style={s.sec}>
       <T v="h2" accessibilityRole="header" style={{ flex: 1, minWidth: 0 }}>{title}</T>
@@ -158,6 +193,7 @@ export function SectionHead({ title, more, onMore }: { title: string; more?: str
 }
 
 export function Empty({ icon, title, text, children }: { icon: IconName; title: string; text?: string; children?: ReactNode }) {
+  const {colors:C}=useTheme();
   return (
     <View style={{ alignItems: 'center', gap: 18, paddingTop: 60, paddingHorizontal: 10 }}>
       <View style={{ width: 120, height: 120, borderRadius: 36, backgroundColor: C.s2, alignItems: 'center', justifyContent: 'center' }}><Icon name={icon} size={64} /></View>
@@ -171,6 +207,7 @@ export function Empty({ icon, title, text, children }: { icon: IconName; title: 
 }
 
 export function Offline({ onRetry }: { onRetry: () => void }) {
+
   return (
     <Empty icon="wifiOff" title="Нет подключения" text="Проверь интернет. Любимое и твои плейлисты остаются на месте.">
       <Btn label="Повторить" icon="refresh" onPress={onRetry} />
@@ -179,6 +216,7 @@ export function Offline({ onRetry }: { onRetry: () => void }) {
 }
 
 export function Skeleton({ h, w = '100%', r = 18, style }: { h: number; w?: number | `${number}%`; r?: number; style?: any }) {
+  const {colors:C}=useTheme();
   const reduced=useReducedMotion();
   const o = useSharedValue(0.45);
   useEffect(() => { o.set(reduced ? .65 : withRepeat(withTiming(1, { duration: 900 }), -1, true));return ()=>cancelAnimation(o); }, [o,reduced]);
@@ -186,6 +224,7 @@ export function Skeleton({ h, w = '100%', r = 18, style }: { h: number; w?: numb
   return <Animated.View style={[{ height: h, width: w, borderRadius: r, backgroundColor: C.s2 }, a, style]} />;
 }
 export function ListSkeleton({ n = 4 }: { n?: number }) {
+
   return (
     <View style={{ gap: 14 }} accessibilityLabel="Загрузка">
       {Array.from({ length: n }).map((_, i) => (
@@ -194,17 +233,22 @@ export function ListSkeleton({ n = 4 }: { n?: number }) {
     </View>
   );
 }
-export const Spinner = () => <ActivityIndicator color={C.tx2} />;
+export const Spinner = () => { const {colors:C}=useTheme(); return (<ActivityIndicator color={C.tx2} />); };
 
 export function Segmented<K extends string>({ items, value, onChange, label }: { items: [K, string][]; value: K; onChange: (k: K) => void; label: string }) {
+  const {colors:C}=useTheme();
+ const s=resolveThemeValues(sThemeTable,C);
   const reduced=useReducedMotion();
+  const [width,setWidth]=useState(0);
+  const cell=Math.max(0,(width-8)/items.length),selected=Math.max(0,items.findIndex(([k])=>k===value));
   return (
-    <View style={s.seg} accessibilityRole="tablist" accessibilityLabel={label}>
+    <View onLayout={e=>setWidth(e.nativeEvent.layout.width)} style={s.seg} accessibilityRole="tablist" accessibilityLabel={label}>
+      <Glass pointerEvents="none" blur={false} radius={999} style={StyleSheet.absoluteFill}/>
+      <Animated.View pointerEvents="none" style={{position:'absolute',left:4+selected*cell,top:4,bottom:4,width:cell,borderRadius:999,backgroundColor:C.s4,borderWidth:.5,borderColor:C.glassLine,transitionProperty:'left',transitionDuration:reduced?0:240}}/>
       {items.map(([k, l]) => {
         const on = k === value;
         return (
           <Pressable key={k} onPress={() => { haptic(); onChange(k); }} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} style={s.segBtn}>
-            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill,{borderRadius:999,backgroundColor:C.s4,opacity:on ? 1 : 0,transitionProperty:'opacity',transitionDuration:reduced ? 0 : 160}]}/>
             <T v="small" style={{ color: on ? C.tx : C.tx3, fontFamily: F.bold, fontSize: items.length > 3 ? 12.5 : 14 }} numberOfLines={1}>{l}</T>
           </Pressable>
         );
@@ -213,7 +257,7 @@ export function Segmented<K extends string>({ items, value, onChange, label }: {
   );
 }
 
-export const s = StyleSheet.create({
+export const s = themeValues((C) => (StyleSheet.create({
   btn: { borderRadius: R.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingLeft: 26, paddingRight: 22 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
   sec: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',gap:12, marginBottom: 12 },
@@ -221,4 +265,7 @@ export const s = StyleSheet.create({
   segBtn: { flex: 1, borderRadius: R.pill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
   field: { height: 54, borderRadius: R.pill, backgroundColor: C.s2, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 20, paddingRight: 8 },
   input: { flex: 1, minWidth: 0, height: '100%', color: C.tx, fontFamily: F.semi, fontSize: 16, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null) },
-});
+})));
+
+const TVThemeTable=TV;
+const sThemeTable=s;

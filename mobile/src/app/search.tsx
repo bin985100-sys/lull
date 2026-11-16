@@ -1,3 +1,5 @@
+import { setSearchQuery, useChrome } from '@/ui/chrome';
+import { resolveThemeValues , useTheme } from '@/theme/state';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
@@ -7,7 +9,7 @@ import { useData } from '@/api/useData';
 import { ArtistRail, openArtist, openPlaylist } from '@/components/Cards';
 import { TrackRow } from '@/components/TrackRow';
 import { useLibrary } from '@/store/library';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
 import { useLayout } from '@/ui/layout';
 import { Btn, Cover, Empty, IconBtn, ListSkeleton, Offline, Press, Reveal, s, Screen, SectionHead, Segmented, T } from '@/ui/kit';
@@ -15,11 +17,13 @@ import { Btn, Cover, Empty, IconBtn, ListSkeleton, Offline, Press, Reveal, s, Sc
 type Filter = 'all' | 'tracks' | 'albums' | 'artists';
 
 export default function Search() {
+  const {colors:C}=useTheme();
+ const s=resolveThemeValues(sThemeTable,C);
   const layout=useLayout();
   /* фокус после анимации входа экрана, иначе браузер его теряет */
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
-  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 340); return () => clearTimeout(t); }, []);
-  const [q, setQ] = useState('');
+  useEffect(() => { if(!layout.rail)return;const t = setTimeout(() => inputRef.current?.focus(), 340); return () => clearTimeout(t); }, [layout.rail]);
+  const q=useChrome(s=>s.query),setQ=setSearchQuery;
   const [debounced, setDebounced] = useState('');
   const [f, setF] = useState<Filter>('all');
   const recent = useLibrary((x) => x.recentSearches);
@@ -48,7 +52,7 @@ export default function Search() {
 
   return (
     <Screen>
-      <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+      {layout.rail?<View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
         <IconBtn name="back" label="Назад" onPress={() => router.back()} />
         <View style={[s.field, { flex: 1 }]}>
           <Icon name="search" size={22} color={C.tx2} />
@@ -57,6 +61,7 @@ export default function Search() {
           {q ? <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityLabel="Очистить запрос" style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={20} /></Pressable> : null}
         </View>
       </View>
+      :<T v="h1">Поиск</T>}
       <View style={{ marginTop: 16, marginBottom: 20 }}>
         <Segmented label="Фильтр" value={f} onChange={setF} items={[['all', 'Всё'], ['tracks', 'Треки'], ['albums', 'Альбомы'], ['artists', 'Артисты']]} />
       </View>
@@ -118,6 +123,7 @@ export default function Search() {
 /* Лучший результат YouTube Music: то, что человек скорее всего искал — крупно и первым */
 type Top = NonNullable<Awaited<ReturnType<typeof lull.search>>['top']>;
 function TopResult({ top, tracks }: { top: Top; tracks: import('@/api/audius').Track[] }) {
+  const {colors:C}=useTheme();
   if (top.kind === 'track') {
     const list = [top.track, ...tracks.filter((t) => t.id !== top.track.id)];
     return <View><SectionHead title="Лучший результат" /><TrackRow track={top.track} list={list} sub noWarm /></View>;
@@ -141,3 +147,5 @@ function TopResult({ top, tracks }: { top: Top; tracks: import('@/api/audius').T
     </View>
   );
 }
+
+const sThemeTable=s;

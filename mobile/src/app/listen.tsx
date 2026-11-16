@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 import { router } from 'expo-router';
 import { type ComponentRef, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
@@ -14,7 +15,7 @@ import { Insights } from '@/components/Insights';
 import { TrackRow } from '@/components/TrackRow';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { useLibrary } from '@/store/library';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
 import { Cover, haptic, IconBtn, ListSkeleton, Offline, Press, Reveal, Screen, SectionHead, T } from '@/ui/kit';
 import { PlayPause } from '@/ui/PlayPause';
@@ -25,6 +26,7 @@ function greet() {
 }
 
 export default function Listen() {
+  const {colors:C}=useTheme();
   const history = useLibrary((s) => s.history);
   const cur = usePlayer((s) => currentTrack(s));
   const playing = usePlayer((s) => s.playing);
@@ -111,6 +113,7 @@ function moodNow() {
   return h < 11 || h >= 23 ? 'exhale' : h < 18 ? 'focus' : 'night';
 }
 function Focus({ onPlayForYou,loading,canPlay }: { onPlayForYou: () => void;loading:boolean;canPlay:boolean }) {
+  const {colors:C}=useTheme();
   const [w, setW] = useState(0);
   const [page, setPage] = useState(0);
   const rail=useRef<ComponentRef<typeof ScrollView>>(null);
@@ -178,7 +181,7 @@ function ArtistMixes() {
         {list.map((a) => (
           <Press key={a.id} onPress={() => router.push({ pathname: '/mix/[id]', params: { id: `artist:${a.id}`, n: a.name } })} accessibilityRole="button" accessibilityLabel={`Микс: ${a.name}`} style={{ width: 132, gap: 8 }}>
             <View><Cover uri={a.avatar} label={a.name} size={132} radius={28} />
-              <View style={{ position: 'absolute', left: 10, bottom: 10, paddingHorizontal: 10, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center' }}><T v="label" style={{ color: C.tx, fontFamily: F.bold }}>Микс</T></View>
+              <View style={{ position: 'absolute', left: 10, bottom: 10, paddingHorizontal: 10, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center' }}><T v="label" style={{ color: '#fff', fontFamily: F.bold }}>Микс</T></View>
             </View>
             <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 15 }}>{a.name}</T>
           </Press>
@@ -190,6 +193,7 @@ function ArtistMixes() {
 
 /* Подборки под настроение */
 function Moods() {
+
   return (
     <View>
       <SectionHead title="Под настроение" more="Все" onMore={() => router.push('/discover')} />

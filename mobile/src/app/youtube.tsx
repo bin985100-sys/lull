@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 /* Перенос из YouTube Music: лайки → «Любимые треки», плейлисты → свои плейлисты Lull. */
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -5,7 +6,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { unlinkYouTube, ytLibrary, ytPlaylist, type YtPlaylist } from '@/api/youtube';
 import type { Track } from '@/api/audius';
 import { useLibrary } from '@/store/library';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Btn, Cover, Empty, Press, Screen, T, TopBar } from '@/ui/kit';
 import { Icon } from '@/ui/Icon';
 import { confirm, toast } from '@/ui/overlay';
@@ -14,13 +15,14 @@ import { router } from 'expo-router';
 type Lib = { account: string; liked: Track[]; playlists: YtPlaylist[] };
 
 export default function YouTube() {
+  const {colors:C}=useTheme();
   const [lib, setLib] = useState<Lib | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<Record<string, 'run' | 'done'>>({});
   const account = useLibrary((s) => s.account.youtube);
 
   const load = () => { setErr(null); setLib(null); ytLibrary().then(setLib, (e) => setErr(e.message)); };
-  useEffect(load, []);
+  useEffect(()=>{let alive=true;ytLibrary().then(value=>{if(alive)setLib(value);},e=>{if(alive)setErr(e.message);});return()=>{alive=false;};}, []);
 
   const mark = (id: string, v: 'run' | 'done') => setBusy((b) => ({ ...b, [id]: v }));
 
@@ -82,6 +84,7 @@ export default function YouTube() {
 }
 
 function Item({ title, sub, art, state, onPress }: { title: string; sub: string; art?: string; state?: 'run' | 'done'; onPress: () => void }) {
+  const {colors:C}=useTheme();
   return (
     <Press onPress={state ? undefined : onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 10, borderRadius: 22, backgroundColor: C.s1 }}>
       <Cover uri={art} size={56} radius={14} />

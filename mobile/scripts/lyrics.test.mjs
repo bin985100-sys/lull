@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const mobile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,7 +15,7 @@ await esbuild.build({
     b.onLoad({ filter: /.*/, namespace: 's' }, () => ({ contents: 'export const LULL_API="http://x"', loader: 'js' }));
   } }],
 });
-const L = await import(out);
+const L = await import(pathToFileURL(out).href);
 
 let pass = 0, fail = 0;
 const test = (n, f) => { try { f(); pass++; console.log('✓', n); } catch (e) { fail++; console.log('✗', n, '\n   ', e.message); } };

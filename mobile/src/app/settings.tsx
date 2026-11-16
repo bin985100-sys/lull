@@ -1,3 +1,4 @@
+import { useAppearance, useTheme, type ThemeMode } from '@/theme/state';
 import { router } from 'expo-router';
 import { resetTo } from '@/nav';
 import { Linking, Pressable, Switch, View } from 'react-native';
@@ -10,23 +11,27 @@ import { askBattery, canMix, openAppSettings } from '@/player/background';
 import { player } from '@/player/player';
 import { lastError, useCrash } from '@/ui/Crash';
 import { useLibrary } from '@/store/library';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon, type IconName } from '@/ui/Icon';
 import { Cover, Screen, T, TopBar } from '@/ui/kit';
 import { confirm, toast } from '@/ui/overlay';
+import { Glass } from '@/ui/Glass';
 
 function Row({ icon, label, sub, onPress, right }: { icon: IconName; label: string; sub?: string; onPress?: () => void; right?: React.ReactNode }) {
+
   return (
     <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 64, paddingVertical: sub ? 10 : 0 }}>
       <Icon name={icon} size={28} /><View style={{ flex: 1 }}><T style={{ fontSize: 16.5 }}>{label}</T>{sub ? <T v="small" style={{ marginTop: 3 }}>{sub}</T> : null}</View>{right ?? (onPress ? <Icon name="chev" size={22} /> : null)}
     </Pressable>
   );
 }
-const Group = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <View><T v="h2" style={{ fontSize: 20, marginTop: 24, marginBottom: 12 }}>{title}</T><View style={{ borderRadius: 26, backgroundColor: C.s1, paddingHorizontal: 18, paddingVertical: 4 }}>{children}</View></View>
-);
+const Group = ({ title, children }: { title: string; children: React.ReactNode }) => {  return ((
+  <View><T v="h2" style={{ fontSize: 20, marginTop: 24, marginBottom: 12 }}>{title}</T><Glass blur={false} radius={28} style={{ paddingHorizontal: 18, paddingVertical: 4 }}>{children}</Glass></View>
+)); };
 
 export default function Settings() {
+  const {colors:C}=useTheme();
+  const appearance=useAppearance();
   const lib = useLibrary();
   const mix = !!lib.settings.mixAudio;
   function toggleMix(v: boolean) {
@@ -47,11 +52,18 @@ export default function Settings() {
         {lib.account.avatar ? <Cover uri={lib.account.avatar} size={60} radius={30} /> : <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.s3, alignItems: 'center', justifyContent: 'center' }}><Icon name="user" size={32} /></View>}
         <View style={{ flex: 1 }}><T style={{ fontFamily: F.bold, fontSize: 18 }}>{lib.account.name || 'Мой аккаунт'}</T><T v="small">{lib.account.provider ? `Вход через ${lib.account.provider}` : 'Локальный профиль'}</T></View>
       </View>
+      <Group title="Оформление">
+        <View accessibilityRole="radiogroup" accessibilityLabel="Тема приложения" style={{flexDirection:'row',gap:6,paddingVertical:12}}>
+          {([['light','Светлая'],['dark','Тёмная'],['system','Системная']] as [ThemeMode,string][]).map(([mode,label])=><Pressable key={mode} accessibilityRole="radio" accessibilityState={{checked:appearance.mode===mode}} aria-checked={appearance.mode===mode} accessibilityLabel={label} onPress={()=>appearance.setMode(mode)} style={{flex:1,minWidth:0,minHeight:48,paddingHorizontal:4,paddingVertical:10,borderRadius:24,alignItems:'center',justifyContent:'center',backgroundColor:appearance.mode===mode ? C.tx : C.s2}}>
+            <T numberOfLines={1} style={{fontSize:12,color:appearance.mode===mode ? C.inverse : C.tx2}}>{label}</T>
+          </Pressable>)}
+        </View>
+      </Group>
       <Group title="Музыка">
         <Row icon="sliders" label="Рекомендации и волна" onPress={() => router.push('/prefs')} />
         <Row icon="chart" label="Итоги месяца" onPress={() => router.push('/month')} />
         <Row icon="heart" label={`Любимые исполнители · ${lib.favArtists.length}`} onPress={() => router.push('/onboarding')} />
-        <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={lib.settings.saveHistory ? '#000' : '#8a8f96'} accessibilityLabel="Сохранять историю" />} />
+        <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={lib.settings.saveHistory ? C.inverse : C.tx3} accessibilityLabel="Сохранять историю" />} />
       </Group>
       <Group title="Продолжить на другом устройстве">
         <Row icon="queue" label="Передать очередь" sub="Сохранить трек и позицию в аккаунте Lull" onPress={() => transferPlayback(true).then(() => toast('Очередь передана','check')).catch(e => toast(e.message,'info'))}/>
@@ -59,7 +71,7 @@ export default function Settings() {
       </Group>
       <Group title="Воспроизведение">
         <Row icon="stack" label="Играть поверх других приложений" sub={canMix ? 'Lull не останавливает другие приложения, а приглушает их. Если другое приложение само забирает звук, Android поставит Lull на паузу' : 'Недоступно на iPhone: iOS сама останавливает звук сайта'}
-          right={<Switch value={mix && canMix} disabled={!canMix} onValueChange={toggleMix} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={mix && canMix ? '#000' : '#8a8f96'} accessibilityLabel="Играть поверх других приложений" />} />
+          right={<Switch value={mix && canMix} disabled={!canMix} onValueChange={toggleMix} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={mix && canMix ? C.inverse : C.tx3} accessibilityLabel="Играть поверх других приложений" />} />
         {canMix ? <Row icon="shield" label="Работа в фоне" sub="Разрешить Lull играть без ограничений батареи" onPress={() => askBattery().catch(openAppSettings)} /> : null}
       </Group>
       <Group title="Перенос музыки">

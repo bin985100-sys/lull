@@ -1,11 +1,13 @@
+import { useTheme } from '@/theme/state';
 
 import { resetTo } from '@/nav';
 import { ListPage } from '@/components/ListPage';
 import { useLibrary } from '@/store/library';
 import { Btn, Empty } from '@/ui/kit';
-import {C} from '@/theme/tokens';
+
 
 export default function Favorites() {
+  const {colors:C}=useTheme();
   const liked = useLibrary((s) => s.liked);
   return (
     <ListPage title="Любимые треки" cover={{icon:'heartF',accent:C.rose}} tracks={liked} sub2

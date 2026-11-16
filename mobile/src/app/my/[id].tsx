@@ -1,15 +1,18 @@
+import { resolveThemeValues , useTheme } from '@/theme/state';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
 import { ListPage } from '@/components/ListPage';
 import { useLibrary } from '@/store/library';
-import { C } from '@/theme/tokens';
+
 import { Icon } from '@/ui/Icon';
 import { Btn, Empty, IconBtn, s, T } from '@/ui/kit';
 import { closeSheet, confirm, openSheet, toast } from '@/ui/overlay';
 
 function EditSheet({ id }: { id: string }) {
+  const {colors:C}=useTheme();
+ const s=resolveThemeValues(sThemeTable,C);
   const pl = useLibrary((x) => x.playlists.find((p) => p.id === id));
   const [name, setName] = useState(pl?.name ?? '');
   if (!pl) return null;
@@ -29,6 +32,7 @@ function EditSheet({ id }: { id: string }) {
 }
 
 export default function MyPlaylist() {
+  const {colors:C}=useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const pl = useLibrary((x) => x.playlists.find((p) => p.id === id));
   if (!pl) return <ListPage title="Плейлист удалён" tracks={[]} empty={<Empty icon="note" title="Плейлист не найден" />} />;
@@ -39,3 +43,5 @@ export default function MyPlaylist() {
       empty={<View style={{ padding: 24, borderRadius: 26, backgroundColor: C.s1, alignItems: 'center', gap: 6 }}><T v="h3">В плейлисте пока нет треков</T><T v="body">Добавь первые — и можно слушать.</T></View>} />
   );
 }
+
+const sThemeTable=s;

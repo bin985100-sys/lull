@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 
@@ -7,11 +8,12 @@ import { useData } from '@/api/useData';
 import { CardRail } from '@/components/Cards';
 import { Banner } from '@/components/Banner';
 import { TrackRow } from '@/components/TrackRow';
-import { C } from '@/theme/tokens';
+
 import { Icon } from '@/ui/Icon';
 import { Btn, ListSkeleton, Offline, Press, Screen, SectionHead, Skeleton, T } from '@/ui/kit';
 
 export default function Discover() {
+  const {colors:C}=useTheme();
   const charts = useData('charts', (s) => lull.charts(s));
   const home = useData('home', (s) => lull.home(undefined, s));
   const trending = charts.data?.find((x) => x.layout === 'tracks');

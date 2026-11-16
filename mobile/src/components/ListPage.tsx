@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 import { Image } from 'expo-image';
 import { type ReactNode, useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -6,7 +7,7 @@ import { useLayout } from '@/ui/layout';
 import type { Track } from '@/api/audius';
 import { warm } from '@/api/lull';
 import { currentTrack, player, usePlayer } from '@/player/player';
-import { C } from '@/theme/tokens';
+
 import { Btn, IconBtn, ListSkeleton, Offline, Screen, Skeleton, T, TopBar } from '@/ui/kit';
 import { OfflineSaveButton } from './MusicActions';
 import { TrackRow } from './TrackRow';
@@ -32,6 +33,7 @@ type Props = {
 const EMPTY_TRACKS:Track[]=[];
 
 export function CoverArt({ cover, size, radius = 34 }: { cover?: Props['cover']; size: number | '100%'; radius?: number }) {
+  const {colors:C}=useTheme();
   const col = (cover?.collage || []).filter(Boolean).slice(0, 3) as string[];
   return (
     <View style={{ width: size, aspectRatio: 1, borderRadius: radius, overflow: 'hidden', backgroundColor: C.s2, alignSelf: 'center' }}>
@@ -52,6 +54,7 @@ export function CoverArt({ cover, size, radius = 34 }: { cover?: Props['cover'];
 }
 
 export function ListPage(p: Props) {
+
   const layout=useLayout();
   const size = Math.min(270, layout.content * 0.7);
   const wide=layout.content>=680;

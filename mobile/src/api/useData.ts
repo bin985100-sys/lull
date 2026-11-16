@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 
 import { ApiError } from './audius';
 
@@ -8,31 +8,28 @@ const TTL = 5 * 60e3;
 
 export type DataState<T> = { data: T | undefined; loading: boolean; error: ApiError | null; reload(): void };
 
+const isFresh=(entry:{at:number}|undefined)=>!!entry&&Date.now()-entry.at<TTL;
+
 export function useData<T>(key: string | null, fn: (signal: AbortSignal) => Promise<T>): DataState<T> {
-  const hit = key ? cache.get(key) : undefined;
-  const [state, setState] = useState<{ data: T | undefined; loading: boolean; error: ApiError | null }>({
-    data: hit?.data as T | undefined,
-    loading: !!key && !hit,
-    error: null,
-  });
-  const [nonce, setNonce] = useState(0);
-  const fnRef = useRef(fn);
-  fnRef.current = fn;
-
-  useEffect(() => {
-    if (!key) { setState({ data: undefined, loading: false, error: null }); return; }
-    const c = cache.get(key);
-    if (c && Date.now() - c.at < TTL && nonce === 0) { setState({ data: c.data as T, loading: false, error: null }); return; }
-    const ac = new AbortController();
-    setState((s) => ({ data: c ? (c.data as T) : s.data, loading: true, error: null }));
-    fnRef.current(ac.signal)
-      .then((data) => { cache.set(key, { at: Date.now(), data }); if (!ac.signal.aborted) setState({ data, loading: false, error: null }); })
-      .catch((e) => { if (!ac.signal.aborted) setState((s) => ({ data: s.data, loading: false, error: e instanceof ApiError ? e : new ApiError('http', String(e?.message || e)) })); });
-    return () => ac.abort();
-  }, [key, nonce]);
-
-  const reload = useCallback(() => { if (key) cache.delete(key); setNonce((n) => n + 1); }, [key]);
-  return { ...state, reload };
+  const [nonce,setNonce]=useState(0);
+  const [result,setResult]=useState<{key:string;nonce:number;data:T|undefined;error:ApiError|null}|null>(null);
+  const fetchData=useEffectEvent((signal:AbortSignal)=>fn(signal));
+  const hit=key ? cache.get(key) : undefined;
+  const fresh=isFresh(hit)&&nonce===0;
+  const current=result?.key===key&&result.nonce===nonce ? result : null;
+  useEffect(()=>{
+    if(!key)return;
+    const c=cache.get(key);
+    if(c&&Date.now()-c.at<TTL&&nonce===0)return;
+    const ac=new AbortController();
+    fetchData(ac.signal).then(data=>{
+      if(ac.signal.aborted)return;
+      cache.set(key,{at:Date.now(),data});setResult({key,nonce,data,error:null});
+    },e=>{if(!ac.signal.aborted)setResult({key,nonce,data:c?.data as T|undefined,error:e instanceof ApiError ? e : new ApiError('http',String(e?.message||e))});});
+    return()=>ac.abort();
+  },[key,nonce]);
+  const reload=useCallback(()=>{if(key)cache.delete(key);setNonce(n=>n+1);},[key]);
+  return {data:key ? current?.data??hit?.data as T|undefined : undefined,loading:!!key&&!current&&!fresh,error:current?.error??null,reload};
 }
 
 /* Сбросить кэш подборок после изменения настроек вкуса */

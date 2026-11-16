@@ -1,7 +1,8 @@
+import { resolveThemeValues, useTheme } from '@/theme/state';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { type Artist } from '@/api/audius';
@@ -9,31 +10,23 @@ import { lull } from '@/api/lull';
 import { useData } from '@/api/useData';
 import { ArtistPick } from '@/components/ArtistPick';
 import { useLibrary } from '@/store/library';
-import { C } from '@/theme/tokens';
+
 import { Icon } from '@/ui/Icon';
 import { Btn, haptic, Offline, s as ks, Screen, Skeleton, T } from '@/ui/kit';
 import { toast } from '@/ui/overlay';
 
 export default function Onboarding() {
+  const {colors:C}=useTheme();
+  const ks=resolveThemeValues(ksThemeTable,C);
   const { data, loading, error, reload } = useData('popularArtists', (s) => lull.popularArtists(s));
   const [picked, setPicked] = useState<Artist[]>([]);
   /* ширину колонки считаем от реальной ширины сетки — иначе третья колонка не помещалась */
   const [gridW, setGridW] = useState(0);
   const size = gridW ? Math.floor((gridW - 12 * 2) / 3) : 0;
   const [q, setQ] = useState('');
-  const [found, setFound] = useState<Artist[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  /* поиск исполнителей в каталоге: ждём паузу в наборе, старый запрос отменяем */
-  useEffect(() => {
-    const text = q.trim();
-    if (text.length < 2) { setFound(null); setSearching(false); return; }
-    const ac = new AbortController();
-    setSearching(true);
-    const t = setTimeout(() => {
-      lull.search(text, ac.signal).then((r) => { setFound(r.artists.filter((a) => a.avatar).slice(0, 18)); setSearching(false); }, () => { if (!ac.signal.aborted) { setFound([]); setSearching(false); } });
-    }, 350);
-    return () => { clearTimeout(t); ac.abort(); };
-  }, [q]);
+  const searchText=q.trim();
+  const {data:searchResult,loading:searching}=useData(searchText.length>=2 ? `onboarding:artists:${searchText}` : null,signal=>lull.search(searchText,signal));
+  const found=searchText.length>=2 ? searchResult?.artists.filter(a=>a.avatar).slice(0,18)??[] : null;
   const MIN = 5, MAX = 10;
   const toggle = (a: Artist) => {
     if (picked.some((x) => x.id === a.id)) setPicked(picked.filter((x) => x.id !== a.id));
@@ -59,7 +52,7 @@ export default function Onboarding() {
             {picked.map((a) => (
               <Pressable key={a.id} onPress={() => { haptic(); toggle(a); }} accessibilityRole="button" accessibilityLabel={`Убрать ${a.name}`}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingLeft: 14, paddingRight: 10, borderRadius: 18, backgroundColor: C.tx }}>
-                <T v="small" style={{ color: '#000', fontFamily: 'Montserrat_700Bold' }} numberOfLines={1}>{a.name}</T><Icon name="close" size={16} color="#000" />
+                <T v="small" style={{ color: C.inverse, fontFamily: 'Montserrat_700Bold' }} numberOfLines={1}>{a.name}</T><Icon name="close" size={16} color={C.inverse} />
               </Pressable>
             ))}
           </View>
@@ -73,7 +66,7 @@ export default function Onboarding() {
         </View>
       </Screen>
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 56, paddingBottom: 24, gap: 10 }}>
-        <LinearGradient colors={['rgba(0,0,0,0)', '#000', '#000']} locations={[0, 0.3, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <LinearGradient colors={['transparent', C.bg, C.bg]} locations={[0, 0.3, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <T v="sub" style={{ textAlign: 'center' }} accessibilityLiveRegion="polite">{picked.length < MIN ? `Выбрано ${picked.length} из ${MIN}` : `Выбрано ${picked.length}`}</T>
         <Btn label="Дальше" icon="arrow" disabled={picked.length < MIN} onPress={() => {
           useLibrary.getState().setFavArtists(picked);
@@ -83,3 +76,5 @@ export default function Onboarding() {
     </View>
   );
 }
+
+const ksThemeTable=ks;

@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 /* Текст песни в плеере: карточка под кнопками (листаешь плеер вниз) и полноэкранный режим.
    Строки подсвечиваются по ходу песни, слова — по своему времени; второй голос в дуэте — справа. */
 import { Image } from 'expo-image';
@@ -9,7 +10,7 @@ import { create } from 'zustand';
 import type { Track } from '@/api/audius';
 import { activeLine, getLyrics, type LLine, type Lyrics } from '@/api/lyrics';
 import { player, usePlayer, useProgress } from '@/player/player';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
 import { haptic, T } from '@/ui/kit';
 
@@ -20,18 +21,18 @@ export const closeLyrics = () => useLyricsUi.setState({ open: false });
 /* ---------- загрузка ---------- */
 type State = { status: 'loading' | 'ok' | 'none' | 'error'; data?: Lyrics };
 export function useLyrics(t: Track | undefined): State {
-  const [st, setSt] = useState<State>({ status: 'loading' });
+  const [result, setResult] = useState<{id:string;state:State}|null>(null);
+  const setSt=(state:State)=>setResult({id:t!.id,state});
   useEffect(() => {
     if (!t) return;
     let alive = true;
-    setSt({ status: 'loading' });
     getLyrics(t).then(
       (d) => alive && setSt({ status: d.lines || d.plain ? 'ok' : 'none', data: d }),
       () => alive && setSt({ status: 'error' }),
     );
     return () => { alive = false; };
   }, [t?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  return st;
+  return result?.id===t?.id ? result!.state : {status:'loading'};
 }
 
 /* ---------- плавное время: плеер шлёт позицию раз в 250 мс, между ними досчитываем сами ---------- */
@@ -50,11 +51,12 @@ function usePlayhead(fps = 20) {
 }
 
 /* ---------- одна строка ---------- */
-const DIM = 'rgba(255,255,255,0.32)';
-const PAST = 'rgba(255,255,255,0.55)';
+
 const Line = memo(function Line({ l, state, now, size, onPress, onLayout }: {
   l: LLine; state: 'past' | 'now' | 'next'; now: number; size: number; onPress?: () => void; onLayout?: (e: LayoutChangeEvent) => void;
 }) {
+  const {colors:C}=useTheme();
+  const DIM=C.tx3,PAST=C.tx2;
   const right = l.side === 'right';
   const base = { fontFamily: F.heavy, fontSize: size, lineHeight: Math.round(size * 1.22), letterSpacing: -0.4, textAlign: right ? 'right' : 'left' } as const;
   const empty = !l.text.trim();
@@ -68,13 +70,13 @@ const Line = memo(function Line({ l, state, now, size, onPress, onLayout }: {
           {l.words.map((w, i) => {
             const k = w.e <= now ? 1 : w.t > now ? 0 : (now - w.t) / Math.max(0.05, w.e - w.t);
             const a = 0.38 + 0.62 * Math.min(1, Math.max(0, k));
-            return <Text key={i} style={{ color: `rgba(255,255,255,${a.toFixed(3)})` }}>{(w.space ? ' ' : '') + w.text}</Text>;
+            return <Text key={i} style={{ color:C.tx,opacity:a }}>{(w.space ? ' ' : '') + w.text}</Text>;
           })}
         </Text>
       ) : (
         <Text style={[base, { color: state === 'past' ? PAST : DIM }]}>{l.text}</Text>
       )}
-      {l.bg ? <Text style={[base, { fontSize: size * 0.62, lineHeight: Math.round(size * 0.8), marginTop: 2, color: state === 'now' ? 'rgba(255,255,255,0.7)' : DIM }]}>{l.bg}</Text> : null}
+      {l.bg ? <Text style={[base, { fontSize: size * 0.62, lineHeight: Math.round(size * 0.8), marginTop: 2, color: state === 'now' ? C.tx2 : DIM }]}>{l.bg}</Text> : null}
     </Pressable>
   );
 });
@@ -83,14 +85,15 @@ const credit = (s: string | null) => (s === 'lrclib' ? 'LRCLIB' : s === 'betterl
 
 /* ---------- карточка под плеером ---------- */
 export function LyricsCard({ track }: { track: Track }) {
+  const {colors:C}=useTheme();
   const st = useLyrics(track);
   const lines = st.data?.lines;
   return (
     <Pressable onPress={st.status === 'ok' ? openLyrics : undefined} accessibilityRole="button" accessibilityLabel="Открыть текст на весь экран"
-      style={{ borderRadius: 30, backgroundColor: 'rgba(0,0,0,0.28)', padding: 22, minHeight: 200 }}>
+      style={{ borderRadius: 30, backgroundColor:C.s2, padding: 22, minHeight: 200 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <T style={{ fontFamily: F.bold, fontSize: 18 }}>Текст</T>
-        {st.status === 'ok' ? <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}><Icon name="arrowUR" size={22} /></View> : null}
+        {st.status === 'ok' ? <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor:C.s3, alignItems: 'center', justifyContent: 'center' }}><Icon name="arrowUR" size={22} /></View> : null}
       </View>
       {st.status === 'loading' ? <ActivityIndicator color={C.tx2} style={{ marginTop: 30 }} /> : null}
       {st.status === 'none' || st.status === 'error' ? <T v="sub">{st.status === 'none' ? 'Для этой песни текста пока нет' : 'Не получилось загрузить текст'}</T> : null}
@@ -101,6 +104,7 @@ export function LyricsCard({ track }: { track: Track }) {
 }
 /* в карточке — окно из нескольких строк вокруг текущей */
 function CardLines({ lines }: { lines: LLine[] }) {
+
   const now = usePlayhead(12);
   const cur = activeLine(lines, now);
   const from = Math.max(0, cur - 1);
@@ -118,14 +122,15 @@ function CardLines({ lines }: { lines: LLine[] }) {
 
 /* ---------- весь экран ---------- */
 export function LyricsFull({ track }: { track: Track }) {
+  const {colors:C}=useTheme();
   const st = useLyrics(track);
   const lines = st.data?.lines;
   return (
     <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(180)} style={[StyleSheet.absoluteFill, { zIndex: 20 }]}>
       {/* плотный фон: размытая обложка под тёмной вуалью — плеер под текстом не просвечивает */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a0a0b', borderRadius: 44, overflow: 'hidden' }]}>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor:C.bg, borderRadius: 44, overflow: 'hidden' }]}>
         {track.artworkLarge || track.artwork ? <Image source={{ uri: track.artworkLarge || track.artwork }} blurRadius={60} style={[StyleSheet.absoluteFill, { opacity: 0.55, transform: [{ scale: 1.4 }] }]} contentFit="cover" /> : null}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor:C.glass }]} />
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 10 }}>
         <Image source={{ uri: track.artwork }} style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: C.s2 }} />
@@ -133,7 +138,7 @@ export function LyricsFull({ track }: { track: Track }) {
           <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 17 }}>{track.title}</T>
           <T v="small" numberOfLines={1}>{track.artist}</T>
         </View>
-        <Pressable onPress={closeLyrics} hitSlop={10} accessibilityRole="button" accessibilityLabel="Закрыть текст" style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable onPress={closeLyrics} hitSlop={10} accessibilityRole="button" accessibilityLabel="Закрыть текст" style={{ width: 44, height: 44, borderRadius: 22, backgroundColor:C.s3, alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="down" size={26} />
         </Pressable>
       </View>
@@ -149,6 +154,7 @@ export function LyricsFull({ track }: { track: Track }) {
 }
 
 function FullLines({ lines, source }: { lines: LLine[]; source: string | null }) {
+
   const now = usePlayhead(24);
   const cur = activeLine(lines, now);
   const sv = useRef<ScrollViewInstance>(null);

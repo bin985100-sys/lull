@@ -1,8 +1,9 @@
+import { useTheme } from '@/theme/state';
 import { useEffect } from 'react';
 import Animated, { useAnimatedProps, useSharedValue, withTiming, Easing, useReducedMotion } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 
-import { C, EASE } from '@/theme/tokens';
+import { EASE } from '@/theme/tokens';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -28,18 +29,19 @@ function shape(a: number[], b: number[], t: number) {
   return d + ' Z';
 }
 
-export function PlayPause({ playing, size = 26, color = C.tx, stroke = 2.2 }: { playing: boolean; size?: number; color?: string; stroke?: number }) {
+export function PlayPause({ playing, size = 26, color, stroke = 2.2 }: { playing: boolean; size?: number; color?: string; stroke?: number }) {
+  const {colors:C}=useTheme();
   const reduced = useReducedMotion();
   const t = useSharedValue(playing ? 1 : 0);
   useEffect(() => {
-    t.value = reduced ? (playing ? 1 : 0) : withTiming(playing ? 1 : 0, { duration: 320, easing: Easing.bezier(...EASE) });
+    t.set(reduced ? (playing ? 1 : 0) : withTiming(playing ? 1 : 0, { duration: 320, easing: Easing.bezier(...EASE) }));
   }, [playing, reduced, t]);
-  const left = useAnimatedProps(() => ({ d: shape(PLAY[0], PAUSE[0], t.value) }));
-  const right = useAnimatedProps(() => ({ d: shape(PLAY[1], PAUSE[1], t.value) }));
+  const left = useAnimatedProps(() => ({ d: shape(PLAY[0], PAUSE[0], t.get()) }));
+  const right = useAnimatedProps(() => ({ d: shape(PLAY[1], PAUSE[1], t.get()) }));
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      <AnimatedPath animatedProps={left} fill={color} stroke={color} strokeWidth={stroke} strokeLinejoin="round" />
-      <AnimatedPath animatedProps={right} fill={color} stroke={color} strokeWidth={stroke} strokeLinejoin="round" />
+      <AnimatedPath animatedProps={left} fill={color ?? C.tx} stroke={color ?? C.tx} strokeWidth={stroke} strokeLinejoin="round" />
+      <AnimatedPath animatedProps={right} fill={color ?? C.tx} stroke={color ?? C.tx} strokeWidth={stroke} strokeLinejoin="round" />
     </Svg>
   );
 }

@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 import { router } from 'expo-router';
 import { memo, useEffect } from 'react';
 import { Platform, Pressable, View } from 'react-native';
@@ -11,15 +12,16 @@ import { artistKey, useTaste } from '@/store/taste';
 import { downloaded, removeDownload } from '@/player/downloads';
 import { saveTracks } from './MusicActions';
 import { openWave } from './Wave';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
 import { Cover, haptic, T } from '@/ui/kit';
-import { closeSheet, openSheet, toast } from '@/ui/overlay';
+import { closeSheet, openSheet, openPopover, type MenuAnchor, toast } from '@/ui/overlay';
 import { PlayPause } from '@/ui/PlayPause';
 
 type Props = { track: Track; list: Track[]; num?: number; sub?: boolean; right?: 'play' | 'plus' | 'heart' | 'none'; playlistId?: string; noWarm?: boolean };
 
 export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 'play', playlistId, noWarm }: Props) {
+  const {colors:C}=useTheme();
   const isCur = usePlayer((s) => currentTrack(s)?.id === track.id);
   const playing = usePlayer((s) => s.playing && currentTrack(s)?.id === track.id);
   const lit = useSharedValue(0);
@@ -30,22 +32,22 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
   /* прозрачность пишем обычным числом: «6e-8» из конца анимации ронял приложение на новых Android */
   const bg = useAnimatedStyle(() => ({ backgroundColor: `rgba(255,255,255,${(Math.max(0, lit.get()) * 0.1).toFixed(3)})` }));
   const play = () => { haptic(); player.play(list, track.id); };
-  const more = () => { haptic(); openTrackActions(track, playlistId); };
+  const more = (anchor?:MenuAnchor) => { haptic(); openTrackActions(track, playlistId,anchor); };
 
   return (
     <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 66, borderRadius: 16, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
-      <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={more} delayLongPress={420} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 6 }}
+      <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={e=>more({x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} delayLongPress={420} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 6 }}
         accessibilityRole="button" accessibilityLabel={`${track.title}, ${track.artist}`} accessibilityHint="Двойное касание — слушать, удержание — меню трека"
         accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Меню трека' }]}
         onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'longpress' ? more() : play())}>
         {num ? <T v="sub" style={{ width: 24, fontSize: 16 }}>{num}</T> : <Cover uri={track.artwork} size={58} />}
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <T numberOfLines={1} style={{ color: isCur ? '#fff' : C.tx, fontFamily: isCur ? F.bold : F.semi }}>{track.title}</T>
+          <T numberOfLines={1} style={{ color: isCur ? C.sky : C.tx, fontFamily: isCur ? F.bold : F.semi }}>{track.title}</T>
           {sub ? <T v="small" numberOfLines={1}>{track.artist}</T> : null}
         </View>
       </Pressable>
       {right === 'play' ? (
-        <Pressable onPress={play} hitSlop={6} accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : `Слушать ${track.title}`} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable onPress={()=>isCur ? player.toggle() : play()} hitSlop={6} accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : `Слушать ${track.title}`} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
           <PlayPause playing={playing} size={26} />
         </Pressable>
       ) : right === 'plus' ? (
@@ -69,17 +71,20 @@ export function likeWithUndo(t: Track) {
 }
 
 function Item({ icon, label, onPress }: { icon: any; label: string; onPress: () => void }) {
+  const {colors:C}=useTheme();
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 56 }}>
-      <Icon name={icon} size={28} /><T style={{ fontSize: 16.5, flex: 1, paddingVertical: 12 }}>{label}</T>
+    <Pressable onPress={onPress} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 46,borderBottomWidth:.5,borderColor:C.line }}>
+      <Icon name={icon} size={23} /><T style={{ fontSize: 14.5, flex: 1, paddingVertical: 10 }}>{label}</T>
     </Pressable>
   );
 }
 
-export function openTrackActions(t: Track, playlistId?: string) {
-  openSheet(() => <TrackActions t={t} playlistId={playlistId} />);
+export function openTrackActions(t: Track, playlistId?: string,anchor?:MenuAnchor) {
+  const render=()=><TrackActions t={t} playlistId={playlistId} />;
+  if(anchor)openPopover(render,anchor);else openSheet(render);
 }
 function TrackActions({ t, playlistId }: { t: Track; playlistId?: string }) {
+
   const liked = useLibrary((s) => s.liked.some((x) => x.id === t.id));
   const go = (path: any) => { closeSheet(); usePlayer.setState({ expanded: false }); router.push(path); };
   return (
@@ -118,6 +123,7 @@ export function openSelectPlaylist(t: Track) {
   openSheet(() => <SelectPlaylist t={t} />);
 }
 function SelectPlaylist({ t }: { t: Track }) {
+  const {colors:C}=useTheme();
   const pls = useLibrary((s) => s.playlists);
   return (
     <View style={{ gap: 4 }}>
@@ -133,7 +139,7 @@ function SelectPlaylist({ t }: { t: Track }) {
             <Cover uri={p.tracks[0]?.artwork} size={48} />
             <T numberOfLines={1} style={{ flex: 1 }}>{p.name}</T>
             <View style={{ width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: has ? C.tx : C.s3 }}>
-              <Icon name={has ? 'check' : 'plus'} size={20} color={has ? '#000' : C.tx} />
+              <Icon name={has ? 'check' : 'plus'} size={20} color={has ? C.inverse : C.tx} />
             </View>
           </Pressable>
         );

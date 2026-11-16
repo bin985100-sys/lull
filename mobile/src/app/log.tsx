@@ -1,19 +1,21 @@
+import { useTheme } from '@/theme/state';
 /* Журнал приложения: что происходило перед ошибкой или вылетом. Можно отправить разработчику. */
 import { useEffect, useState } from 'react';
 import { ScrollView, Share, Text, View } from 'react-native';
 
 import { clearLog, lastError, readLog } from '@/ui/Crash';
-import { C } from '@/theme/tokens';
+
 import { Btn, Screen, T, TopBar } from '@/ui/kit';
 import { toast } from '@/ui/overlay';
 
 export default function LogScreen() {
+  const {colors:C}=useTheme();
   const [text, setText] = useState('Загружаем…');
   const load = async () => {
     const [l, e] = await Promise.all([readLog(), lastError()]);
     setText([e ? `ПОСЛЕДНЯЯ ОШИБКА\n${e}\n` : '', 'ЖУРНАЛ', l || 'пусто'].filter(Boolean).join('\n'));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { let alive=true;Promise.all([readLog(),lastError()]).then(([l,e])=>{if(alive)setText([e ? `ПОСЛЕДНЯЯ ОШИБКА\n${e}\n` : '', 'ЖУРНАЛ',l||'пусто'].filter(Boolean).join('\n'));});return()=>{alive=false;}; }, []);
   return (
     <Screen scroll={false}>
       <TopBar title="Журнал" />

@@ -6,7 +6,7 @@ import { execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -46,7 +46,7 @@ async function freshPhone() {
   globalThis.__store = new Map(); globalThis.__routes = []; globalThis.__api = API;
   const out = path.join(tmp, `app-${Math.random().toString(36).slice(2)}.mjs`);
   await esbuild.build({ stdin: { contents: entry, resolveDir: mobile, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, plugins: [plugin], logLevel: 'silent', nodePaths: [path.join(mobile, 'node_modules')] });
-  const m = await import(out);
+  const m = await import(pathToFileURL(out).href);
   await new Promise((r) => setTimeout(r, 20)); // persist успевает «загрузиться»
   return m;
 }

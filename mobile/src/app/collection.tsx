@@ -1,3 +1,4 @@
+import { resolveThemeValues , useTheme } from '@/theme/state';
 import { router } from 'expo-router';
 import {artistPhoto} from '@/api/lull';
 import { resetTo } from '@/nav';
@@ -7,7 +8,7 @@ import { Platform, Pressable, TextInput, View } from 'react-native';
 import { openArtist, openPlaylist } from '@/components/Cards';
 import { CoverArt } from '@/components/ListPage';
 import { useLibrary } from '@/store/library';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
 import { useLayout } from '@/ui/layout';
 import { Btn, Cover, Empty, IconBtn, Press, s, Screen, SectionHead, Segmented, T } from '@/ui/kit';
@@ -15,6 +16,8 @@ import { Btn, Cover, Empty, IconBtn, Press, s, Screen, SectionHead, Segmented, T
 type Tab = 'pl' | 'saved' | 'ar';
 
 export default function Collection() {
+  const {colors:C}=useTheme();
+ const s=resolveThemeValues(sThemeTable,C);
   const layout=useLayout();
   const lib = useLibrary();
   const [tab, setTab] = useState<Tab>('pl');
@@ -85,3 +88,5 @@ export default function Collection() {
     </Screen>
   );
 }
+
+const sThemeTable=s;

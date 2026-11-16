@@ -1,15 +1,17 @@
+import { useTheme } from '@/theme/state';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, TextInput, View } from 'react-native';
 
 import type { Track } from '@/api/audius';
 import { useLibrary } from '@/store/library';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
 import { Btn, Screen, T, TopBar } from '@/ui/kit';
 import { toast } from '@/ui/overlay';
 
 export default function NewPlaylist() {
+  const {colors:C}=useTheme();
   const { add } = useLocalSearchParams<{ add?: string }>();
   const pending: Track | undefined = add ? JSON.parse(add) : undefined;
   /* фокус после анимации входа экрана, иначе браузер его теряет */

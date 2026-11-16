@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
@@ -5,13 +6,14 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { player } from '@/player/player';
 import { fmtListen, monthIn, monthName, monthStats, prevMonthKey, useTaste } from '@/store/taste';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon, type IconName } from '@/ui/Icon';
 import { Press, SectionHead, T } from '@/ui/kit';
 import { openArtist } from './Cards';
 
 /* Живые карточки на главной: собираются из того, что и сколько ты слушаешь в этом месяце */
 function Card({ img, eyebrow, title, sub, icon, onPress, wide }: { img?: string; eyebrow: string; title: string; sub?: string; icon?: IconName; onPress: () => void; wide?: boolean }) {
+  const {colors:C}=useTheme();
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={`${eyebrow}. ${title}. ${sub ?? ''}`}
       style={{ width: wide ? 300 : 230, height: 176, borderRadius: 28, overflow: 'hidden', backgroundColor: C.s1, padding: 18, justifyContent: 'space-between' }}>
@@ -22,18 +24,19 @@ function Card({ img, eyebrow, title, sub, icon, onPress, wide }: { img?: string;
         </>
       ) : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <T v="label" style={{ color: 'rgba(255,255,255,0.75)', fontFamily: F.bold, letterSpacing: 0.3 }}>{eyebrow}</T>
-        {icon ? <Icon name={icon} size={22} /> : null}
+        <T v="label" style={{ color: img ? 'rgba(255,255,255,0.75)' : C.tx2, fontFamily: F.bold, letterSpacing: 0.3 }}>{eyebrow}</T>
+        {icon ? <Icon name={icon} size={22} color={img ? '#fff' : C.tx} /> : null}
       </View>
       <View style={{ gap: 4 }}>
-        <T numberOfLines={2} style={{ fontFamily: F.bold, fontSize: 22, lineHeight: 26 }}>{title}</T>
-        {sub ? <T v="small" numberOfLines={2} style={{ color: 'rgba(255,255,255,0.8)' }}>{sub}</T> : null}
+        <T numberOfLines={2} style={{ color:img ? '#fff' : C.tx,fontFamily: F.bold, fontSize: 22, lineHeight: 26 }}>{title}</T>
+        {sub ? <T v="small" numberOfLines={2} style={{ color: img ? 'rgba(255,255,255,0.8)' : C.tx2 }}>{sub}</T> : null}
       </View>
     </Press>
   );
 }
 
 export function Insights() {
+
   useTaste((s) => s.months); // перерисовка, когда копится время
   const now = new Date();
   const m = monthStats();

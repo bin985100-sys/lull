@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, Switch, View } from 'react-native';
@@ -6,7 +7,7 @@ import { invalidate } from '@/api/useData';
 import { WAVE_MODES } from '@/reco/engine';
 import { useLibrary } from '@/store/library';
 import { useTaste, type Balance, type RecoSettings } from '@/store/taste';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
 import { Btn, Cover, haptic, Screen, Segmented, T, TopBar } from '@/ui/kit';
 import { confirm, toast } from '@/ui/overlay';
@@ -19,23 +20,25 @@ const BAL: [Balance, string, string][] = [
   [4, 'Только новое', 'То, что ты ещё не слушал'],
 ];
 
-const Group = ({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) => (
+const Group = ({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) => {  return ((
   <View style={{ marginTop: 26 }}>
     <T v="h2" style={{ fontSize: 20 }}>{title}</T>
     {hint ? <T v="small" style={{ marginTop: 4 }}>{hint}</T> : null}
     <View style={{ marginTop: 12 }}>{children}</View>
   </View>
-);
+)); };
 function Toggle({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void }) {
+  const {colors:C}=useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, paddingVertical: 8 }}>
       <View style={{ flex: 1 }}><T style={{ fontSize: 16.5 }}>{label}</T>{hint ? <T v="small" style={{ marginTop: 2 }}>{hint}</T> : null}</View>
-      <Switch value={value} onValueChange={(v) => { haptic(); onChange(v); }} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={value ? '#000' : '#8a8f96'} accessibilityLabel={label} />
+      <Switch value={value} onValueChange={(v) => { haptic(); onChange(v); }} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={value ? C.inverse : C.tx3} accessibilityLabel={label} />
     </View>
   );
 }
 
 export default function Prefs() {
+  const {colors:C}=useTheme();
   const t = useTaste();
   const favs = useLibrary((s) => s.favArtists);
   const r = t.reco;

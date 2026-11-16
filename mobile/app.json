@@ -2,12 +2,12 @@
   "expo": {
     "name": "Lull",
     "slug": "lull",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "lull",
-    "userInterfaceStyle": "dark",
-    "backgroundColor": "#000000",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#f8f9fc",
     "ios": {
       "bundleIdentifier": "website.lull.app",
       "supportsTablet": true,
@@ -15,7 +15,8 @@
         "UIBackgroundModes": [
           "audio"
         ]
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "package": "website.lull.app",
@@ -28,15 +29,16 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "output": "single",
       "favicon": "./assets/images/favicon.png",
       "name": "Lull",
       "shortName": "Lull",
-      "themeColor": "#000000",
-      "backgroundColor": "#000000"
+      "themeColor": "#f8f9fc",
+      "backgroundColor": "#f8f9fc"
     },
     "plugins": [
       "expo-router",

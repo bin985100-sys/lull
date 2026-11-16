@@ -1,13 +1,15 @@
+import { useTheme } from '@/theme/state';
 import { View } from 'react-native';
 
 import { openArtist } from '@/components/Cards';
 import { TrackRow } from '@/components/TrackRow';
 import { fmtListen, monthIn, monthName, monthStats, useTaste } from '@/store/taste';
-import { C, F } from '@/theme/tokens';
+import { F } from '@/theme/tokens';
 import { Cover, Empty, Press, Screen, SectionHead, T, TopBar } from '@/ui/kit';
 
 /* Итоги месяца: время, исполнители, треки, дни с музыкой */
 export default function Month() {
+  const {colors:C}=useTheme();
   useTaste((s) => s.months);
   const now = new Date();
   const m = monthStats();

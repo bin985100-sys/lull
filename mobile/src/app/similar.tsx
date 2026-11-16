@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/state';
 import { LinearGradient } from 'expo-linear-gradient';
 import { resetTo } from '@/nav';
 import { useState } from 'react';
@@ -8,10 +9,11 @@ import { lull } from '@/api/lull';
 import { useData } from '@/api/useData';
 import { ArtistPick } from '@/components/ArtistPick';
 import { useLibrary } from '@/store/library';
-import { C } from '@/theme/tokens';
+
 import { Btn, Screen, Skeleton, T, TopBar } from '@/ui/kit';
 
 export default function Similar() {
+  const {colors:C}=useTheme();
   const favs = useLibrary((s) => s.favArtists);
   const key = 'related:' + favs.map((a) => a.id).join(',');
   const { data, loading } = useData(key, async (s) => {
@@ -43,7 +45,7 @@ export default function Similar() {
         </View>
       </Screen>
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 56, paddingBottom: 18, gap: 6 }}>
-        <LinearGradient colors={['rgba(0,0,0,0)', '#000', '#000']} locations={[0, 0.3, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <LinearGradient colors={['transparent', C.bg, C.bg]} locations={[0, 0.3, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Btn label="Начать слушать" icon="play" onPress={() => finish()} />
         <Pressable onPress={() => finish(true)} style={{ alignSelf: 'center', padding: 12 }} accessibilityRole="button"><T v="sub">Пропустить</T></Pressable>
       </View>

@@ -1,13 +1,15 @@
+import { useTheme } from '@/theme/state';
 import { Redirect } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 
 import { finishLogin } from '@/api/session';
 import { useLibrary } from '@/store/library';
-import { C } from '@/theme/tokens';
+
 import { Spinner } from '@/ui/kit';
 
 export default function Index() {
+  const {colors:C}=useTheme();
   const onboarded = useLibrary((s) => s.onboarded);
   const signedIn = useLibrary((s) => !!s.account.token);
   const pending = signedIn && !onboarded;
