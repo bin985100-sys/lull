@@ -10,12 +10,14 @@ import { mint, potState, resetMinter, warmMinter } from './potoken';
 import { alternatives } from './alternative';
 import { streamFetch } from './stream-client';
 import { StreamGate } from './stream-gate';
+import { smallMedia } from './stream-file';
 const audioGate = new StreamGate(2,8);
 
-type Way = { name: string; client: Types.InnerTubeClient; pot: '' | 'video' | 'visitor'; playerPot?: boolean; anonymous?: boolean };
+type Way = { name: string; client: Types.InnerTubeClient; pot: '' | 'video' | 'visitor'; playerPot?: boolean; anonymous?: boolean; muxed?:boolean };
 // pot — токен в ссылке на файл: привязан к id видео (так сейчас делает сайт YouTube) или к сессии (как раньше).
 // playerPot — токен ещё и в запросе плеера; с ним YouTube иногда не отдаёт обычных ссылок («No valid URL»).
 const WAYS: Way[] = [
+  { name: 'MWEB-progressive+токен', client: 'MWEB', pot: 'video', muxed:true },
   { name: 'TV-SAMSUNG', client: 'TV', pot: '', anonymous: true },
   { name: 'MWEB+токен в ссылке', client: 'MWEB', pot: 'video' },
   { name: 'MWEB+токен в ссылке(сессия)', client: 'MWEB', pot: 'visitor' },
@@ -41,8 +43,9 @@ async function anon(): Promise<Innertube> {
 
 export function warmStream() {
   anon().catch(() => {});
+  warmMinter();
 }
-export const streamState = () => ({ ready: !!anonClient && Date.now() - anonAt < 6 * 3600_000, best, ...audioGate.state() });
+export const streamState = () => ({ ready: !!anonClient && Date.now() - anonAt < 6 * 3600_000, tokenReady:potState().ready, best, ...audioGate.state() });
 
 async function timeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -97,7 +100,7 @@ async function tryWay(id: string, w: Way, prepare = false) {
   const st = info.playability_status?.status;
   if (st && st !== 'OK') throw new Error(info.playability_status?.reason || st);
   const audio = (info.streaming_data?.adaptive_formats ?? []).filter((f: any) => f.has_audio && !f.has_video);
-  const f = audio.filter((x: any) => String(x.mime_type).includes('mp4a')).sort((a: any, b: any) => b.bitrate - a.bitrate)[0] ?? audio[0];
+  const f = w.muxed ? (info.streaming_data?.formats??[]).find((x:any)=>x.itag===18 && x.has_audio) : audio.filter((x: any) => String(x.mime_type).includes('mp4a')).sort((a: any, b: any) => b.bitrate - a.bitrate)[0] ?? audio[0];
   if (!f) throw new Error('нет аудио');
   let url: string = await f.decipher(c.session.player);
   if (w.name === 'TV-SAMSUNG') {
@@ -115,6 +118,10 @@ async function tryWay(id: string, w: Way, prepare = false) {
     url = u.toString();
   }
   const len = Number(f.content_length) || 0;
+  if(w.muxed){
+    const prefix=await smallMedia(url,len,32*1024*1024);
+    return {prefix,url,complete:true,mime:String(f.mime_type).split(';')[0],size:prefix.length,duration:Math.round((f.approx_duration_ms||0)/1000)||info.basic_info?.duration||0,bitrate:f.bitrate,client:w.name};
+  }
   if (!len) throw new Error('нет размера');
   const prefix = await probe(url, len, prepare);
   return { prefix, url, mime: String(f.mime_type).split(';')[0], size: len, duration: Math.round((f.approx_duration_ms || 0) / 1000), bitrate: f.bitrate, client: w.name };
@@ -155,6 +162,9 @@ async function fastStreamOnce(id: string, prepare: boolean) {
     } catch (e) {
       if (best === w.name) best = null;
       errors.push(`${w.name}: ${(e as Error).message} (${Date.now() - t0} мс)`);
+      // Missing/large progressive formats are common. Try the original video's
+      // audio clients before spending the entire fast-path budget on alternates.
+      if(w.muxed)continue;
       if (!candidates) candidates = await timeout(alternatives(id), 3000, 'поиск версии').catch(() => []);
       {
         for (const candidate of candidates.slice(0,3)) {

@@ -275,26 +275,60 @@ BOT_COOLDOWN = 120
 class Ladder:
     """Рейтинг способов: последний успешный — первым, «бот»/403 — вниз или на паузу."""
 
-    def __init__(self):
+    def __init__(self, state_path=None):
         self.last_ok: dict[str, float] = {}
         self.avg: dict[str, float] = {}
         self.fails: dict[str, int] = {}
         self.blocked_until: dict[str, float] = {}
+        self.state_path = state_path
+        if state_path:
+            try:
+                data=json.loads(state_path.read_text())
+                now=time.time()
+                for c,item in data.items():
+                    if c not in (*FALLBACK_CLIENTS,'regional','regional_ytdlp'):
+                        continue
+                    stamp=float(item['last_ok']);avg=float(item['avg'])
+                    if 0<=now-stamp<600 and .01<=avg<=60:
+                        self.last_ok[c]=stamp;self.avg[c]=avg
+            except (OSError,ValueError,TypeError,KeyError,AttributeError):
+                pass
 
-    def order(self) -> list[str]:
+    def save(self):
+        if self.state_path:
+            try:
+                self.state_path.parent.mkdir(parents=True,exist_ok=True)
+                temp=self.state_path.with_suffix('.tmp')
+                temp.write_text(json.dumps({c:{'last_ok':stamp,'avg':self.avg[c]} for c,stamp in self.last_ok.items()}))
+                temp.replace(self.state_path)
+            except OSError:
+                pass
+
+    def rank(self, methods: list[str]) -> list[str]:
         now = time.time()
-        live = [c for c in FALLBACK_CLIENTS if self.blocked_until.get(c, 0) < now]
-        base = {c: i for i, c in enumerate(FALLBACK_CLIENTS)}
-        # успевший недавно (10 мин) — вперёд, потом по скорости; у кого подряд ошибки — назад
+        live = list(dict.fromkeys(c for c in methods if self.blocked_until.get(c, 0) < now))
+        base = {c: i for i, c in enumerate(methods)}
+        # Compare verified audio, including independent exits, by latency rather
+        # than which route happened to win the previous track.
         def key(c: str):
             fresh = now - self.last_ok.get(c, 0) < 600
-            return (0 if fresh else 1, self.fails.get(c, 0), self.avg.get(c, 9.0) if fresh else base[c])
+            return (0 if fresh else 1, self.avg.get(c, 9.0) + min(6,self.fails.get(c,0)*2) if fresh else base[c])
         return sorted(live, key=key)
+
+    def order(self) -> list[str]:
+        return self.rank(list(FALLBACK_CLIENTS))
+
+    def hedge_delay(self, method: str) -> float:
+        # Give the likely winner a short head start. Slow source activation must
+        # not delay an independent exit until the full primary timeout.
+        estimate=self.avg.get(method)
+        return max(STEP, min(1.2, estimate*.8 if estimate is not None else STEP))
 
     def ok(self, c: str, secs: float):
         self.last_ok[c] = time.time()
         self.fails[c] = 0
         self.avg[c] = secs if c not in self.avg else self.avg[c] * 0.7 + secs * 0.3
+        self.save()
 
     def fail(self, c: str, msg: str):
         self.fails[c] = self.fails.get(c, 0) + 1
@@ -308,10 +342,10 @@ class Ladder:
     def state(self) -> dict:
         now = time.time()
         return {c or "default": {"ok_ago": round(now - self.last_ok[c]) if c in self.last_ok else None, "avg": round(self.avg.get(c, 0), 2),
-                                 "fails": self.fails.get(c, 0), "paused": max(0, round(self.blocked_until.get(c, 0) - now))} for c in FALLBACK_CLIENTS}
+                                 "fails": self.fails.get(c, 0), "paused": max(0, round(self.blocked_until.get(c, 0) - now))} for c in (*FALLBACK_CLIENTS,'regional','regional_ytdlp')}
 
 
-ladder = Ladder()
+ladder = Ladder(DATA / 'audio-routes.json')
 API_LOCAL = os.environ.get("LULL_API_LOCAL", "http://127.0.0.1:8787")
 API_REGIONAL = os.environ.get("LULL_YT_FALLBACK_API", "").rstrip("/")
 # Выход в YouTube через Cloudflare WARP (socks5://127.0.0.1:40000): адрес сервера-датацентра YouTube режет.
@@ -339,6 +373,13 @@ AUDIO_FRAME = "application/vnd.lull.prepared-audio"
 MAX_INLINE = 8 * 1024 * 1024
 
 
+def remember_verified(url: str, data: bytes):
+    verified_audio[url]=data
+    verified_audio.move_to_end(url)
+    while len(verified_audio)>4 or sum(map(len,verified_audio.values()))>MAX_MUXED_BYTES:
+        verified_audio.popitem(last=False)
+
+
 async def read_audio_frame(reader):
     length = int.from_bytes(await reader.readexactly(4), "big")
     if not 0 < length <= 128 * 1024:
@@ -347,7 +388,9 @@ async def read_audio_frame(reader):
     total = int(meta["size"])
     if not meta.get("url") or total <= 0:
         raise ValueError("invalid stream metadata")
-    expected = total if total <= MAX_INLINE else FIRST_CHUNK + CHUNK
+    if meta.get('complete') and total > MAX_MUXED_BYTES:
+        raise ValueError('complete audio frame exceeds size bound')
+    expected = total if total <= MAX_INLINE or meta.get('complete') else FIRST_CHUNK + CHUNK
     data = await reader.readexactly(expected)
     if await reader.read(1):
         raise ValueError("oversized stream frame")
@@ -363,10 +406,7 @@ async def resolve_innertube(vid: str, regional: str = "") -> dict:
             j, data = await read_audio_frame(r.content)
             if regional and len(data) != int(j.get("size") or 0):
                 raise RuntimeError("regional audio must be complete")
-            verified_audio[j["url"]] = data
-            verified_audio.move_to_end(j["url"])
-            while len(verified_audio) > 4:
-                verified_audio.popitem(last=False)
+            remember_verified(j['url'],data)
         else:
             j = await r.json(content_type=None)
             if regional and r.status == 200:
@@ -396,10 +436,7 @@ async def verify(s: dict) -> bool:
                 data = await r.content.readexactly(known)
                 if await r.content.read(1):
                     return False
-                verified_audio[s["url"]] = data
-                verified_audio.move_to_end(s["url"])
-                while len(verified_audio) > 4:
-                    verified_audio.popitem(last=False)
+                remember_verified(s['url'],data)
                 return True
         async with audio_session(s).get(s["url"], headers={**s["headers"], "Range": "bytes=0-1"}) as r:
             if r.status not in (200, 206):
@@ -482,6 +519,8 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 s["exit"] = "fallback"
             else:
                 s = await resolve_worker(target, fmt, client)
+            resolved_at=time.monotonic()
+            waited=0.0
             retry_after = s.pop("retryAfter", 0)
             candidates = [s, *s.pop("alternateFormats", [])]
             candidates.sort(key=lambda candidate:max(time.time(),float(candidate.get("availableAt") or 0)))
@@ -490,13 +529,14 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 for candidate in candidates:
                     if s.get("exit"):
                         candidate["exit"] = s["exit"]
-                    wait = max(0,float(candidate.get("availableAt") or 0)+.5-time.time())
+                    wait = max(0,float(candidate.get("availableAt") or 0)+.05-time.time())
                     if wait:
                         if wait > 35:
                             continue
                         deadline = max(deadline,min(t0+50,time.monotonic()+wait+12))
                         log.info("audio_source_wait video=%s route=%s seconds=%.2f",vid,client or "default",wait)
                         await asyncio.sleep(wait)
+                        waited+=wait
                     if candidate.get("checked") or await verify(candidate):
                         if candidate.get("muxed") and int(candidate.get("contentLength") or 0) > MAX_MUXED_BYTES:
                             continue
@@ -509,6 +549,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 delay = min(5, max(0, retry_after-time.monotonic()))
                 log.info("audio_url_wait video=%s route=%s seconds=%.2f", vid, client or "default", delay)
                 await asyncio.sleep(delay)
+                waited+=delay
             if selected is None:
                 raise RuntimeError("403 or incomplete audio probe")
             if selected is not s:
@@ -526,10 +567,16 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 route_failed.set()
             if media_id is None and any(x in low for x in ("unavailable", "not available", "country", "claimed content")):
                 unavailable.set()
-            if client not in ("regional", "regional_ytdlp") and "unavailable" not in low and "not available" not in low and "claimed content" not in low:
-                ladder.fail(client, msg)
+            if not any(x in low for x in ("unavailable", "not available", "claimed content", "country", "private", "removed")):
+                if client in ("regional", "regional_ytdlp") and "403" in low:
+                    # A regional 403 can be specific to this recording. Penalize
+                    # its speed score without disabling it for unrelated songs.
+                    ladder.fails[client] = ladder.fails.get(client,0)+1
+                else:
+                    ladder.fail(client, msg)
             return
         ladder.ok(client, time.monotonic() - started)
+        log.info('audio_route_timing video=%s route=%s resolve_ms=%.0f activation_ms=%.0f verify_ms=%.0f',vid,client or 'default',(resolved_at-started)*1000,waited*1000,max(0,time.monotonic()-resolved_at-waited)*1000)
         s["method"] = client
         if client not in ("innertube", "regional"):
             s["client"] = client
@@ -558,15 +605,29 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
     order = ladder.order()
     regional_started = False
     regional_methods = (["regional"] if API_REGIONAL else []) + (["regional_ytdlp"] if YT_FALLBACK_PROXY else [])
-    regional_methods.sort(key=lambda c: -ladder.last_ok.get(c, 0))
+    regional_methods = ladder.rank(regional_methods)
     regional_ready = bool(regional_methods) and fmt == "aac"
     # A working independent exit must remain available while primary clients cool down.
-    if regional_ready and (not order or max(ladder.last_ok.get(c, 0) for c in regional_methods) > max(ladder.last_ok.get(c, 0) for c in FALLBACK_CLIENTS)):
-        order = regional_methods + order
+    if regional_ready:
+        order = ladder.rank(order + regional_methods)
+        # Prefer the independent resolver implementation as the hedge. Two
+        # yt-dlp clients can otherwise occupy both workers and starve the fast
+        # API on a proven working regional exit.
+        if order:
+            if order[0] not in ('innertube','regional'):
+                probes=['regional','innertube'] if order[0]=='regional_ytdlp' else ['innertube','regional']
+                independent=next((c for c in probes if c in order[1:]),None)
+            else:
+                independent=next((c for c in order[1:] if c in ('innertube','regional')),None)
+                if independent is None:
+                    independent=next((c for c in order[1:] if c not in ('innertube','regional')),None)
+            if independent is not None:
+                order.remove(independent); order.insert(1,independent)
         regional_started = True
     if fmt != "aac" and "innertube" in order:
         order.remove("innertube")
     pending = set()
+    leader = order[0] if order else "innertube"
     alternate_started = False
     try:
         while order or pending:
@@ -576,7 +637,7 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
                 break
             if not pending and order:
                 pending.add(asyncio.create_task(one(order.pop(0))))
-            hedge = max(STEP, min(1.0, ladder.avg.get("innertube", 0) * 2))
+            hedge = ladder.hedge_delay(leader)
             completed, _ = await asyncio.wait(pending, timeout=min(hedge, remaining), return_when=asyncio.FIRST_COMPLETED)
             for task in completed:
                 pending.remove(task)

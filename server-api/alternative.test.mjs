@@ -34,7 +34,20 @@ test('alternate recording tries MWEB when TV cannot play it',async()=>{
   const found=await fastStream('original001',true);
   assert.equal(found.mediaId,'alternate01');assert.equal(found.prefix.length,16);
   assert.equal(new URL(requests[0]).searchParams.has('range'),false);
-  assert.deepEqual(calls.slice(0,4),[['original001','TV'],['alternate01','TV'],['original001','MWEB'],['alternate01','MWEB']]);
+  assert.deepEqual(calls.slice(0,5),[['original001','MWEB'],['original001','TV'],['alternate01','TV'],['original001','MWEB'],['alternate01','MWEB']]);
+  // The new progressive path must keep the exact video ID and deliver its
+  // complete bytes; selecting it must not search for a different recording.
+  calls.length=0;requests.length=0;
+  globalThis.audioFixture.getBasicInfo=async(id,opts)=>{
+   calls.push([id,opts.client]);
+   return {basic_info:{duration:120},playability_status:{status:'OK'},streaming_data:{formats:[{itag:18,has_audio:true,has_video:true,mime_type:'video/mp4',decipher:async()=> 'https://fixture.invalid/muxed?x=1'}]}};
+  };
+  const progressive=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64')+'#progressive');
+  const exact=await progressive.fastStream('original001',true);
+  assert.deepEqual(calls,[['original001','MWEB']]);
+  assert.equal(exact.mediaId,undefined);assert.equal(exact.size,16);
+  assert.equal(exact.prefix.length,16);assert.equal(exact.duration,120);
+  assert.match(exact.client,/progressive/);
  } finally {globalThis.fetch=oldFetch;delete globalThis.audioFixture;}
 });
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('./alternative.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false,plugins:[{name:'catalog-fixture',setup(b){

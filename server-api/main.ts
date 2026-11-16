@@ -178,7 +178,7 @@ http
         if(!page.thumb){res.writeHead(404,{'Cache-Control':'no-store'}).end();return;}
         return void await image(page.thumb,res);
       }
-      if (name === 'health') return void res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"ok":true}');
+      if (name === 'health') {const state=streamState();return json(res,{ok:true,audioReady:state.ready&&state.tokenReady});}
       let body = '';
       for await (const c of req) body += c;
       if (name === 'auth') return void (await auth(rest, url.searchParams, body, res));

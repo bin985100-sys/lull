@@ -23,8 +23,57 @@ VID = 'dQw4w9WgXcQ'
 class RelayTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         s.cache.clear(); s.inflight.clear(); s.prep_inflight.clear()
+        s.verified_audio.clear()
         s.ladder = s.Ladder()
         s.warm_queue.clear();s.warm_event.clear()
+
+    def test_verified_audio_cache_is_bounded_by_bytes_not_only_file_count(self):
+        with patch.object(s,'MAX_MUXED_BYTES',8):
+            s.remember_verified('old',b'12345');s.remember_verified('new',b'67890')
+        self.assertEqual(list(s.verified_audio),['new'])
+
+    async def test_complete_progressive_frame_preserves_large_file_and_rejects_oversize(self):
+        async def frame(size):
+            reader=asyncio.StreamReader();meta=json.dumps({'url':'https://fixture.invalid/file','size':size,'complete':True}).encode()
+            reader.feed_data(len(meta).to_bytes(4,'big')+meta+b'a'*size);reader.feed_eof()
+            return await s.read_audio_frame(reader)
+        with patch.object(s,'MAX_INLINE',3),patch.object(s,'MAX_MUXED_BYTES',8):
+            meta,data=await frame(7);self.assertEqual(len(data),7)
+            with self.assertRaisesRegex(ValueError,'bound'):await frame(9)
+
+    def test_verified_speed_beats_more_recent_slow_exit(self):
+        s.ladder.ok('innertube',1.2)
+        s.ladder.ok('regional_ytdlp',8)
+        self.assertEqual(s.ladder.rank(['regional_ytdlp','innertube'])[0],'innertube')
+
+    def test_restart_preserves_only_fresh_verified_route_timings(self):
+        with tempfile.TemporaryDirectory(dir=tmp.name) as root:
+            path=Path(root)/'routes.json'
+            before=s.Ladder(path);before.ok('regional_ytdlp',2.5)
+            restored=s.Ladder(path)
+            self.assertEqual(restored.rank(['innertube','regional_ytdlp'])[0],'regional_ytdlp')
+            text=path.read_text();self.assertNotIn('url',text);self.assertNotIn('proxy',text)
+            data=json.loads(text);data['regional_ytdlp']['last_ok']=time.time()-3600
+            path.write_text(json.dumps(data));self.assertFalse(s.Ladder(path).last_ok)
+
+    def test_blocked_regional_route_is_not_hedged_until_cooldown(self):
+        s.ladder.fail('regional_ytdlp','403')
+        self.assertEqual(s.ladder.rank(['regional_ytdlp','innertube']),['innertube'])
+
+    def test_hedge_delay_tracks_leader_with_bounded_head_start(self):
+        s.ladder.ok('regional',.8)
+        s.ladder.ok('innertube',20)
+        self.assertLess(s.ladder.hedge_delay('regional'),s.ladder.hedge_delay('innertube'))
+        self.assertLessEqual(s.ladder.hedge_delay('innertube'),1.2)
+
+    async def test_slow_known_ytdlp_does_not_starve_new_fast_regional_api(self):
+        s.ladder.ok('regional_ytdlp',8)
+        async def slow(*args):await asyncio.sleep(20)
+        async def fast(*args):return {'checked':True,'url':'https://fixture.invalid/full'}
+        with patch.object(s,'API_REGIONAL','http://fixture'),patch.object(s,'YT_FALLBACK_PROXY','socks5://fixture'),patch.object(s.ladder,'order',return_value=['innertube']),patch.object(s,'resolve_worker',slow),patch.object(s,'resolve_innertube',slow),patch.object(s,'resolve_regional',fast),patch.object(s,'STEP',.01):
+            start=time.monotonic()
+            self.assertEqual((await s.resolve_checked(VID,'aac'))['method'],'regional')
+            self.assertLess(time.monotonic()-start,1.5)
 
     def test_public_chart_warm_is_bounded_and_coalesces_tracks_only(self):
         snapshot=[{'items':[{'kind':'track','track':{'id':VID}},{'kind':'track','id':VID},{'kind':'artist','id':'aaaaaaaaaaa'}]}]
