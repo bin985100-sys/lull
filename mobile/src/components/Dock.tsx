@@ -332,7 +332,7 @@ export function Dock() {
   /* на планшете и в горизонтали капсула не растягивается во всю ширину */
   const maxW = 560;
   const side = layout.available > maxW + 2 * DOCK.side ? (layout.available - maxW) / 2 : DOCK.side;
-  const fullSide = layout.available > 760 ? (layout.available - 680) / 2 : 8;
+  const fullSide = Math.max(ins.left+4,ins.right+4,layout.available > 760 ? (layout.available - 680) / 2 : 8);
   const bottomGap = Math.max(ins.bottom, 14) - 2;
   const fullH = height - Math.max(ins.top, 18) - 2 - 8;
   const h = !has ? DOCK.compact : expanded ? fullH : miniHeight;

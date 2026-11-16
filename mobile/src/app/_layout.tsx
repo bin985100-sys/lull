@@ -1,16 +1,16 @@
 import { Montserrat_500Medium, Montserrat_600SemiBold, Montserrat_700Bold, Montserrat_800ExtraBold, useFonts } from '@expo-google-fonts/montserrat';
-import { DarkTheme, router, ThemeProvider } from 'expo-router';
+import { DarkTheme, router, ThemeProvider, usePathname } from 'expo-router';
 import { Stack } from 'expo-router/stack';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { PanResponder, Platform, View } from 'react-native';
+import { PanResponder, Platform, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { startSync } from '@/api/sync';
 import { Dock } from '@/components/Dock';
 import { DesktopRail } from '@/components/DesktopRail';
-import { useLayout } from '@/ui/layout';
+import { layoutMetrics } from '@/ui/layout';
 import { useLibrary } from '@/store/library';
 import { C } from '@/theme/tokens';
 import { CrashBanner, Guard, ScreenError } from '@/ui/Crash';
@@ -31,7 +31,10 @@ function EdgeBack() {
 const theme = { ...DarkTheme, colors: { ...DarkTheme.colors, background: C.bg, card: C.bg, text: C.tx, border: 'transparent', primary: C.tx } };
 
 export default function Root() {
-  const layout=useLayout();
+  const {width,height,fontScale}=useWindowDimensions();
+  const layout=layoutMetrics(width,height,fontScale);
+  const path=usePathname();
+  const rail=['/','/welcome','/auth','/onboarding'].includes(path) ? 0 : layout.rail;
   const [fonts] = useFonts({ Montserrat_500Medium, Montserrat_600SemiBold, Montserrat_700Bold, Montserrat_800ExtraBold });
   const [hydrated, setHydrated] = useState(useLibrary.persist.hasHydrated());
   useEffect(() => useLibrary.persist.onFinishHydration(() => setHydrated(true)), []);
@@ -44,7 +47,7 @@ export default function Root() {
       <ThemeProvider value={theme}>
         <StatusBar style="light" />
         <View style={{ flex: 1, backgroundColor: C.bg }}>
-          <View style={{flex:1,marginLeft:layout.rail}}>
+          <View style={{flex:1,marginLeft:rail}}>
           <Guard name="screens">
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: 'slide_from_right' }}>
             <Stack.Screen name="index" options={{ animation: 'none' }} />
