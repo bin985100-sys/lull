@@ -275,7 +275,7 @@ function SearchField(){
  useEffect(()=>{const frame=requestAnimationFrame(()=>ref.current?.focus());return()=>cancelAnimationFrame(frame);},[focusRequest]);
  return <Glass radius={30} style={{height:60,flexDirection:'row',alignItems:'center',paddingHorizontal:14,gap:8}}>
   <Icon name="search" color={C.tx2} size={22}/>
-  <TextInput ref={ref} value={query} onChangeText={setSearchQuery} placeholder="Что послушать?" placeholderTextColor={C.tx3} accessibilityLabel="Поиск" autoCorrect={false} returnKeyType="search" onSubmitEditing={()=>query.trim()&&useLibrary.getState().pushSearch(query.trim())} style={{flex:1,minWidth:0,color:C.tx,fontFamily:F.medium,fontSize:15,outlineWidth:0}}/>
+  <TextInput ref={ref} value={query} onChangeText={setSearchQuery} placeholder="Что послушать?" placeholderTextColor={C.tx3} underlineColorAndroid="transparent" selectionColor={C.sky} cursorColor={C.sky} accessibilityLabel="Поиск" autoCorrect={false} returnKeyType="search" onSubmitEditing={()=>query.trim()&&useLibrary.getState().pushSearch(query.trim())} style={{flex:1,minWidth:0,color:C.tx,fontFamily:F.medium,fontSize:16,borderWidth:0,padding:0,backgroundColor:'transparent',outlineWidth:0}}/>
   {!!query&&<Pressable accessibilityRole="button" accessibilityLabel="Очистить запрос" onPress={()=>setSearchQuery('')} style={{width:32,height:44,alignItems:'center',justifyContent:'center'}}><Icon name="close" size={18}/></Pressable>}
  </Glass>;
 }
@@ -312,10 +312,10 @@ export function Dock(){
  const [mounted,setMounted]=useState(false),[ready,setReady]=useState(false);
  const fullOn=expanded&&ready;
  useEffect(()=>{if(!expanded)closeLyrics();},[expanded]);
- useEffect(()=>{let next=0;if(expanded){const id=requestAnimationFrame(()=>{setMounted(true);next=requestAnimationFrame(()=>setReady(true));});return()=>{cancelAnimationFrame(id);cancelAnimationFrame(next);};}const frame=requestAnimationFrame(()=>setReady(false));const id=setTimeout(()=>setMounted(false),reduced?0:400);return()=>{cancelAnimationFrame(frame);clearTimeout(id);};},[expanded,reduced]);
+ useEffect(()=>{let next=0;if(expanded){const id=requestAnimationFrame(()=>{setMounted(true);next=requestAnimationFrame(()=>setReady(true));});return()=>{cancelAnimationFrame(id);cancelAnimationFrame(next);};}const frame=requestAnimationFrame(()=>setReady(false));const id=setTimeout(()=>setMounted(false),reduced?0:600);return()=>{cancelAnimationFrame(frame);clearTimeout(id);};},[expanded,reduced]);
  const fullSide=Math.max(ins.left+4,ins.right+4,layout.available>760?(layout.available-680)/2:8);
  const fullH=height-Math.max(ins.top,18)-16;
- const motion={transitionDuration:reduced?0:380,transitionTimingFunction:cubicBezier(.2,.8,.2,1)} as const;
+ const motion={transitionDuration:reduced?0:560,transitionTimingFunction:cubicBezier(.18,.76,.2,1)} as const;
  const select=(next:Tab)=>{haptic();player.expand(false);useTab.setState({tab:next});resetTo(`/${next}` as '/listen');};
  return <>
   {mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} style={[StyleSheet.absoluteFill,{backgroundColor:'rgba(0,0,0,.24)',opacity:fullOn?1:0,transitionProperty:'opacity',...motion}]}><Pressable accessibilityLabel="Закрыть полный плеер" onPress={()=>player.expand(false)} style={{flex:1}}/></Animated.View>}
@@ -332,7 +332,7 @@ export function Dock(){
    </View>}
   </View>
   {has&&mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} aria-hidden={!expanded} accessibilityViewIsModal={expanded} accessibilityElementsHidden={!expanded} importantForAccessibility={expanded?'auto':'no-hide-descendants'} style={{position:'absolute',left:layout.rail+(fullOn?fullSide:side),right:fullOn?fullSide:side,bottom:fullOn?8:bottom+miniBottom,height:fullOn?fullH:56,borderRadius:fullOn?38:28,opacity:fullOn?1:0,overflow:'hidden',transitionProperty:['left','right','height','bottom','opacity','borderRadius'],...motion}}>
-   <Glass radius={38} blur={false} style={{flex:1,backgroundColor:C.bg}}><Animated.View style={{flex:1,opacity:fullOn?1:0,transform:[{translateY:fullOn?0:18}],transitionProperty:['opacity','transform'],transitionDuration:reduced?0:260,transitionDelay:fullOn&&!reduced?90:0}}><Full h={fullH} active={fullOn}/></Animated.View></Glass>
+   <Glass radius={38} blur={false} style={{flex:1,backgroundColor:C.bg}}><Animated.View style={{flex:1,opacity:fullOn?1:0,transform:[{translateY:fullOn?0:18}],transitionProperty:['opacity','transform'],transitionDuration:reduced?0:360,transitionDelay:fullOn&&!reduced?110:0}}><Full h={fullH} active={fullOn}/></Animated.View></Glass>
   </Animated.View>}
  </>;
 }

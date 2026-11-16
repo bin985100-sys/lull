@@ -63,7 +63,7 @@ export function Overlays() {
           <Animated.View entering={reduced ? undefined : FadeIn.duration(220)} exiting={reduced ? undefined : FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { backgroundColor: anchor ? 'rgba(0,0,0,.14)' : 'rgba(0,0,0,0.35)' }]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} accessibilityRole="button" accessibilityLabel="Закрыть панель" />
           </Animated.View>
-          <Animated.View entering={reduced ? undefined : anchor ? ZoomIn.duration(220).withInitialValues({transform:[{scale:.92}]}) : SlideInDown.duration(380).easing(ease)} exiting={reduced ? undefined : anchor ? ZoomOut.duration(150).withTargetValues({transform:[{scale:.94}]}) : SlideOutDown.duration(260)} style={[st.sheet, { bottom: 8 + ins.bottom * 0.4 },anchored]}>
+          <Animated.View entering={reduced ? undefined : anchor ? ZoomIn.duration(340).withInitialValues({transform:[{scale:.92}]}) : SlideInDown.duration(520).easing(ease)} exiting={reduced ? undefined : anchor ? ZoomOut.duration(150).withTargetValues({transform:[{scale:.94}]}) : SlideOutDown.duration(360)} style={[st.sheet, { bottom: 8 + ins.bottom * 0.4 },anchored]}>
             <Glass pointerEvents="none" radius={38} style={StyleSheet.absoluteFill}/>
             {!anchor&&<View style={st.grab} />}
             <ScrollView onContentSizeChange={(_w,h)=>setContentHeight(h)} style={{flexGrow:0,flexShrink:1}} contentContainerStyle={{paddingBottom:8}} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">{sheet()}</ScrollView>

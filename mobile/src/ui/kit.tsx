@@ -25,7 +25,7 @@ export function Reveal({children,step=0,style}:{children:ReactNode;step?:number;
   const reduced=useReducedMotion();
   const progress=useSharedValue(reduced ? 1 : 0);
   useEffect(()=>{
-    progress.set(reduced ? 1 : withDelay(Math.min(3,Math.max(0,step))*45,withTiming(1,{duration:320})));
+    progress.set(reduced ? 1 : withDelay(Math.min(3,Math.max(0,step))*60,withTiming(1,{duration:440})));
     return ()=>cancelAnimation(progress);
   },[reduced,step,progress]);
   const motion=useAnimatedStyle(()=>({opacity:progress.get(),transform:[{translateY:(1-progress.get())*12}]}));
@@ -53,7 +53,7 @@ export function T({ v = 'title', style, ...p }: TextProps & { v?: V }) {
   // Larger titles must reserve their own line box instead of inheriting the
   // smaller variant's height (especially in wrapped Russian headings).
   const lineHeight = custom?.lineHeight ?? Math.max(TV[v].lineHeight, Math.ceil(fontSize * 1.25));
-  return <Text {...p} style={[{ color: C.tx }, TV[v], style, { lineHeight }]} />;
+  return <Text {...p} style={[{ position:'relative',color: C.tx }, TV[v], style, { lineHeight }]} />;
 }
 
 /* ---------- нажатие: лёгкое сжатие через CSS-переход, без работы JS на каждом кадре ---------- */
@@ -77,7 +77,7 @@ export function Press({ style, outer, children, scaleTo = 0.96, onPress, ...p }:
       onPressIn={(e) => { setDown(true); p.onPressIn?.(e); }}
       onPressOut={(e) => { setDown(false); p.onPressOut?.(e); }}
     >
-      <Animated.View style={[visual, { transform: [{ scale: down && !reduced ? scaleTo : 1 }], transitionProperty: 'transform', transitionDuration: reduced ? 0 : down ? 90 : 220, transitionTimingFunction: PRESS_EASE }]}>{children}</Animated.View>
+      <Animated.View style={[visual, { transform: [{ scale: down && !reduced ? scaleTo : 1 }], transitionProperty: 'transform', transitionDuration: reduced ? 0 : down ? 140 : 320, transitionTimingFunction: PRESS_EASE }]}>{children}</Animated.View>
     </Pressable>
   );
 }
@@ -124,11 +124,11 @@ export function Cover({ uri, size, radius = R.cover, style, source, label,fallba
 
 /* ---------- экран со скроллом: отступ под капсулу ---------- */
 /* В браузере стек экранов без анимации переходов — добавляем свою: экран мягко въезжает */
-const WEB_ENTER = Platform.OS === 'web' ? slideIn(0, 1, 220) : undefined;
+const WEB_ENTER = Platform.OS === 'web' ? slideIn(0, 1, 360) : undefined;
 function Ambient() {
-
-  return <LinearGradient pointerEvents="none" colors={['rgba(42,65,106,0.28)','rgba(23,30,55,0.10)','transparent']}
-    start={{x:0,y:0}} end={{x:1,y:1}} style={{position:'absolute',top:0,left:0,right:0,height:380}}/>;
+  const {dark}=useTheme();
+  return <LinearGradient pointerEvents="none" colors={dark ? ['rgba(50,76,120,.12)','rgba(50,76,120,.035)','transparent'] : ['rgba(115,155,215,.08)','rgba(115,155,215,.025)','transparent']}
+    start={{x:0,y:0}} end={{x:0,y:1}} style={{position:'absolute',top:0,left:0,right:0,height:380}}/>;
 }
 export function Screen({ children, dock = true, scroll = true, style, ...p }: ScrollViewProps & { dock?: boolean; scroll?: boolean; children?: ReactNode }) {
   const {colors:C}=useTheme();

@@ -66,7 +66,7 @@ export default function Root() {
             <Guard name="overlays" quiet><Overlays /></Guard>
             <CrashBanner />
           </>}>
-          <Animated.View pointerEvents={expanded?'none':'auto'} aria-hidden={expanded} accessibilityElementsHidden={expanded} style={{flex:1,marginLeft:rail,borderRadius:expanded?24:0,overflow:'hidden',transform:[{scale:expanded?.975:1}],transitionProperty:['transform','borderRadius'],transitionDuration:reduced?0:380}}>
+          <Animated.View pointerEvents={expanded?'none':'auto'} aria-hidden={expanded} accessibilityElementsHidden={expanded} style={{flex:1,marginLeft:rail,borderRadius:expanded?24:0,overflow:'hidden',transform:[{scale:expanded?.975:1}],transitionProperty:['transform','borderRadius'],transitionDuration:reduced?0:560}}>
           <Guard name="screens">
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: 'slide_from_right' }}>
             <Stack.Screen name="index" options={{ animation: 'none' }} />

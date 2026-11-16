@@ -11,12 +11,12 @@ const accents:Partial<Record<IconName,string>>=themeValues((C) => ({heart:C.rose
 export const Icon = memo(function Icon({ name, size = 24, color }: { name: IconName; size?: number; color?: string }) {
   const {colors:C}=useTheme();
  const accents=resolveThemeValues(accentsThemeTable,C);
-  return <SvgXml xml={ICON_XML[name]} width={size} height={size} color={color ?? accents[name] ?? C.tx} />;
+  return <SvgXml style={{position:'relative'}} xml={ICON_XML[name]} width={size} height={size} color={color ?? accents[name] ?? C.tx} />;
 });
 
 export const Logo = memo(function Logo({ size = 40, color }: { size?: number; color?: string }) {
   const {colors:C}=useTheme();
-  return <SvgXml xml={LOGO_XML} width={size} height={size} color={color ?? C.tx} />;
+  return <SvgXml style={{position:'relative'}} xml={LOGO_XML} width={size} height={size} color={color ?? C.tx} />;
 });
 
 const accentsThemeTable=accents;

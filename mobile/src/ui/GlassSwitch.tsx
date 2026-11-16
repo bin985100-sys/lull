@@ -13,13 +13,13 @@ export function GlassSwitch({value,onValueChange,disabled=false,accessibilityLab
  const {colors:C}=useTheme(),reduced=useReducedMotion();
  const progress=useSharedValue(value?1:0),pressure=useSharedValue(0),dragging=useSharedValue(false);
  const preventTap=useRef(false);
- useEffect(()=>{progress.set(reduced?(value?1:0):withSpring(value?1:0,{damping:20,stiffness:300}));},[value,progress,reduced]);
+ useEffect(()=>{progress.set(reduced?(value?1:0):withSpring(value?1:0,{damping:24,stiffness:200,mass:1}));},[value,progress,reduced]);
  const begin=()=>{preventTap.current=true;};
  const commit=(next:boolean,canceled:boolean)=>{preventTap.current=true;if(!canceled&&next!==value){haptic();onValueChange(next);}setTimeout(()=>{preventTap.current=false;},120);};
  const pan=usePanGesture({enabled:!disabled,minDistance:3,maxPointers:1,cancelsJSResponder:true,
-  onActivate:e=>{dragging.set(true);pressure.set(reduced?0:withTiming(1,{duration:100}));progress.set(Math.max(0,Math.min(1,(e.x-14)/24)));scheduleOnRN(begin);},
+  onActivate:e=>{dragging.set(true);pressure.set(reduced?0:withTiming(1,{duration:150}));progress.set(Math.max(0,Math.min(1,(e.x-14)/24)));scheduleOnRN(begin);},
   onUpdate:e=>progress.set(Math.max(0,Math.min(1,(e.x-14)/24))),
-  onDeactivate:e=>{const next=e.canceled?value:progress.get()>=.5;progress.set(reduced?(next?1:0):withSpring(next?1:0,{damping:20,stiffness:300}));pressure.set(withTiming(0,{duration:120}));dragging.set(false);scheduleOnRN(commit,next,e.canceled);},
+  onDeactivate:e=>{const next=e.canceled?value:progress.get()>=.5;progress.set(reduced?(next?1:0):withSpring(next?1:0,{damping:24,stiffness:200,mass:1}));pressure.set(withTiming(0,{duration:220}));dragging.set(false);scheduleOnRN(commit,next,e.canceled);},
   onFinalize:e=>{dragging.set(false);pressure.set(0);if(e.canceled)progress.set(value?1:0);},
  });
  const color=useAnimatedStyle(()=>({opacity:progress.get()}));
@@ -27,8 +27,8 @@ export function GlassSwitch({value,onValueChange,disabled=false,accessibilityLab
  return <GestureDetector gesture={pan} touchAction="none"><View style={{width:56,height:44,opacity:disabled?.4:1,justifyContent:'center'}}>
   <Pressable disabled={disabled} accessibilityRole="switch" accessibilityLabel={accessibilityLabel} accessibilityState={{checked:value,disabled}} aria-checked={value}
    {...(Platform.OS==='web'?{onKeyDown:(event:Parameters<NonNullable<PressableProps['onKeyDown']>>[0])=>{const key=(event as unknown as {key?:string}).key??(event.nativeEvent as {key?:string}).key;if(!disabled&&(key===' '||key==='Spacebar')){event.preventDefault();haptic();onValueChange(!value);}}}:{})}
-   onPressIn={()=>{if(!dragging.get())preventTap.current=false;pressure.set(reduced?0:withTiming(1,{duration:100}));}}
-   onPressOut={()=>{if(!dragging.get())pressure.set(withTiming(0,{duration:120}));}}
+   onPressIn={()=>{if(!dragging.get())preventTap.current=false;pressure.set(reduced?0:withTiming(1,{duration:150}));}}
+   onPressOut={()=>{if(!dragging.get())pressure.set(withTiming(0,{duration:220}));}}
    onPress={()=>{if(!preventTap.current){haptic();onValueChange(!value);}}} style={{height:44,justifyContent:'center'}}>
    <View style={{height:32,borderRadius:18,overflow:'hidden',backgroundColor:C.s4}}>
     <Glass pointerEvents="none" radius={18} blur={false} style={StyleSheet.absoluteFill}/>

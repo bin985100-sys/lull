@@ -34,14 +34,15 @@ export function Glass({children,radius=28,interactive=false,variant='regular',bl
   const target=useContext(Target),reduced=useContext(ReducedTransparency);
   const canBlur=Platform.OS!=='android'||Number(Platform.Version)>=31;
   const opaque=reduced||!canBlur;
-  const surface:ViewStyle={borderRadius:radius,overflow:'hidden',borderWidth:StyleSheet.hairlineWidth,borderColor:C.glassLine,
+  const surface:ViewStyle={zIndex:0,borderRadius:radius,overflow:'hidden',borderWidth:StyleSheet.hairlineWidth,borderColor:C.glassLine,
     boxShadow:[{offsetX:0,offsetY:6,blurRadius:20,color:C.shadow}],backgroundColor:opaque ? C.s1 : 'transparent'};
-  const sheen=<LinearGradient pointerEvents="none" colors={dark ? ['rgba(255,255,255,.16)','rgba(255,255,255,.01)','rgba(255,255,255,.06)'] : ['rgba(255,255,255,.68)','rgba(255,255,255,.03)','rgba(255,255,255,.3)']}
+  const sheen=<LinearGradient pointerEvents="none" colors={dark ? ['rgba(255,255,255,.16)','rgba(255,255,255,.01)','rgba(255,255,255,.06)'] : ['rgba(255,255,255,.28)','rgba(255,255,255,.03)','rgba(255,255,255,.12)']}
     start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>;
   if(nativeGlass&&!reduced)return <GlassView {...props} style={[surface,style]} isInteractive={interactive} glassEffectStyle={variant} colorScheme={dark ? 'dark' : 'light'}>{children}</GlassView>;
   return <View {...props} style={[surface,style]}>
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill,{zIndex:-1}]}>
     {blur&&!opaque ? <BlurView pointerEvents="none" blurTarget={target??undefined} blurMethod={target ? 'dimezisBlurViewSdk31Plus' : 'none'} tint={dark ? 'dark' : 'light'} intensity={38} style={StyleSheet.absoluteFill}/> : null}
     <View pointerEvents="none" style={[StyleSheet.absoluteFill,{backgroundColor:opaque ? C.s1 : C.glass,opacity:opaque ? 1 : variant==='clear' ? .18 : blur ? .72 : 1}]}/>
-    {!reduced&&sheen}{children}
+    {!reduced&&sheen}</View>{children}
   </View>;
 }
