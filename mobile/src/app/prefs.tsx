@@ -1,7 +1,8 @@
+import { GlassSwitch as Switch } from '@/ui/GlassSwitch';
 import { useTheme } from '@/theme/state';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, Switch, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { invalidate } from '@/api/useData';
 import { WAVE_MODES } from '@/reco/engine';
@@ -28,11 +29,10 @@ const Group = ({ title, hint, children }: { title: string; hint?: string; childr
   </View>
 )); };
 function Toggle({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void }) {
-  const {colors:C}=useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, paddingVertical: 8 }}>
       <View style={{ flex: 1 }}><T style={{ fontSize: 16.5 }}>{label}</T>{hint ? <T v="small" style={{ marginTop: 2 }}>{hint}</T> : null}</View>
-      <Switch value={value} onValueChange={(v) => { haptic(); onChange(v); }} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={value ? C.inverse : C.tx3} accessibilityLabel={label} />
+      <Switch value={value} onValueChange={onChange}   accessibilityLabel={label} />
     </View>
   );
 }

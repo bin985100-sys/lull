@@ -1,7 +1,8 @@
+import { GlassSwitch as Switch } from '@/ui/GlassSwitch';
 import { useAppearance, useTheme, type ThemeMode } from '@/theme/state';
 import { router } from 'expo-router';
 import { resetTo } from '@/nav';
-import { Linking, Pressable, Switch, View } from 'react-native';
+import { Linking, Pressable, View } from 'react-native';
 
 import { transferPlayback } from '@/api/playback';
 import { deleteAccountServer, logoutServer } from '@/api/auth';
@@ -18,11 +19,11 @@ import { confirm, toast } from '@/ui/overlay';
 import { Glass } from '@/ui/Glass';
 
 function Row({ icon, label, sub, onPress, right }: { icon: IconName; label: string; sub?: string; onPress?: () => void; right?: React.ReactNode }) {
-
+  const Wrapper=onPress ? Pressable : View;
   return (
-    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 64, paddingVertical: sub ? 10 : 0 }}>
+    <Wrapper onPress={onPress} accessibilityRole={onPress ? 'button' : undefined} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 64, paddingVertical: sub ? 10 : 0 }}>
       <Icon name={icon} size={28} /><View style={{ flex: 1 }}><T style={{ fontSize: 16.5 }}>{label}</T>{sub ? <T v="small" style={{ marginTop: 3 }}>{sub}</T> : null}</View>{right ?? (onPress ? <Icon name="chev" size={22} /> : null)}
-    </Pressable>
+    </Wrapper>
   );
 }
 const Group = ({ title, children }: { title: string; children: React.ReactNode }) => {  return ((
@@ -63,7 +64,7 @@ export default function Settings() {
         <Row icon="sliders" label="Рекомендации и волна" onPress={() => router.push('/prefs')} />
         <Row icon="chart" label="Итоги месяца" onPress={() => router.push('/month')} />
         <Row icon="heart" label={`Любимые исполнители · ${lib.favArtists.length}`} onPress={() => router.push('/onboarding')} />
-        <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={lib.settings.saveHistory ? C.inverse : C.tx3} accessibilityLabel="Сохранять историю" />} />
+        <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)}   accessibilityLabel="Сохранять историю" />} />
       </Group>
       <Group title="Продолжить на другом устройстве">
         <Row icon="queue" label="Передать очередь" sub="Сохранить трек и позицию в аккаунте Lull" onPress={() => transferPlayback(true).then(() => toast('Очередь передана','check')).catch(e => toast(e.message,'info'))}/>
@@ -71,7 +72,7 @@ export default function Settings() {
       </Group>
       <Group title="Воспроизведение">
         <Row icon="stack" label="Играть поверх других приложений" sub={canMix ? 'Lull не останавливает другие приложения, а приглушает их. Если другое приложение само забирает звук, Android поставит Lull на паузу' : 'Недоступно на iPhone: iOS сама останавливает звук сайта'}
-          right={<Switch value={mix && canMix} disabled={!canMix} onValueChange={toggleMix} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={mix && canMix ? C.inverse : C.tx3} accessibilityLabel="Играть поверх других приложений" />} />
+          right={<Switch value={mix && canMix} disabled={!canMix} onValueChange={toggleMix}   accessibilityLabel="Играть поверх других приложений" />} />
         {canMix ? <Row icon="shield" label="Работа в фоне" sub="Разрешить Lull играть без ограничений батареи" onPress={() => askBattery().catch(openAppSettings)} /> : null}
       </Group>
       <Group title="Перенос музыки">

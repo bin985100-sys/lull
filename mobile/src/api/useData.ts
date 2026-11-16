@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useState } from 'react';
+import { startTransition, useCallback, useEffect, useEffectEvent, useState } from 'react';
 
 import { ApiError } from './audius';
 
@@ -24,8 +24,8 @@ export function useData<T>(key: string | null, fn: (signal: AbortSignal) => Prom
     const ac=new AbortController();
     fetchData(ac.signal).then(data=>{
       if(ac.signal.aborted)return;
-      cache.set(key,{at:Date.now(),data});setResult({key,nonce,data,error:null});
-    },e=>{if(!ac.signal.aborted)setResult({key,nonce,data:c?.data as T|undefined,error:e instanceof ApiError ? e : new ApiError('http',String(e?.message||e))});});
+      cache.set(key,{at:Date.now(),data});startTransition(()=>setResult({key,nonce,data,error:null}));
+    },e=>{if(!ac.signal.aborted)startTransition(()=>setResult({key,nonce,data:c?.data as T|undefined,error:e instanceof ApiError ? e : new ApiError('http',String(e?.message||e))}));});
     return()=>ac.abort();
   },[key,nonce]);
   const reload=useCallback(()=>{if(key)cache.delete(key);setNonce(n=>n+1);},[key]);

@@ -1,9 +1,10 @@
-import { useTheme } from '@/theme/state';
+import { GlassSwitch as Switch } from '@/ui/GlassSwitch';
+import { resolveThemeValues, useTheme } from '@/theme/state';
 import { FileImport } from '@/components/FileImport';
 /* Перенос музыки из Spotify, Apple Music, SoundCloud, Яндекс Музыки, Deezer и YouTube Music по ссылке. */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, Switch, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, TextInput, View } from 'react-native';
 
 import { runImport, type ImportState } from '@/api/importer';
 import { linkYouTube } from '@/api/youtube';
@@ -11,21 +12,21 @@ import { TrackRow } from '@/components/TrackRow';
 import { useLibrary } from '@/store/library';
 
 import { Icon } from '@/ui/Icon';
-import { Btn, haptic, s as ks, Screen, T, TopBar } from '@/ui/kit';
+import { Btn, s as ks, Screen, T, TopBar } from '@/ui/kit';
 import { toast } from '@/ui/overlay';
 
 function Opt({ label, sub, value, onChange }: { label: string; sub?: string; value: boolean; onChange: (v: boolean) => void }) {
-  const {colors:C}=useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, paddingVertical: 8 }}>
       <View style={{ flex: 1 }}><T style={{ fontSize: 16 }}>{label}</T>{sub ? <T v="small" style={{ marginTop: 2 }}>{sub}</T> : null}</View>
-      <Switch value={value} onValueChange={(v) => { haptic(); onChange(v); }} trackColor={{ true: C.tx, false: C.s4 }} thumbColor={value ? C.inverse : C.tx3} accessibilityLabel={label} />
+      <Switch value={value} onValueChange={onChange}   accessibilityLabel={label} />
     </View>
   );
 }
 
 export default function Import() {
   const {colors:C}=useTheme();
+  const ks=resolveThemeValues(ksThemeTable,C);
   const params = useLocalSearchParams<{ url?: string }>();
   const [url, setUrl] = useState(params.url ?? '');
   const [st, setSt] = useState<ImportState | null>(null);
@@ -129,3 +130,5 @@ export default function Import() {
     </Screen>
   );
 }
+
+const ksThemeTable=ks;
