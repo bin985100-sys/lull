@@ -121,8 +121,23 @@ journalctl -u lull-relay --since "-2 min" --no-pager -o cat 2>/dev/null | grep -
 
 echo "== 3. Веб-приложение"
 mkdir -p /var/www/lull-app
-rm -rf /var/www/lull-app/*
-tar xzf "$HERE/web.tgz" -C /var/www/lull-app
+WEB_NEXT=$(mktemp -d /var/www/lull-app-next.XXXXXX)
+tar xzf "$HERE/web.tgz" -C "$WEB_NEXT"
+test -s "$WEB_NEXT/index.html"
+# Открытые вкладки могут запросить файлы предыдущей сборки после обновления.
+for ASSET_DIR in _expo assets; do
+  if [ -d "/var/www/lull-app/$ASSET_DIR" ]; then
+    mkdir -p "$WEB_NEXT/$ASSET_DIR"
+    cp -an "/var/www/lull-app/$ASSET_DIR/." "$WEB_NEXT/$ASSET_DIR/"
+  fi
+done
+chmod -R a+rX "$WEB_NEXT"
+WEB_BACKUP="/var/www/lull-app-before-$(date +%s)-$$"
+mv /var/www/lull-app "$WEB_BACKUP"
+if ! mv "$WEB_NEXT" /var/www/lull-app; then
+  mv "$WEB_BACKUP" /var/www/lull-app
+  exit 1
+fi
 CF=/etc/caddy/Caddyfile
 MYIP=$(curl -4 -fsS https://ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
 if [ "$(getent ahostsv4 app.lull.website | awk 'NR==1{print $1}')" = "$MYIP" ]; then
@@ -134,8 +149,9 @@ app.lull.website {
 	encode zstd gzip
 	root * /var/www/lull-app
 	header /_expo/* Cache-Control "public, max-age=31536000, immutable"
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 	header /sw.js Cache-Control "no-cache"
-	header /index.html Cache-Control "no-cache"
+	header ?Cache-Control "no-cache"
 	try_files {path} /index.html
 	file_server
 }
