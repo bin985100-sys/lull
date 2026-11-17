@@ -45,15 +45,17 @@ export function GlassTabs({active,width,onSelect,enabled=true}:{active:TabKey;wi
   const focus=useSharedValue(selected),pressure=useSharedValue(0),stretch=useSharedValue(0),lift=useSharedValue(0),dragging=useSharedValue(false);
   const cell=Math.max(1,(width-8)/3);
   const preventTap=useRef(false);
+  const resetGuard=()=>{preventTap.current=false;};
   const markDrag=()=>{preventTap.current=true;};
   const commit=(index:number,canceled=false)=>{
     preventTap.current=true;
     if(!canceled)onSelect(TABS[Math.max(0,Math.min(2,index))].key);
-    setTimeout(()=>{preventTap.current=false;},120);
+
   };
-  useEffect(()=>{focus.set(reduced ? selected : withSpring(selected,spring));},[focus,selected,reduced]);
+  useEffect(()=>{if(dragging.get())return;focus.set(reduced ? selected : withSpring(selected,spring));},[focus,selected,reduced,dragging]);
   const pan=usePanGesture({
     enabled,minDistance:3,maxPointers:1,cancelsJSResponder:true,
+    onBegin:()=>scheduleOnRN(resetGuard),
     onActivate:e=>{
       dragging.set(true);pressure.set(reduced ? 0 : withTiming(1,{duration:160}));
       focus.set(clamp((e.x-4)/cell-.5,-.16,2.16));scheduleOnRN(markDrag);
@@ -65,7 +67,7 @@ export function GlassTabs({active,width,onSelect,enabled=true}:{active:TabKey;wi
       lift.set(reduced ? 0 : clamp((e.y-32)*.14,-4,4));
     },
     onDeactivate:e=>{
-      const next=e.canceled ? selected : Math.round(clamp(focus.get(),0,2));
+      const next=e.canceled ? selected : Math.round(clamp((e.x-4)/cell-.5,0,2));
       focus.set(reduced ? next : withSpring(next,spring));pressure.set(withTiming(0,{duration:300}));
       stretch.set(withSpring(0,spring));lift.set(withSpring(0,spring));dragging.set(false);
       scheduleOnRN(commit,next,e.canceled);
@@ -97,9 +99,9 @@ export function GlassTabs({active,width,onSelect,enabled=true}:{active:TabKey;wi
       <View style={{flexDirection:'row',paddingHorizontal:4}}>
         {TABS.map((tab,index)=><Pressable key={tab.key} disabled={!enabled} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected:active===tab.key}} aria-selected={active===tab.key}
           {...(Platform.OS==='web' ? {tabIndex:active===tab.key ? 0 : -1,onKeyDown:(event:Parameters<NonNullable<PressableProps['onKeyDown']>>[0])=>{const key=(event as unknown as {key?:string}).key??(event.nativeEvent as {key?:string}).key;if(key==='ArrowRight'||key==='ArrowLeft'){event.preventDefault();onSelect(TABS[(selected+(key==='ArrowRight' ? 1 : 2))%3].key);}}} : {})}
-          onPressIn={()=>{if(!dragging.get())preventTap.current=false;if(!preventTap.current){focus.set(reduced ? index : withTiming(index,{duration:220}));pressure.set(reduced ? 0 : withTiming(1,{duration:160}));}}}
+          onPressIn={event=>{const input=event.nativeEvent as unknown as {type?:string;key?:string};if(Platform.OS==='web'&&/(?:up|end)$/.test(input.type??''))return;if(Platform.OS!=='web'||input.key)preventTap.current=false;if(!preventTap.current){focus.set(reduced ? index : withTiming(index,{duration:220}));pressure.set(reduced ? 0 : withTiming(1,{duration:160}));}}}
           onPressOut={()=>{if(!dragging.get())pressure.set(withTiming(0,{duration:300}));}}
-          onPress={()=>{if(!preventTap.current)onSelect(tab.key);}}
+          onFocus={resetGuard} onPress={()=>{if(preventTap.current){preventTap.current=false;return;}onSelect(tab.key);}}
           style={{width:cell,height:64,alignItems:'center',justifyContent:'center',minWidth:0}}>
 
         </Pressable>)}

@@ -6,7 +6,7 @@ import { GlassTabs } from './GlassTabs';
 /* Separate floating navigation, mini-player and search; full player expands from the mini-player. */
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Keyboard, Platform, TextInput, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import Animated, {
   cubicBezier, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
@@ -132,7 +132,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
   const playSize=ww<350 ? 64 : 84;
   const controlSize=Math.max(28,Math.min(56,(Math.min(680,ww-16)-44-playSize)/4));
   const coverSize = Math.max(130, Math.min(ww - 60, ww > 700 ? 480 : 360, h - DOCK.compact - 450));
-  const enter = reduced ? undefined : slideIn(s.lastDir === 'next' ? 60 : -60, 0.9, 500);
+  const enter=useMemo(()=>reduced?undefined:slideIn(s.lastDir==='next'?60:-60,.9,500),[reduced,s.lastDir]);
   const close = () => player.expand(false);
   const swipe = useTrackSwipe(close);
   const [boxH, setBoxH] = useState(0);
@@ -240,11 +240,11 @@ function Mini({compact=false,width=400}:{compact?:boolean;width?:number}) {
   const loading = useProgress((x) => s.buffering && x.time < 0.5);
   const t = currentTrack(s)!;
   const reduced = useReducedMotion();
-  const enter = reduced ? undefined : slideIn(s.lastDir === 'next' ? 28 : -28, 1, 420);
+  const enter=useMemo(()=>reduced?undefined:slideIn(s.lastDir==='next'?28:-28,1,420),[reduced,s.lastDir]);
   const swipe = useTrackSwipe();
   return (
     <View style={{height:56,flexDirection:"row",alignItems:"center",paddingLeft:8,paddingRight:4,gap:2}}>
-      <Animated.View {...swipe.handlers} style={[{ flex: 1, minWidth: 0 }, swipe.style]}>
+      <Animated.View {...swipe.handlers} style={[{ flex: 1, minWidth: 0,height:56 }, swipe.style]}>
       <Pressable onLongPress={e=>openTrackActions(t,undefined,{x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} onPress={() => { haptic(); player.expand(true); }} accessibilityRole="button" accessibilityLabel={`Открыть плеер: ${t.title}. Свайп влево — следующий трек, вправо — предыдущий`} style={{ flex: 1, minWidth: 0, height: 56 }}>
         <Animated.View key={t.id} entering={enter} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: compact ? 6 : 10 }}>
           {width>155&&<View style={{ width: compact ? 34 : 40, height: compact ? 34 : 40, borderRadius: 16, overflow: 'hidden', backgroundColor: C.s2, borderWidth:StyleSheet.hairlineWidth,borderColor:C.glassLine }}><Image source={{ uri: t.artwork }} style={StyleSheet.absoluteFill} transition={reduced ? 0 : 240}/></View>}
