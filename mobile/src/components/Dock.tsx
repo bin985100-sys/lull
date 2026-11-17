@@ -257,7 +257,7 @@ function Mini({compact=false,width=400}:{compact?:boolean;width?:number}) {
         </Animated.View>
       </Pressable>
       </Animated.View>
-      <Pressable onPress={() => { haptic(); player.toggle(); }} hitSlop={6} accessibilityRole="button" accessibilityLabel={s.playing ? 'Пауза' : 'Слушать'} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+      <Pressable onPress={() => { haptic(); player.toggle(); }} hitSlop={6} accessibilityRole="button" accessibilityLabel={s.playing ? 'Пауза' : 'Слушать'} style={{ width: compact?44:48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
         {loading ? <ActivityIndicator color={C.tx} /> : <PlayPause playing={s.playing} size={28} />}
       </Pressable>
       {!compact&&width>245&&<SkipBtn dir="next" box={44}/>}
@@ -323,7 +323,7 @@ export function Dock(){
    {has&&(!search||!keyboardShown)&&<Animated.View style={{position:'absolute',width:miniWidth,left:compact?68:0,bottom:miniBottom,transitionProperty:['width','left','bottom'],...motion}}>
     <Glass radius={28}><Mini compact={compact} width={miniWidth}/></Glass>
    </Animated.View>}
-   {!layout.rail&&<View style={{position:'absolute',left:0,right:0,bottom:0,height:60,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10}}>
+   {!layout.rail&&<View pointerEvents="box-none" style={{position:'absolute',left:0,right:0,bottom:0,height:60,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10}}>
     {search?<><ChromeButton icon="back" label="Закрыть поиск" onPress={()=>{Keyboard.dismiss();resetTo(`/${tab}` as '/listen');}}/><Animated.View entering={reduced?undefined:FadeIn.duration(220)} style={{flex:1,minWidth:0}}><SearchField/></Animated.View></>:<>
      <Animated.View pointerEvents={compact?'none':'auto'} aria-hidden={compact} accessibilityElementsHidden={compact} style={{position:'absolute',left:0,bottom:0,opacity:compact?0:1,transform:[{scale:compact?.55:1},{translateX:compact?-30:0}],transformOrigin:'left bottom',transitionProperty:['opacity','transform'],...motion}}><GlassTabs active={tab} width={width-70} onSelect={select}/></Animated.View>
      <Animated.View pointerEvents={compact?'auto':'none'} aria-hidden={!compact} accessibilityElementsHidden={!compact} style={{position:'absolute',left:0,bottom:0,opacity:compact?1:0,transform:[{scale:compact?1:.55}],transitionProperty:['opacity','transform'],...motion}}><ChromeButton icon={tab==='listen'?'navListen':tab==='discover'?'navDiscover':'navCollection'} label="Развернуть навигацию" onPress={()=>setChromeCollapsed(false)}/></Animated.View>
