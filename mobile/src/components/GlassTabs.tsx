@@ -89,7 +89,7 @@ export function GlassTabs({active,width,onSelect,enabled=true}:{active:TabKey;wi
       <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
        <Animated.View style={[{position:'absolute',left:0,top:0,height:64,overflow:'hidden'},leftMask]}><Strip cell={cell} color={C.tx2} small={width<240}/></Animated.View>
        <Animated.View style={[{position:'absolute',top:0,height:64,overflow:'hidden'},rightMask]}><Animated.View style={rightStrip}><Strip cell={cell} color={C.tx2} small={width<240}/></Animated.View></Animated.View>
-       <Animated.View style={[{position:'absolute',left:0,top:0,borderRadius:38,overflow:'hidden',borderWidth:StyleSheet.hairlineWidth,borderColor:dark?'rgba(255,255,255,.42)':'rgba(255,255,255,.95)',boxShadow:[{offsetX:0,offsetY:3,blurRadius:10,color:C.shadow}]},lens]}>
+       <Animated.View style={[{position:'absolute',left:0,top:0,borderRadius:38,overflow:'hidden',borderWidth:StyleSheet.hairlineWidth,borderColor:dark?'rgba(255,255,255,.42)':'rgba(255,255,255,.95)',boxShadow:Platform.OS==='android' ? undefined : [{offsetX:0,offsetY:3,blurRadius:10,color:C.shadow}]},lens]}>
         <Glass variant="clear" blur={false} radius={38} style={StyleSheet.absoluteFill}/>
         {TABS.map((tab,index)=><RefractedGlyph key={tab.key} index={index} cell={cell} focus={focus} pressure={pressure} stretch={stretch} small={width<240}/>)}
         <View style={{position:'absolute',top:1,left:'22%',right:'22%',height:1,borderRadius:1,backgroundColor:dark?'rgba(255,255,255,.4)':'rgba(255,255,255,.9)'}}/>
