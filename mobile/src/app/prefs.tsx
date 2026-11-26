@@ -1,3 +1,4 @@
+import { SlidingPill, usePillGroup } from '@/ui/SlidingPill';
 import { Toggle as Switch } from '@/ui/Toggle';
 import { useTheme } from '@/theme/state';
 import { router } from 'expo-router';
@@ -41,7 +42,7 @@ export default function Prefs() {
   const {colors:C}=useTheme();
   const t = useTaste();
   const favs = useLibrary((s) => s.favArtists);
-  const r = t.reco;
+  const r = t.reco,selection=usePillGroup(String(t.reco.balance));
   const set = <K extends keyof RecoSettings>(k: K, v: RecoSettings[K]) => t.setReco(k, v);
   /* после изменений подборки пересоберутся при следующем открытии */
   useEffect(() => () => invalidate('mix:'), []);
@@ -56,13 +57,14 @@ export default function Prefs() {
           {BAL.map(([v, l, h]) => {
             const on = r.balance === v;
             return (
-              <Pressable key={v} onPress={() => { haptic(); set('balance', v); }} accessibilityRole="radio" accessibilityState={{ checked: on }}
-                style={{flexGrow:1,flexBasis:'42%',minHeight:120,padding:15,borderRadius:20,backgroundColor:C.s1,borderWidth:on?1.5:1,borderColor:on?C.tx:C.line,justifyContent:'space-between',gap:10}}>
+              <Pressable key={v} onLayout={selection.layout(String(v))} onPress={() => { selection.select(String(v));haptic(); set('balance', v); }} accessibilityRole="radio" accessibilityState={{ checked: on }}
+                style={{flexGrow:1,flexBasis:'42%',minHeight:120,padding:15,borderRadius:20,backgroundColor:C.s1,borderWidth:1,borderColor:C.line,justifyContent:'space-between',gap:10}}>
                 <View style={{minWidth:0}}><T style={{fontSize:14,fontFamily: on ? F.bold : F.semi }}>{l}</T><T v="small">{h}</T></View>
                 {on ? <Icon name="check" size={22} /> : null}
               </Pressable>
             );
           })}
+          <SlidingPill motion={selection.pill} borderColor={C.tx+'99'} radius={24}/>
         </View>
       </Group>
 
@@ -90,7 +92,7 @@ export default function Prefs() {
             const on = r.waveMode === m.id;
             return (
               <Pressable key={m.id} onPress={() => { haptic(); set('waveMode', m.id); }} accessibilityRole="radio" accessibilityState={{ checked: on }}
-                style={{flexGrow:1,flexBasis:'42%',minHeight:120,padding:15,borderRadius:20,backgroundColor:C.s1,borderWidth:on?1.5:1,borderColor:on?C.tx:C.line,justifyContent:'space-between',gap:10}}>
+                style={{flexGrow:1,flexBasis:'42%',minHeight:120,padding:15,borderRadius:20,backgroundColor:C.s1,borderWidth:1,borderColor:C.line,justifyContent:'space-between',gap:10}}>
                 <View style={{minWidth:0}}><T style={{fontSize:14,fontFamily: on ? F.bold : F.semi }}>{m.title}</T><T v="small">{m.text}</T></View>
                 {on ? <Icon name="check" size={22} /> : null}
               </Pressable>

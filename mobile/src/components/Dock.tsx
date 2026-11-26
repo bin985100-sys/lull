@@ -21,7 +21,7 @@ import { currentTrack, player, usePlayer, useProgress } from '@/player/player';
 import { useLibrary } from '@/store/library';
 import { DOCK, F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
-import { haptic, T } from '@/ui/kit';
+import { haptic, Press, T } from '@/ui/kit';
 import { PlayPause } from '@/ui/PlayPause';
 import { HeartButton } from '@/ui/HeartButton';
 import { slideIn } from '@/ui/anim';
@@ -187,7 +187,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
       <View style={{ flexDirection: 'row', gap:6, marginTop: 18 }}>
 
         <SleepButton />
-        <Pressable onPress={() => { close(); router.push('/queue'); }} accessibilityRole="button" style={st.extra}><Icon name="queue" size={24} /><T v="small" numberOfLines={1} style={{ fontSize: 11.5 }}>Очередь</T></Pressable>
+        <Press onPress={() => { close(); router.push('/queue'); }} accessibilityRole="button" style={st.extra}><Icon name="queue" size={24} /><T v="small" numberOfLines={1} style={{ fontSize: 11.5 }}>Очередь</T></Press>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Волна по текущему треку" onPress={()=>openWave(t)} style={{height:56,borderRadius:28,overflow:'hidden',marginTop:14}}><WaveArt colors={palette} animate={active&&!lyricsOpen} inPlayer/><View style={{flex:1,backgroundColor:'rgba(0,0,0,.50)',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10}}><T style={{fontSize:14,color:'#fff',fontFamily:F.bold}}>Волна</T><View style={{width:24,height:24,borderRadius:12,backgroundColor:'#fff',alignItems:'center',justifyContent:'center'}}><Icon name="play" size={12} color="#111"/></View><T style={{fontSize:14,color:'#fff'}}>{{sound:'По треку',artist:'По артисту',discover:'Открытия',favorite:'Любимое',calm:'Спокойнее',energy:'Бодрее'}[mode]}</T></View></Pressable>
       {/* подсказка: ниже — текст песни */}

@@ -1,6 +1,6 @@
 import { Pressable, View } from 'react-native';
 import {useRef,useState} from 'react';
-import { Btn,T } from '@/ui/kit';
+import { Btn,Press,T } from '@/ui/kit';
 import { closeSheet, openSheet, toast } from '@/ui/overlay';
 import { setSleep, useSleep } from '@/player/player';
 import { downloaded, saveDownload } from '@/player/downloads';
@@ -27,11 +27,11 @@ export function OfflineSaveButton({tracks}:{tracks:Track[]}) {
 export function SleepButton() {
   const state = useSleep();
   const label = state.endTrack ? 'До конца трека' : state.deadline ? 'До ' + new Date(state.deadline).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : 'Таймер сна';
-  return <Pressable accessibilityRole="button" accessibilityLabel={state.endTrack || state.deadline ? `Таймер сна: ${label}` : label} onPress={() => openSheet(() => <View><T v="h2">Таймер сна</T>
+  return <Press accessibilityRole="button" accessibilityLabel={state.endTrack || state.deadline ? `Таймер сна: ${label}` : label} onPress={() => openSheet(() => <View><T v="h2">Таймер сна</T>
     {([15,30,45,'track',null] as const).map(m => <Pressable key={String(m)} style={{paddingVertical:14}} onPress={() => { setSleep(m); closeSheet(); }}>
       <T>{m === null ? 'Выключить' : m === 'track' ? 'До конца трека' : m + ' минут'}</T></Pressable>)}</View>)}
     style={{flex:1,minWidth:0,alignItems:'center',justifyContent:'center',paddingHorizontal:2,gap:5,minHeight:62}}>
       <Icon name="clock" size={24} color={state.endTrack || state.deadline ? '#b4eaff' : undefined}/>
       <T v="small" numberOfLines={1} style={{fontSize:11.5}}>{label}</T>
-    </Pressable>;
+    </Press>;
 }

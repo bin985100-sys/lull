@@ -14,6 +14,7 @@ import { Icon, type IconName } from './Icon';
 import { PlayPause } from './PlayPause';
 import { usePlayer } from '@/player/player';
 import { Surface } from './Surface';
+import { SlidingPill, SlidingPillLabel, useSlidingPill } from './SlidingPill';
 
 export const haptic = () => { if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {}); };
 /** A short entrance on mount, with no perpetual animation or per-frame JS. */
@@ -213,18 +214,19 @@ export const Spinner = () => { const {colors:C}=useTheme(); return (<ActivityInd
 export function Segmented<K extends string>({ items, value, onChange, label }: { items: [K, string][]; value: K; onChange: (k: K) => void; label: string }) {
   const {colors:C}=useTheme();
  const s=resolveThemeValues(sThemeTable,C);
-  const reduced=useReducedMotion();
+  const pill=useSlidingPill();
   const [width,setWidth]=useState(0);
   const cell=Math.max(0,(width-8)/items.length),selected=Math.max(0,items.findIndex(([k])=>k===value));
+  useEffect(()=>pill.move({x:4+selected*cell,y:4,width:cell,height:42}),[pill,selected,cell]);
   return (
     <View onLayout={e=>setWidth(e.nativeEvent.layout.width)} style={s.seg} accessibilityRole="tablist" accessibilityLabel={label}>
       <Surface pointerEvents="none" radius={999} style={StyleSheet.absoluteFill}/>
-      <Animated.View pointerEvents="none" style={{position:'absolute',left:4+selected*cell,top:4,bottom:4,width:cell,borderRadius:999,backgroundColor:C.tx,borderWidth:0,transitionProperty:'left',transitionDuration:reduced?0:240}}/>
-      {items.map(([k, l]) => {
+      <SlidingPill motion={pill} backgroundColor={C.tx}/>
+      {items.map(([k, l],index) => {
         const on = k === value;
         return (
           <Pressable key={k} onPress={() => { haptic(); onChange(k); }} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} style={s.segBtn}>
-            <T v="small" style={{ color: on ? C.inverse : C.tx2, fontFamily: F.bold, fontSize: items.length > 3 ? 12.5 : 14 }} numberOfLines={1}>{l}</T>
+            <SlidingPillLabel motion={pill} index={index} cell={cell} activeColor={C.inverse} inactiveColor={C.tx2} size={items.length>3?12.5:14}>{l}</SlidingPillLabel>
           </Pressable>
         );
       })}

@@ -1,3 +1,4 @@
+import { SlidingPill, usePillGroup } from '@/ui/SlidingPill';
 import { WaveArt } from '@/ui/WaveArt';
 import { useCoverColors } from '@/theme/useCoverColors';
 import { useTheme } from '@/theme/state';
@@ -24,7 +25,7 @@ export async function launchWave(seed: Track, mode?: WaveMode) {
 
 function WaveSheet({ seed }: { seed: Track }) {
   const {colors:C}=useTheme();
-  const reco = useTaste((s) => s.reco);
+  const reco = useTaste((s) => s.reco),selection=usePillGroup(reco.waveMode);
   const colors=useCoverColors(seed.artwork,seed.id);
   const [busy, setBusy] = useState(false);
   return (
@@ -37,13 +38,14 @@ function WaveSheet({ seed }: { seed: Track }) {
         {WAVE_MODES.map((m) => {
           const on = reco.waveMode === m.id;
           return (
-            <Pressable key={m.id} onPress={() => { haptic(); useTaste.getState().setReco('waveMode', m.id); }} accessibilityRole="radio" accessibilityState={{ checked: on }}
-              style={{flexGrow:1,flexBasis:'40%',flexDirection:'row',alignItems:'center',gap:8,padding:16,borderRadius:24,backgroundColor:on?C.tx:C.s1}}>
-              <View style={{ flex: 1 }}><T style={{fontFamily:F.semi,fontSize:13,color:on?C.inverse:C.tx}}>{m.title}</T></View>
-              {on ? <Icon name="check" size={18} color={C.inverse}/> : null}
+            <Pressable key={m.id} onLayout={selection.layout(m.id)} onPress={() => { selection.select(m.id);haptic(); useTaste.getState().setReco('waveMode', m.id); }} accessibilityRole="radio" accessibilityState={{ checked: on }}
+              style={{flexGrow:1,flexBasis:'40%',flexDirection:'row',alignItems:'center',gap:8,padding:16,borderRadius:24,backgroundColor:C.s1}}>
+              <View style={{ flex: 1 }}><T style={{fontFamily:F.semi,fontSize:13,color:C.tx}}>{m.title}</T></View>
+              {on ? <Icon name="check" size={18} color={C.tx}/> : null}
             </Pressable>
           );
         })}
+        <SlidingPill motion={selection.pill} borderColor={C.tx+'99'}/>
       </View>
       <Segmented label="Длина волны" value={String(reco.waveLength) as '25' | '50' | '100'} onChange={(v) => useTaste.getState().setReco('waveLength', Number(v) as 25 | 50 | 100)}
         items={[['25', '25 треков'], ['50', '50 треков'], ['100', '100 треков']]} />
