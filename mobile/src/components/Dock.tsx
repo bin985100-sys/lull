@@ -67,14 +67,12 @@ function BigPlay({ playing, loading, size=84 }: { playing: boolean; loading?: bo
   const {colors:C}=useTheme();
 
   const reduced=useReducedMotion();
-  const sc = useSharedValue(1),pulse=useSharedValue(1);
+  const sc = useSharedValue(1);
   const a = useAnimatedStyle(() => ({ transform: [{ scale: sc.get() }] }));
-  const ring=useAnimatedStyle(()=>({opacity:.32*(1-pulse.get()),transform:[{scale:1+pulse.get()*.24}]}));
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : 'Слушать'}
-      onPress={() => { haptic(); if(!reduced){sc.set(withSequence(withTiming(.88,{duration:160}),withSpring(1,{damping:15,stiffness:140})));pulse.set(0);pulse.set(withTiming(1,{duration:700}));} player.toggle(); }}>
-      <Animated.View style={[{ width: size, height: size, borderRadius: size/2, backgroundColor:C.bg,borderWidth:.8,borderColor:C.line, alignItems: 'center', justifyContent: 'center' }, a]}>
-        <Animated.View pointerEvents="none" style={[{position:'absolute',inset:-3,borderRadius:size/2+3,borderWidth:1,borderColor:C.tx},ring]}/>
+    <Pressable style={{outlineWidth:0}} accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : 'Слушать'}
+      onPress={() => { haptic(); if(!reduced){sc.set(withSequence(withTiming(.88,{duration:160}),withSpring(1,{damping:15,stiffness:140})));} player.toggle(); }}>
+      <Animated.View style={[{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }, a]}>
         {loading ? <ActivityIndicator color={C.tx} size="large" /> : <PlayPause playing={playing} size={Math.min(64,size*.8)} color={C.tx} stroke={2.6} />}
       </Animated.View>
     </Pressable>
