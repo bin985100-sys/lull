@@ -24,8 +24,8 @@ export function CardItem({ c, w = 156 }: { c: Card; w?: number }) {
   return (
     <Press onPress={() => openCard(c)} accessibilityRole="button" accessibilityLabel={c.title} style={{ width: wide ? w * 1.4 : w, gap: 10, alignItems: round ? 'center' : 'stretch' }}>
       {wide ? (
-        <View style={{ width: '100%', aspectRatio: 16 / 9, borderRadius: 20, overflow: 'hidden' }}><Cover uri={c.image} size="100%" radius={0} style={{ aspectRatio: 16 / 9 }} /></View>
-      ) : <Cover uri={c.image} fallbackUri={round ? artistPhoto(c.id) : undefined} label={c.title} size={w} radius={round ? w / 2 : 18} />}
+        <View style={{ width: '100%', aspectRatio: 16 / 9, borderRadius: 28, overflow: 'hidden' }}><Cover uri={c.image} size="100%" radius={0} style={{ aspectRatio: 16 / 9 }} /></View>
+      ) : <Cover uri={c.image} fallbackUri={round ? artistPhoto(c.id) : undefined} label={c.title} size={w} radius={round ? w / 2 : 28} />}
       <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 14, textAlign: round ? 'center' : 'left' }}>{c.title}</T>
       {c.subtitle && !round ? <T v="small" numberOfLines={1}>{c.subtitle}</T> : null}
     </Press>

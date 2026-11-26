@@ -65,7 +65,7 @@ export function ListPage(p: Props) {
   const disabled = !tracks.length;
   const header=(<View>
       <TopBar right={p.right} />
-      <View style={{flexDirection:wide ? 'row' : 'column',alignItems:wide ? 'center' : 'stretch',gap:wide ? 28 : 0,backgroundColor:C.s1,padding:20,borderRadius:28,marginTop:16}}>
+      <View style={{flexDirection:wide ? 'row' : 'column',alignItems:wide ? 'center' : 'stretch',gap:wide ? 28 : 0,backgroundColor:C.s1,padding:20,borderRadius:34,marginTop:16}}>
       <View style={{ marginTop: 4, marginBottom: 18, width:wide ? 270 : undefined }}>{p.cover?.wide ? (
         <Banner source={p.cover.source} label={p.title}/>
       ) : p.loading && !p.cover?.uri && !p.cover?.source ? <Skeleton h={size} w={size} r={34} style={{ alignSelf: 'center' }} /> : <CoverArt cover={p.cover} size={size} />}</View>

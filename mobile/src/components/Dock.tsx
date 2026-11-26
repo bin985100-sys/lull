@@ -13,7 +13,7 @@ import { router, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Platform, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import Animated, {
-  cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
+  Easing, cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -71,8 +71,8 @@ function BigPlay({ playing, loading, size=84 }: { playing: boolean; loading?: bo
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : 'Слушать'}
       onPress={() => { haptic(); if(!reduced) sc.set(withSequence(withTiming(0.9, { duration: 100 }), withSpring(1, { damping: 10, stiffness: 240 }))); player.toggle(); }}>
-      <Animated.View style={[{ width: size, height: size, borderRadius: size/2, backgroundColor: C.tx, alignItems: 'center', justifyContent: 'center' }, a]}>
-        {loading ? <ActivityIndicator color={C.inverse} size="large" /> : <PlayPause playing={playing} size={46} color={C.inverse} stroke={1.8} />}
+      <Animated.View style={[{ width: size, height: size, borderRadius: size/2, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }, a]}>
+        {loading ? <ActivityIndicator color={C.tx} size="large" /> : <PlayPause playing={playing} size={Math.min(64,size*.8)} color={C.tx} stroke={2.6} />}
       </Animated.View>
     </Pressable>
   );
@@ -86,8 +86,12 @@ function Seek({ active }: { active: boolean }) {
   const duration = useProgress((x) => x.duration);
   const [w, setW] = useState(1);
   const [drag, setDrag] = useState<number | null>(null);
+  const [focused,setFocused]=useState(false),reduced=useReducedMotion();
+  const progress=useSharedValue(0);
   const val = drag ?? time;
-  const p = duration ? Math.min(1, val / duration) : 0;
+  const p = duration ? Math.max(0,Math.min(1,val/duration)) : 0;
+  useEffect(()=>{progress.set(drag!=null||reduced?p:withTiming(p,{duration:350,easing:Easing.linear}));},[p,drag,reduced,progress]);
+  const fill=useAnimatedStyle(()=>({width:`${progress.get()*100}%`}));
   const toSec = useCallback((x: number) => Math.max(0, Math.min(duration, (x / w) * duration)),[duration,w]);
   const toSecRef = useRef(toSec);
   // eslint-disable-next-line react-hooks/refs -- PanResponder stores callbacks; refs are read only during touch events.
@@ -102,19 +106,20 @@ function Seek({ active }: { active: boolean }) {
   useEffect(()=>{toSecRef.current=toSec;},[toSec]);
   return (
     <View style={{ marginTop: 18 }}>
-      <View onLayout={(e) => setW(e.nativeEvent.layout.width)} {...pan.panHandlers} style={{ height: 30, justifyContent: 'center' }}
+      <View onLayout={(e) => setW(e.nativeEvent.layout.width)} {...pan.panHandlers} style={{height:36,justifyContent:'center'}}
+        {...(Platform.OS==='web'?{tabIndex:0,onFocus:()=>setFocused(true),onBlur:()=>setFocused(false),onKeyDown:(event:unknown)=>{const e=event as {key?:string;nativeEvent?:{key?:string};preventDefault():void},key=e.key??e.nativeEvent?.key;if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(key??'')||!duration)return;e.preventDefault();player.seek(Math.max(0,Math.min(duration,key==='Home'?0:key==='End'?duration:val+(['ArrowRight','ArrowUp'].includes(key??'')?5:-5))));}}:{})}
         accessibilityRole="adjustable" accessibilityLabel="Позиция в треке" accessibilityValue={{ min: 0, max: Math.round(duration), now: Math.round(val), text: `${fmt(val)} из ${fmt(duration)}` }}
         aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(val)} aria-valuetext={`${fmt(val)} из ${fmt(duration)}`}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={(e) => player.seek(Math.max(0, Math.min(duration, time + (e.nativeEvent.actionName === 'increment' ? 10 : -10))))}>
-        <View style={{ height: 5, borderRadius: 3, backgroundColor: C.s4 }}>
-          <View style={{ width: `${p * 100}%`, height: 5, borderRadius: 3, backgroundColor: C.sky }} />
-        </View>
-        <View pointerEvents="none" style={{ position: 'absolute', left: `${p * 100}%`, marginLeft: -10, width: 20, height: 20, borderRadius: 10, backgroundColor: C.tx, transform: [{ scale: drag != null ? 1.25 : 1 }] }} />
+        <Animated.View style={{height:drag!=null||focused?8:4,borderRadius:8,backgroundColor:C.tx+'33',overflow:'hidden',transitionProperty:'height',transitionDuration:reduced?0:240}}>
+          <Animated.View style={[{height:'100%',borderRadius:8,backgroundColor:C.tx},fill]}/>
+        </Animated.View>
+        {drag!=null||focused?<View pointerEvents="none" style={{position:'absolute',left:`${p*100}%`,marginLeft:-6,width:12,height:12,borderRadius:6,backgroundColor:C.tx}}/>:null}
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <T v="small" style={{ fontVariant: ['tabular-nums'],color:C.tx,opacity:.8 }}>{fmt(val)}</T>
-        <T v="small" style={{ fontVariant: ['tabular-nums'],color:C.tx,opacity:.8 }}>-{fmt(duration - val)}</T>
+        <T v="small" style={{ fontVariant: ['tabular-nums'],color:C.tx,opacity:.9,fontSize:11 }}>{fmt(val)}</T>
+        <T v="small" style={{ fontVariant: ['tabular-nums'],color:C.tx,opacity:.9,fontSize:11 }}>{fmt(duration)}</T>
       </View>
     </View>
   );
@@ -153,7 +158,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
         <Pressable onPress={() => openSelectPlaylist(t)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Добавить в плейлист" style={{ width: 48, height: 48, alignItems: 'flex-end', justifyContent: 'center' }}><Icon name="plus" size={24} /></Pressable>
       </View>
       <Animated.View style={swipe.style}>
-      <Animated.View key={'c' + t.id} entering={enter} style={{alignSelf:'center',marginTop:8,width:coverSize,height:coverSize}}><View style={{width:coverSize,height:coverSize,borderRadius:22,overflow:'hidden',backgroundColor:C.s2}}><Image source={{uri:t.artworkLarge||t.artwork}} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced?0:280}/></View></Animated.View>
+      <Animated.View key={'c' + t.id} entering={enter} style={{alignSelf:'center',marginTop:8,width:coverSize,height:coverSize}}><View style={{width:coverSize,height:coverSize,borderRadius:36,overflow:'hidden',backgroundColor:C.s2}}><Image source={{uri:t.artworkLarge||t.artwork}} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced?0:280}/></View></Animated.View>
       </Animated.View>
       </View>
       <Animated.View key={'m' + t.id} entering={enter} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 }}>
@@ -173,9 +178,9 @@ function Full({ h, active }: { h: number; active: boolean }) {
       <Seek active={active} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
         <Pressable onPress={() => { haptic(); player.toggleShuffle(); }} accessibilityRole="button" accessibilityLabel="Перемешивать" accessibilityState={{ selected: s.shuffle }} style={[st.ctl,{width:controlSize}]}><Icon name="shuffle" size={28} color={s.shuffle ? C.sky : C.tx3} /></Pressable>
-        <SkipBtn dir="prev" size={28} box={controlSize} />
+        <SkipBtn dir="prev" size={32} box={controlSize} />
         <BigPlay playing={s.playing} loading={loading} size={playSize} />
-        <SkipBtn dir="next" size={28} box={controlSize} />
+        <SkipBtn dir="next" size={32} box={controlSize} />
         <Pressable onPress={() => { haptic(); player.cycleRepeat(); }} accessibilityRole="button" accessibilityLabel={`Повтор: ${{ off: 'выключен', all: 'все', one: 'трек' }[s.repeat]}`} style={[st.ctl,{width:controlSize}]}>
           <Icon name={s.repeat === 'one' ? 'repeatOne' : 'repeat'} size={28} color={s.repeat === 'off' ? C.tx3 : C.sky} />
         </Pressable>
@@ -310,7 +315,7 @@ export function Dock(){
 
 const st = themeValues((C) => (StyleSheet.create({
   ctl: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
-  extra: { flex:1,minWidth:0,alignItems:'center',justifyContent:'center',gap:5,minHeight:62,paddingHorizontal:2,paddingVertical:8,borderRadius:18,backgroundColor:C.s1 },
+  extra: { flex:1,minWidth:0,alignItems:'center',justifyContent:'center',gap:5,minHeight:62,paddingHorizontal:2,paddingVertical:8,borderRadius:31,backgroundColor:C.s1 },
 })));
 
 

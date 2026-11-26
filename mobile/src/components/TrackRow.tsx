@@ -35,12 +35,12 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
   const more = (anchor?:MenuAnchor) => { haptic(); openTrackActions(track, playlistId,anchor); };
 
   return (
-    <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 74, borderRadius: 16, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
+    <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 74, borderRadius: 24, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
       <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={e=>more({x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} delayLongPress={420} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 }}
         accessibilityRole="button" accessibilityLabel={`${track.title}, ${track.artist}`} accessibilityHint="Двойное касание — слушать, удержание — меню трека"
         accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Меню трека' }]}
         onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'longpress' ? more() : play())}>
-        {num ? <T v="sub" style={{ width: 24, fontSize: 16 }}>{num}</T> : <Cover uri={track.artwork} size={52} radius={13} />}
+        {num ? <T v="sub" style={{ width: 24, fontSize: 16 }}>{num}</T> : <Cover uri={track.artwork} size={52} radius={18} />}
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T numberOfLines={1} style={{ color: isCur ? C.sky : C.tx, fontFamily: isCur ? F.bold : F.semi }}>{track.title}</T>
           {sub ? <T v="small" numberOfLines={1}>{track.artist}</T> : null}
@@ -138,7 +138,7 @@ function SelectPlaylist({ t }: { t: Track }) {
           }} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 60 }}>
             <Cover uri={p.tracks[0]?.artwork} size={48} />
             <T numberOfLines={1} style={{ flex: 1 }}>{p.name}</T>
-            <View style={{ width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: has ? C.tx : C.s3 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: has ? C.tx : C.s3 }}>
               <Icon name={has ? 'check' : 'plus'} size={20} color={has ? C.inverse : C.tx} />
             </View>
           </Pressable>

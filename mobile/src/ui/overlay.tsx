@@ -39,7 +39,7 @@ export function Overlays() {
   const {width,height}=useWindowDimensions();
   const [contentHeight,setContentHeight]=useState(0);
   const menuWidth=Math.min(340,width-24),menuHeight=Math.min(contentHeight?contentHeight+38:600,600,height-ins.top-ins.bottom-40);
-  const anchored=anchor ? {left:Math.max(12,Math.min(width-menuWidth-12,anchor.x-menuWidth/2)),right:undefined,width:menuWidth,top:Math.max(ins.top+12,Math.min(height-ins.bottom-menuHeight-12,anchor.y-menuHeight-10)),bottom:undefined,height:menuHeight,maxHeight:menuHeight,borderRadius:28,paddingHorizontal:18,paddingTop:16} : null;
+  const anchored=anchor ? {left:Math.max(12,Math.min(width-menuWidth-12,anchor.x-menuWidth/2)),right:undefined,width:menuWidth,top:Math.max(ins.top+12,Math.min(height-ins.bottom-menuHeight-12,anchor.y-menuHeight-10)),bottom:undefined,height:menuHeight,maxHeight:menuHeight,borderRadius:34,paddingHorizontal:18,paddingTop:16} : null;
   const hasTrack = usePlayer((x) => x.index >= 0);
   const expanded = usePlayer((x) => x.expanded);
   const reduced = useReducedMotion();
@@ -64,7 +64,7 @@ export function Overlays() {
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} accessibilityRole="button" accessibilityLabel="Закрыть панель" />
           </Animated.View>
           <Animated.View entering={reduced ? undefined : anchor ? ZoomIn.duration(340).withInitialValues({transform:[{scale:.92}]}) : SlideInDown.duration(520).easing(ease)} exiting={reduced ? undefined : anchor ? ZoomOut.duration(150).withTargetValues({transform:[{scale:.94}]}) : SlideOutDown.duration(360)} style={[st.sheet, { bottom: 8 + ins.bottom * 0.4 },anchored]}>
-            <Surface pointerEvents="none" radius={28} style={StyleSheet.absoluteFill}/>
+            <Surface pointerEvents="none" radius={34} style={StyleSheet.absoluteFill}/>
             {!anchor&&<View style={st.grab} />}
             <ScrollView onContentSizeChange={(_w,h)=>setContentHeight(h)} style={{flexGrow:0,flexShrink:1}} contentContainerStyle={{paddingBottom:8}} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">{sheet()}</ScrollView>
           </Animated.View>
@@ -74,7 +74,7 @@ export function Overlays() {
         <Animated.View entering={reduced ? undefined : FadeIn.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} accessibilityViewIsModal>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
           <View style={st.dlg} accessibilityRole="alert">
-            <Surface pointerEvents="none" radius={26} style={StyleSheet.absoluteFill}/>
+            <Surface pointerEvents="none" radius={32} style={StyleSheet.absoluteFill}/>
             {dialog.icon ? <Icon name={dialog.icon} size={44} /> : null}
             <T v="h2" style={{ fontSize: 24, textAlign: 'center' }}>{dialog.title}</T>
             {dialog.text ? <T v="body" style={{ textAlign: 'center', fontSize: 15 }}>{dialog.text}</T> : null}
@@ -102,11 +102,11 @@ export function Overlays() {
 }
 
 const st = themeValues((C) => (StyleSheet.create({
-  sheet: { position: 'absolute', left: 8, right: 8, borderRadius: 28, overflow: 'hidden', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 22, maxHeight: '84%', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
+  sheet: { position: 'absolute', left: 8, right: 8, borderRadius: 34, overflow: 'hidden', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 22, maxHeight: '84%', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
   grab: { width: 44, height: 5, borderRadius: 3, backgroundColor: C.sky, opacity:.6, alignSelf: 'center', marginBottom: 14 },
-  dlg: { width: '86%', maxWidth: 340, borderRadius: 26, overflow:'hidden',padding: 24, paddingBottom: 20, gap: 8, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
+  dlg: { width: '86%', maxWidth: 340, borderRadius: 32, overflow:'hidden',padding: 24, paddingBottom: 20, gap: 8, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
   toast: { position: 'absolute', left: 16, right: 16, minHeight: 56, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 18, paddingRight: 8, paddingVertical: 8, backgroundColor: C.s1, borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
-  tAct: { height: 40, paddingHorizontal: 14, borderRadius: 14, backgroundColor: C.s4, justifyContent: 'center' },
+  tAct: { height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: C.s4, justifyContent: 'center' },
 })));
 
 const stThemeTable=st;

@@ -1,4 +1,4 @@
-export const R = { card: 20, panel: 28, pill: 999, cover: 14 } as const;
+export const R = { card: 28, panel: 34, pill: 999, cover: 20 } as const;
 
 export const F = {
   medium: 'Manrope_500Medium',

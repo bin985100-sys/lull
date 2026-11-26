@@ -31,7 +31,7 @@ function Row({ icon, label, sub, onPress, right }: { icon: IconName; label: stri
   </Wrapper>;
 }
 function Group({title,children}:{title:string;children:React.ReactNode}){
- const {colors:C}=useTheme();return <View style={{marginTop:26}}><T style={{fontSize:10,letterSpacing:1.8,color:C.tx3,fontFamily:F.bold,marginBottom:10,paddingLeft:4}}>{title.toLocaleUpperCase('ru')}</T><Surface radius={22} style={{paddingHorizontal:16,paddingVertical:2}}>{children}</Surface></View>;
+ const {colors:C}=useTheme();return <View style={{marginTop:26}}><T style={{fontSize:10,letterSpacing:1.8,color:C.tx3,fontFamily:F.bold,marginBottom:10,paddingLeft:4}}>{title.toLocaleUpperCase('ru')}</T><Surface radius={28} style={{paddingHorizontal:16,paddingVertical:2}}>{children}</Surface></View>;
 }
 
 export default function Settings() {
