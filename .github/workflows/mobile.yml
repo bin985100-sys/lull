@@ -44,6 +44,8 @@ jobs:
         run: node scripts/audio-output.test.mjs
       - name: Тесты цветов обложки
         run: node scripts/cover-colors.test.mjs
+      - name: Тесты света от обложек
+        run: node scripts/artwork-glow.test.mjs
       - name: Тесты локального кэша звука
         run: node --test scripts/audio-cache.test.mjs
       - name: Тесты текста песен

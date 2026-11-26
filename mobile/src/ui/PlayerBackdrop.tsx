@@ -20,9 +20,9 @@ export function PlayerBackdrop({uri,colors,active,variant='player'}:{uri?:string
  const source=texture&&texture.uri===uri?{uri:texture.data}:undefined;
  return <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[StyleSheet.absoluteFill,{overflow:'hidden',backgroundColor:colors.deep}]}>
   <LinearGradient colors={[colors.main,colors.deep,colors.accent]} style={StyleSheet.absoluteFill}/>
-  <Animated.View style={[StyleSheet.absoluteFill,a]}>{source?<Image source={source} contentFit={variant==='mini'?'fill':'cover'} blurRadius={18} transition={900} style={[StyleSheet.absoluteFill,{opacity:variant==='mini'?.85:.72}]}/>:null}</Animated.View>
-  <Animated.View style={[StyleSheet.absoluteFill,b]}><Image source={require('../../assets/motion/caustics.jpg')} contentFit="cover" style={[StyleSheet.absoluteFill,{opacity:.18,mixBlendMode:Platform.OS==='android'&&Number(Platform.Version)<29?undefined:'screen'}]}/></Animated.View>
-  <LinearGradient colors={variant==='mini'?['rgba(0,0,0,.20)','rgba(0,0,0,.48)','rgba(0,0,0,.30)']:variant==='sheet'?['rgba(0,0,0,.38)','rgba(0,0,0,.65)','rgba(0,0,0,.82)']:dark?['rgba(0,0,0,.44)','rgba(0,0,0,.50)','rgba(0,0,0,.72)']:[C.bg+'cc',C.bg+'aa',C.bg+'ee']} start={{x:0,y:0}} end={variant==='mini'?{x:1,y:0}:{x:0,y:1}} style={StyleSheet.absoluteFill}/>
+  <Animated.View style={[StyleSheet.absoluteFill,a]}>{source?<Image source={source} contentFit={variant==='mini'?'fill':'cover'} blurRadius={variant==='mini'?10:18} transition={900} style={[StyleSheet.absoluteFill,{opacity:variant==='mini'?.95:.72}]}/>:null}</Animated.View>
+  {variant!=='mini'?<Animated.View style={[StyleSheet.absoluteFill,b]}><Image source={require('../../assets/motion/caustics.jpg')} contentFit="cover" style={[StyleSheet.absoluteFill,{opacity:.18,mixBlendMode:Platform.OS==='android'&&Number(Platform.Version)<29?undefined:'screen'}]}/></Animated.View>:null}
+  <LinearGradient colors={variant==='mini'?['rgba(0,0,0,.12)','rgba(0,0,0,.40)','rgba(0,0,0,.18)']:variant==='sheet'?['rgba(0,0,0,.38)','rgba(0,0,0,.65)','rgba(0,0,0,.82)']:dark?['rgba(0,0,0,.44)','rgba(0,0,0,.50)','rgba(0,0,0,.72)']:[C.bg+'cc',C.bg+'aa',C.bg+'ee']} start={{x:0,y:0}} end={variant==='mini'?{x:1,y:0}:{x:0,y:1}} style={StyleSheet.absoluteFill}/>
  </View>;
 }
 

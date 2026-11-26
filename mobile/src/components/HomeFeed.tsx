@@ -13,10 +13,10 @@ import { HomeHeader } from './HomeHeader';
 import { WaveHero } from './WaveHero';
 import { WaveArt } from '@/ui/WaveArt';
 import { TrackRow } from './TrackRow';
-import { Insights } from './Insights';
+import { ListeningHighlights } from './ListeningHighlights';
 
 export default function HomeFeed(){
- const layout=useLayout(),[waveVisible,setWaveVisible]=useState(true);
+ const layout=useLayout(),[waveVisible,setWaveVisible]=useState(true),[highlightsReady,setHighlightsReady]=useState(false);
  const history=useLibrary(s=>s.history),liked=useLibrary(s=>s.liked);
  const artists=useLibrary(s=>s.favArtists);
  useMixSeed(s=>s.n);const mix=getMix('foryou');
@@ -25,7 +25,7 @@ export default function HomeFeed(){
  const favorites=liked.length?liked.slice(0,12):personal.data?.slice(0,8)??[];
  const releases=charts.data?.filter(s=>s.layout==='cards'&&s.items.length)??[];
  const shelves=home.data?.filter(s=>s.layout==='cards'&&s.items.length)??[];
- return <Screen scrollEventThrottle={160} onScroll={e=>setWaveVisible(e.nativeEvent.contentOffset.y<800)}>
+ return <Screen scrollEventThrottle={160} onScroll={e=>{const y=e.nativeEvent.contentOffset.y;setWaveVisible(y<800);if(y>=800&&!highlightsReady)setHighlightsReady(true);}}>
   <View style={{gap:28}}>
    <WaveHero fallback={personal.data?.[0]} candidates={personal.data} header={<HomeHeader/>} visible={waveVisible}/>
    <View><SectionHead title={liked.length?'Твои любимые':'Попадание в твой ритм'} more={liked.length?'Все':'Обновить'} onMore={()=>liked.length?router.push('/favorites'):useMixSeed.setState(s=>({n:s.n+1}))}/>
@@ -35,7 +35,7 @@ export default function HomeFeed(){
    {next.data?.length?<View><SectionHead title="Следом за твоим вкусом" more="Все" onMore={()=>router.push({pathname:'/mix/[id]',params:{id:'recommended'}})}/>{next.data.slice(0,4).map(t=><TrackRow key={t.id} track={t} list={next.data!} sub right="plus"/>)}</View>:null}
    <Sections sections={releases} max={2}/><Sections sections={shelves} max={2}/>
    {history.length>2?<View><SectionHead title="Хочется повторить" more="История" onMore={()=>router.push('/history')}/><CardRail items={Array.from(new Map(history.map(h=>[h.track.id,h.track])).values()).slice(0,10).map(t=>({kind:'track',id:t.id,title:t.title,subtitle:t.artist,image:t.artwork,track:t}))}/></View>:null}
-   {layout.content>0?<Insights/>:null}
+   {layout.content>0?<ListeningHighlights active={!waveVisible} ready={highlightsReady}/>:null}
   </View>
  </Screen>;
 }

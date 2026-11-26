@@ -17,13 +17,16 @@ import { Icon } from '@/ui/Icon';
 import { Cover, haptic, T } from '@/ui/kit';
 import { closeSheet, openSheet, openPopover, type MenuAnchor, toast } from '@/ui/overlay';
 import { PlayPause } from '@/ui/PlayPause';
+import { HeartButton } from '@/ui/HeartButton';
+import { ArtworkGlow } from '@/ui/ArtworkGlow';
 
-type Props = { track: Track; list: Track[]; num?: number; sub?: boolean; right?: 'play' | 'plus' | 'heart' | 'none'; playlistId?: string; noWarm?: boolean };
+type Props = { track: Track; list: Track[]; num?: number; sub?: boolean; right?: 'play' | 'plus' | 'heart' | 'none'; playlistId?: string; noWarm?: boolean;glow?:boolean };
 
-export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 'play', playlistId, noWarm }: Props) {
+export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 'play', playlistId, noWarm,glow=false }: Props) {
   const {colors:C}=useTheme();
   const isCur = usePlayer((s) => currentTrack(s)?.id === track.id);
   const playing = usePlayer((s) => s.playing && currentTrack(s)?.id === track.id);
+  const liked=useLibrary(s=>s.liked.some(t=>t.id===track.id));
   const lit = useSharedValue(0);
   const reduced=useReducedMotion();
   /* у первых трёх треков списка сервер заранее берёт ссылку на звук (в поиске — нет: каждая буква давала новые запросы) */
@@ -36,6 +39,7 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
 
   return (
     <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 74, borderRadius: 24, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
+      {glow?<ArtworkGlow uri={track.artwork} style={{left:-56,top:-53,width:180,height:180}} opacity={.48}/>:null}
       <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={e=>more({x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} delayLongPress={420} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 }}
         accessibilityRole="button" accessibilityLabel={`${track.title}, ${track.artist}`} accessibilityHint="Двойное касание — слушать, удержание — меню трека"
         accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Меню трека' }]}
@@ -55,9 +59,7 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
           <Icon name="plus" size={26} />
         </Pressable>
       ) : right === 'heart' ? (
-        <Pressable onPress={() => likeWithUndo(track)} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Убрать ${track.title} из любимых`} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="heartF" size={24} />
-        </Pressable>
+        <HeartButton liked={liked} size={24} onPress={()=>likeWithUndo(track)} label={`${liked?'Убрать':'Добавить'} ${track.title} ${liked?'из любимых':'в любимые'}`}/>
       ) : null}
     </Animated.View>
   );

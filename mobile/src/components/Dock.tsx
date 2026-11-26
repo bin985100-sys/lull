@@ -23,6 +23,7 @@ import { DOCK, F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
 import { haptic, T } from '@/ui/kit';
 import { PlayPause } from '@/ui/PlayPause';
+import { HeartButton } from '@/ui/HeartButton';
 import { slideIn } from '@/ui/anim';
 import { switchTab } from '@/nav';
 import { useLayout } from '@/ui/layout';
@@ -164,9 +165,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
       </Animated.View>
       </View>
       <Animated.View key={'m' + t.id} entering={enter} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 }}>
-        <Pressable onPress={() => likeWithUndo(t)} hitSlop={8} accessibilityRole="button" accessibilityLabel={liked ? 'Убрать из любимых' : 'В любимые'} accessibilityState={{ selected: liked }} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name={liked ? 'heartF' : 'heart'} size={28} color={liked?C.rose:C.tx2}/>
-        </Pressable>
+        <HeartButton liked={liked} onPress={()=>likeWithUndo(t)} label={liked?'Убрать из любимых':'В любимые'}/>
         <View style={{ flex: 1, minWidth: 0 }}>
           <T v="h1" numberOfLines={2} style={{ fontSize: 23, lineHeight: 31, textAlign:'center' }}>{t.title}</T>
           <Pressable disabled={!t.artistId} onPress={() => { close(); router.push({ pathname: '/artist/[id]', params: { id: t.artistId, s: t.source === 'yt' ? 'yt' : 'audius' } }); }} accessibilityRole="link">
