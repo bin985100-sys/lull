@@ -51,8 +51,8 @@ function SkipBtn({ dir, size = 28, box = 48 }: { dir: 'next' | 'prev'; size?: nu
       onPress={() => {
         haptic();
         if (!reduced) {
-          x.set(withSequence(withTiming(6 * k, { duration: 110 }), withSpring(0, { damping: 9, stiffness: 260 })));
-          sc.set(withSequence(withTiming(0.86, { duration: 110 }), withSpring(1, { damping: 10, stiffness: 260 })));
+          x.set(withSequence(withTiming(8 * k, { duration: 150 }), withSpring(0, { damping: 18, stiffness: 145 })));
+          sc.set(withSequence(withTiming(0.88, { duration: 150 }), withSpring(1, { damping: 18, stiffness: 145 })));
         }
         if (dir === 'next') player.next(); else player.prev();
       }}
@@ -143,7 +143,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
   const playSize=ww<350 ? 64 : 84;
   const controlSize=Math.max(28,Math.min(56,(Math.min(680,ww-16)-44-playSize)/4));
   const coverSize = Math.max(130, Math.min(ww - 60, ww > 700 ? 480 : 360, h - safe.top - safe.bottom - DOCK.compact - 465));
-  const enter=useMemo(()=>reduced?undefined:slideIn(s.lastDir==='next'?60:-60,.9,500),[reduced,s.lastDir]);
+  const enter=useMemo(()=>reduced?undefined:slideIn(s.lastDir==='next'?46:-46,.96,620),[reduced,s.lastDir]);
   const close = () => player.expand(false);
   const swipe = useTrackSwipe(close);
   const [boxH, setBoxH] = useState(0);
@@ -155,19 +155,17 @@ function Full({ h, active }: { h: number; active: boolean }) {
     <ScrollView ref={sv} style={{opacity:lyricsOpen?0:1}} pointerEvents={lyricsOpen?'none':'auto'} aria-hidden={lyricsOpen} accessibilityElementsHidden={lyricsOpen} importantForAccessibility={lyricsOpen?'no-hide-descendants':'auto'} showsVerticalScrollIndicator={false} scrollEnabled={!lyricsOpen} contentContainerStyle={{paddingBottom:24,alignItems:'center'}}>
     <View style={{ minHeight:boxH||undefined,width:'100%',maxWidth:680,paddingHorizontal:22+Math.max(safe.left,safe.right),paddingTop:Math.max(18,safe.top+8),paddingBottom:Math.max(44,safe.bottom+24) }}>
       <View style={{position:'absolute',top:8,alignSelf:'center',width:34,height:4,borderRadius:4,backgroundColor:C.tx3}}/>
-      <View {...swipe.handlers}>
+      <View testID="full-player-track-swipe" {...swipe.handlers}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Pressable onPress={close} hitSlop={10} accessibilityRole="button" accessibilityLabel="Свернуть плеер" style={{ width: 48, height: 48, justifyContent: 'center' }}><Icon name="down" size={28} /></Pressable>
         <Pressable onPress={() => openSelectPlaylist(t)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Добавить в плейлист" style={{ width: 48, height: 48, alignItems: 'flex-end', justifyContent: 'center' }}><Icon name="plus" size={24} /></Pressable>
       </View>
       <Animated.View style={swipe.style}>
-      <Animated.View key={'c' + t.id} entering={enter} style={{alignSelf:'center',marginTop:8,width:coverSize,height:coverSize}}><View style={{width:coverSize,height:coverSize,borderRadius:36,overflow:'hidden',backgroundColor:C.s2}}><Image source={{uri:t.artworkLarge||t.artwork}} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced?0:280}/></View></Animated.View>
-      </Animated.View>
-      </View>
+      <Animated.View key={'c' + t.id} entering={enter} style={{alignSelf:'center',marginTop:8,width:coverSize,height:coverSize}}><View style={{width:coverSize,height:coverSize,borderRadius:36,overflow:'hidden',backgroundColor:C.s2}}><Image draggable={false} pointerEvents="none" source={{uri:t.artworkLarge||t.artwork}} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced?0:280}/></View></Animated.View>
       <Animated.View key={'m' + t.id} entering={enter} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 }}>
         <HeartButton liked={liked} onPress={()=>likeWithUndo(t)} label={liked?'Убрать из любимых':'В любимые'}/>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <T v="h1" numberOfLines={2} style={{ fontSize: 23, lineHeight: 31, textAlign:'center' }}>{t.title}</T>
+          <T testID="full-player-title" v="h1" numberOfLines={2} style={{ fontSize: 23, lineHeight: 31, textAlign:'center' }}>{t.title}</T>
           <Pressable disabled={!t.artistId} onPress={() => { close(); router.push({ pathname: '/artist/[id]', params: { id: t.artistId, s: t.source === 'yt' ? 'yt' : 'audius' } }); }} accessibilityRole="link">
             <T v="sub" numberOfLines={1} style={{ fontSize: 14, marginTop: 5,textAlign:'center',color:C.tx,opacity:.8 }}>{t.artist}</T>
           </Pressable>
@@ -175,6 +173,8 @@ function Full({ h, active }: { h: number; active: boolean }) {
 
         <Pressable accessibilityRole="button" accessibilityLabel="Меню текущего трека" onPress={()=>openTrackActions(t)} style={{width:48,height:48,alignItems:'center',justifyContent:'center'}}><Icon name="more" size={25}/></Pressable>
       </Animated.View>
+      </Animated.View>
+      </View>
       {s.error && <Pressable accessibilityRole="button" onPress={() => player.toggle()}><T v="sub">{s.error} · Повторить</T></Pressable>}
       <Seek active={active} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
@@ -226,19 +226,19 @@ function useTrackSwipe(onDown?: () => void) {
       if (onDown && g.dy > 14 && g.dy > Math.abs(g.dx) * 1.3) { mode.current = 'v'; return true; }
       return false;
     },
-    onPanResponderMove: (_, g) => { if (mode.current === 'h') tx.set(g.dx * 0.75); },
+    onPanResponderMove: (_, g) => { if (mode.current === 'h') tx.set(Math.max(-160,Math.min(160,g.dx*.7))); },
     onPanResponderRelease: (_, g) => {
       if (mode.current === 'h') {
         const go = g.dx < -70 || g.vx < -0.7 ? 'next' : g.dx > 70 || g.vx > 0.7 ? 'prev' : null;
         if (go) { haptic(); tx.set(0); if (go === 'next') player.next(); else swipePrev(); }
-        else tx.set(reduced ? 0 : withSpring(0, { damping: 18, stiffness: 220 }));
+        else tx.set(reduced ? 0 : withSpring(0, { damping: 20, stiffness: 160 }));
       } else if (mode.current === 'v' && g.dy > 90) onDown?.();
       mode.current = null;
     },
     onPanResponderTerminate: () => { tx.set(reduced ? 0 : withSpring(0)); mode.current = null; },
     onPanResponderTerminationRequest: () => mode.current !== 'h',
   }));
-  const style = useAnimatedStyle(() => ({ transform: [{ translateX: tx.get() }], opacity: 1 - Math.min(0.5, Math.abs(tx.get()) / 400) }));
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: tx.get() }], opacity: 1 - Math.min(0.3, Math.abs(tx.get()) / 500) }));
   return { handlers: pan.panHandlers, style };
 }
 
@@ -259,7 +259,7 @@ function Mini({compact=false,width=400}:{compact?:boolean;width?:number}) {
       <Animated.View {...swipe.handlers} style={[{ flex: 1, minWidth: 0,height:72 }, swipe.style]}>
       <Pressable onLongPress={e=>openTrackActions(t,undefined,{x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} onPress={() => { haptic(); player.expand(true); }} accessibilityRole="button" accessibilityLabel={`Открыть плеер: ${t.title}. Свайп влево — следующий трек, вправо — предыдущий`} style={{ flex: 1, minWidth: 0, height: 72 }}>
         <Animated.View key={t.id} entering={enter} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: compact ? 6 : 10 }}>
-          {width>155&&<View style={{ width: compact ? 40 : 48, height: compact ? 40 : 48, borderRadius: 24, overflow: 'hidden', backgroundColor: C.s2, borderWidth:StyleSheet.hairlineWidth,borderColor:C.glassLine }}><Image source={{ uri: t.artwork }} style={StyleSheet.absoluteFill} transition={reduced ? 0 : 240}/></View>}
+          {width>155&&<View style={{ width: compact ? 40 : 48, height: compact ? 40 : 48, borderRadius: 24, overflow: 'hidden', backgroundColor: C.s2, borderWidth:StyleSheet.hairlineWidth,borderColor:C.glassLine }}><Image draggable={false} pointerEvents="none" source={{ uri: t.artwork }} style={StyleSheet.absoluteFill} transition={reduced ? 0 : 240}/></View>}
           <View style={{flex:1,minWidth:0,gap:2}}>
             <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: compact ? 13 : 15,color:'#fff' }}>{t.title}</T>
             {width>180&&<View style={{flexDirection:'row',alignItems:'center',gap:6}}>
