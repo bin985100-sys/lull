@@ -1,5 +1,6 @@
 import { resolveThemeValues , useTheme, themeValues } from '@/theme/state';
 import { Surface } from '@/ui/Surface';
+import { PlayerBackdrop } from '@/ui/PlayerBackdrop';
 import { WaveArt } from '@/ui/WaveArt';
 import { BottomNav, type NavKey } from './BottomNav';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -121,7 +122,8 @@ function Seek({ active }: { active: boolean }) {
 
 /* ---------- раскрытый плеер ---------- */
 function Full({ h, active }: { h: number; active: boolean }) {
-  const {dark,colors:C}=useTheme();
+  const {colors:C}=useTheme();
+  const safe=useSafeAreaInsets();
  const st=resolveThemeValues(stThemeTable,C);
   const s = usePlayer();
   const t = currentTrack(s)!;
@@ -132,7 +134,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
   const { width: ww } = useWindowDimensions();
   const playSize=ww<350 ? 64 : 84;
   const controlSize=Math.max(28,Math.min(56,(Math.min(680,ww-16)-44-playSize)/4));
-  const coverSize = Math.max(130, Math.min(ww - 60, ww > 700 ? 480 : 360, h - DOCK.compact - 465));
+  const coverSize = Math.max(130, Math.min(ww - 60, ww > 700 ? 480 : 360, h - safe.top - safe.bottom - DOCK.compact - 465));
   const enter=useMemo(()=>reduced?undefined:slideIn(s.lastDir==='next'?60:-60,.9,500),[reduced,s.lastDir]);
   const close = () => player.expand(false);
   const swipe = useTrackSwipe(close);
@@ -141,9 +143,9 @@ function Full({ h, active }: { h: number; active: boolean }) {
   const lyricsOpen = useLyricsUi((x) => x.open);
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}>
-    <LinearGradient pointerEvents="none" colors={dark?[palette.deep,palette.main,C.bg]:[C.bg,palette.light,C.bg]} style={[StyleSheet.absoluteFill,{opacity:dark?.4:1}]}/>
-    <ScrollView ref={sv} showsVerticalScrollIndicator={false} scrollEnabled={!lyricsOpen} contentContainerStyle={{ paddingBottom: 24 }}>
-    <View style={{ minHeight: boxH || undefined, paddingHorizontal: 22, paddingTop: 18, paddingBottom: 44 }}>
+    <PlayerBackdrop uri={t.artwork} colors={palette} active={active}/>
+    <ScrollView ref={sv} showsVerticalScrollIndicator={false} scrollEnabled={!lyricsOpen} contentContainerStyle={{paddingBottom:24,alignItems:'center'}}>
+    <View style={{ minHeight:boxH||undefined,width:'100%',maxWidth:680,paddingHorizontal:22+Math.max(safe.left,safe.right),paddingTop:Math.max(18,safe.top+8),paddingBottom:Math.max(44,safe.bottom+24) }}>
       <View style={{position:'absolute',top:8,alignSelf:'center',width:34,height:4,borderRadius:4,backgroundColor:C.tx3}}/>
       <View {...swipe.handlers}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -183,14 +185,14 @@ function Full({ h, active }: { h: number; active: boolean }) {
         <SleepButton />
         <Pressable onPress={() => { close(); router.push('/queue'); }} accessibilityRole="button" style={st.extra}><Icon name="queue" size={24} /><T v="small" numberOfLines={1} style={{ fontSize: 11.5 }}>Очередь</T></Pressable>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Волна по текущему треку" onPress={()=>openWave(t)} style={{height:56,borderRadius:28,overflow:'hidden',marginTop:14}}><WaveArt colors={palette} animate={active} inPlayer/><View style={{flex:1,backgroundColor:'rgba(0,0,0,.38)',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10}}><T style={{fontSize:14,color:'#fff',fontFamily:F.bold}}>Волна</T><View style={{width:24,height:24,borderRadius:12,backgroundColor:'#fff',alignItems:'center',justifyContent:'center'}}><Icon name="play" size={12} color="#111"/></View><T style={{fontSize:14,color:'#fff'}}>{{sound:'По треку',artist:'По артисту',discover:'Открытия',favorite:'Любимое',calm:'Спокойнее',energy:'Бодрее'}[mode]}</T></View></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Волна по текущему треку" onPress={()=>openWave(t)} style={{height:56,borderRadius:28,overflow:'hidden',marginTop:14}}><WaveArt colors={palette} animate={active} inPlayer/><View style={{flex:1,backgroundColor:'rgba(0,0,0,.50)',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10}}><T style={{fontSize:14,color:'#fff',fontFamily:F.bold}}>Волна</T><View style={{width:24,height:24,borderRadius:12,backgroundColor:'#fff',alignItems:'center',justifyContent:'center'}}><Icon name="play" size={12} color="#111"/></View><T style={{fontSize:14,color:'#fff'}}>{{sound:'По треку',artist:'По артисту',discover:'Открытия',favorite:'Любимое',calm:'Спокойнее',energy:'Бодрее'}[mode]}</T></View></Pressable>
       {/* подсказка: ниже — текст песни */}
       <Pressable onPress={() => sv.current?.scrollTo({ y: Math.max(0, boxH - 120), animated: true })} accessibilityRole="button" accessibilityLabel="Показать текст песни"
-        style={{ position: 'absolute', left: 0, right: 0, bottom: 6, alignItems: 'center', paddingVertical: 6 }}>
+        style={{ position: 'absolute', left: 0, right: 0, bottom: Math.max(6,safe.bottom+4), alignItems: 'center', paddingVertical: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, opacity: 0.6 }}><T style={{ fontSize: 13, fontFamily: F.semi }}>Текст</T><Icon name="down" size={18} /></View>
       </Pressable>
     </View>
-    <View style={{ paddingHorizontal: 16 }}>
+    <View style={{paddingHorizontal:16,width:'100%',maxWidth:680}}>
       <LyricsCard track={t} />
     </View>
     </ScrollView>
@@ -292,7 +294,7 @@ export function Dock(){
  const fullOn=expanded&&ready;
  useEffect(()=>{if(!expanded)closeLyrics();},[expanded]);
  useEffect(()=>{let next=0;if(expanded){const frame=requestAnimationFrame(()=>{setMounted(true);next=requestAnimationFrame(()=>setReady(true));});return()=>{cancelAnimationFrame(frame);cancelAnimationFrame(next);};}const frame=requestAnimationFrame(()=>setReady(false));const timer=setTimeout(()=>setMounted(false),reduced?0:420);return()=>{cancelAnimationFrame(frame);clearTimeout(timer);};},[expanded,reduced]);
- const fullSide=Math.max(ins.left+4,ins.right+4,layout.available>760?(layout.available-680)/2:8),fullH=height-Math.max(ins.top,18)-16;
+ const fullH=height;
  const motion={transitionDuration:reduced?0:420,transitionTimingFunction:cubicBezier(.2,.75,.2,1)} as const;
  return <>
   {mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} style={[StyleSheet.absoluteFill,{backgroundColor:'rgba(0,0,0,.65)',opacity:fullOn?1:0,transitionProperty:'opacity',...motion}]}><Pressable accessibilityRole="button" accessibilityLabel="Закрыть полный плеер" onPress={()=>player.expand(false)} style={{flex:1}}/></Animated.View>}
@@ -300,8 +302,8 @@ export function Dock(){
    {has&&<View style={{position:'absolute',left:0,right:0,bottom:miniBottom,borderRadius:20,overflow:'hidden',backgroundColor:C.s2,borderWidth:1,borderColor:C.line}}><Mini width={width}/></View>}
    {!layout.rail&&<View style={{position:'absolute',left:0,right:0,bottom:0}}><BottomNav active={active} onSelect={tab=>{player.expand(false);resetTo(`/${tab}` as '/listen'|'/wave'|'/search'|'/collection');}}/></View>}
   </View>
-  {has&&mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} aria-hidden={!expanded} accessibilityViewIsModal={expanded} accessibilityElementsHidden={!expanded} importantForAccessibility={expanded?'auto':'no-hide-descendants'} style={{position:'absolute',left:layout.rail+(fullOn?fullSide:side),right:fullOn?fullSide:side,bottom:fullOn?8:bottom+miniBottom,height:fullOn?fullH:56,borderRadius:fullOn?30:20,opacity:fullOn?1:0,overflow:'hidden',transitionProperty:['left','right','height','bottom','opacity','borderRadius'],...motion}}>
-   <Surface radius={30} style={{flex:1,backgroundColor:C.bg}}><Animated.View style={{flex:1,opacity:fullOn?1:0,transform:[{translateY:fullOn?0:18}],transitionProperty:['opacity','transform'],transitionDuration:reduced?0:300}}><Full h={fullH} active={fullOn}/></Animated.View></Surface>
+  {has&&mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} aria-hidden={!expanded} accessibilityViewIsModal={expanded} accessibilityElementsHidden={!expanded} importantForAccessibility={expanded?'auto':'no-hide-descendants'} style={{position:'absolute',left:fullOn?0:layout.rail+side,right:fullOn?0:side,bottom:fullOn?0:bottom+miniBottom,height:fullOn?fullH:56,borderRadius:fullOn?0:20,opacity:fullOn?1:0,overflow:'hidden',transitionProperty:['left','right','height','bottom','opacity','borderRadius'],...motion}}>
+   <Surface radius={0} style={{flex:1,backgroundColor:C.bg,borderWidth:0}}><Animated.View style={{flex:1,opacity:fullOn?1:0,transform:[{translateY:fullOn?0:18}],transitionProperty:['opacity','transform'],transitionDuration:reduced?0:300}}><Full h={fullH} active={fullOn}/></Animated.View></Surface>
   </Animated.View>}
  </>;
 }
