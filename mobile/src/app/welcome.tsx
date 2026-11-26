@@ -1,32 +1,19 @@
-import { resolveThemeValues, themeValues, useTheme } from '@/theme/state';
+import { useTheme } from '@/theme/state';
 import { finishLogin, useSession } from '@/api/session';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { cancelAnimation, Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { ActivityIndicator, Pressable, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { cancelLogin, login, openAuthUrl, useAuthWait, type Provider } from '@/api/auth';
 import { useLibrary } from '@/store/library';
 
 import { Logo } from '@/ui/Icon';
+import { WaveArt } from '@/ui/WaveArt';
 import { Btn, Screen, T } from '@/ui/kit';
 import { toast } from '@/ui/overlay';
 
 /* Две стеклянные рамки из знака: медленно покачиваются навстречу друг другу */
-function Mark() {
-  const {colors:C}=useTheme();
- const st=resolveThemeValues(stThemeTable,C);
-  const t = useSharedValue(0);
-  const reduced = useReducedMotion();
-  useEffect(() => { t.set(reduced ? 0 : withRepeat(withTiming(1, { duration: 3500, easing: Easing.inOut(Easing.sin) }), -1, true));return()=>cancelAnimation(t); }, [reduced, t]);
-  const a = useAnimatedStyle(() => ({ transform: [{ translateX: t.get() * 4 }, { translateY: t.get() * -4 }, { rotate: `${t.get() * 1.5}deg` }] }));
-  const b = useAnimatedStyle(() => ({ transform: [{ translateX: t.get() * -4 }, { translateY: t.get() * 4 }, { rotate: `${t.get() * -1.5}deg` }] }));
-  return (
-    <View style={{ width: 250, height: 250, alignSelf: 'center', marginTop: 34, marginBottom: 30 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Animated.View style={[st.g, { left: 0, bottom: 0 }, a]} />
-      <Animated.View style={[st.g, { right: 0, top: 0 }, b]} />
-    </View>
-  );
-}
+function Mark(){return <View style={{height:230,width:'100%',maxWidth:420,borderRadius:36,overflow:'hidden',alignSelf:'center',marginVertical:26,backgroundColor:'#24152e'}}><WaveArt animate/></View>;}
 
 /* после входа сначала забираем библиотеку с сервера: на новом телефоне сразу вернутся любимые и настройки */
 export const afterLogin = () => finishLogin();
@@ -48,7 +35,7 @@ export default function Welcome() {
     <Screen dock={false} scroll={false}>
       <Logo size={40} />
       <Mark />
-      <T v="xl" accessibilityRole="header">{'Ближе\nк музыке.'}</T>
+      <T v="xl" accessibilityRole="header">{'Твой ритм.\nТвоя волна.'}</T>
       <View style={{ flex: 1, minHeight: 28 }} />
       {signedIn && (session.loading || session.error) ? (
         <View style={{ gap: 12 }} accessibilityLiveRegion="polite">
@@ -83,9 +70,3 @@ export default function Welcome() {
     </Screen>
   );
 }
-
-const st = themeValues(C=>StyleSheet.create({
-  g: { position: 'absolute', width: '64%', height: '64%', borderRadius: 48, borderWidth: 26, borderColor:C.glassLine, backgroundColor:C.glass },
-}));
-
-const stThemeTable=st;

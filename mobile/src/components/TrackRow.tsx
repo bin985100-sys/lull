@@ -35,12 +35,12 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
   const more = (anchor?:MenuAnchor) => { haptic(); openTrackActions(track, playlistId,anchor); };
 
   return (
-    <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 66, borderRadius: 16, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
-      <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={e=>more({x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} delayLongPress={420} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 6 }}
+    <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 74, borderRadius: 16, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
+      <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={e=>more({x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} delayLongPress={420} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 }}
         accessibilityRole="button" accessibilityLabel={`${track.title}, ${track.artist}`} accessibilityHint="Двойное касание — слушать, удержание — меню трека"
         accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Меню трека' }]}
         onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'longpress' ? more() : play())}>
-        {num ? <T v="sub" style={{ width: 24, fontSize: 16 }}>{num}</T> : <Cover uri={track.artwork} size={58} />}
+        {num ? <T v="sub" style={{ width: 24, fontSize: 16 }}>{num}</T> : <Cover uri={track.artwork} size={52} radius={13} />}
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T numberOfLines={1} style={{ color: isCur ? C.sky : C.tx, fontFamily: isCur ? F.bold : F.semi }}>{track.title}</T>
           {sub ? <T v="small" numberOfLines={1}>{track.artist}</T> : null}

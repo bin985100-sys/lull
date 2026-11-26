@@ -1,10 +1,12 @@
+import { WaveArt } from '@/ui/WaveArt';
+import { useCoverColors } from '@/theme/useCoverColors';
 import { useTheme } from '@/theme/state';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import type { Track } from '@/api/audius';
-import { player, usePlayer } from '@/player/player';
-import { buildWave, WAVE_MODES } from '@/reco/engine';
+import { startPersonalWave } from '@/reco/wave-session';
+import { WAVE_MODES } from '@/reco/engine';
 import { useTaste, type WaveMode } from '@/store/taste';
 import { F } from '@/theme/tokens';
 import { Icon } from '@/ui/Icon';
@@ -15,34 +17,30 @@ import { closeSheet, openSheet, toast } from '@/ui/overlay';
 export function openWave(t: Track) { openSheet(() => <WaveSheet seed={t} />); }
 
 export async function launchWave(seed: Track, mode?: WaveMode) {
-  const r = useTaste.getState().reco;
-  const ac = new AbortController();
-  const list = await buildWave(seed, mode ?? r.waveMode, r.waveLength, ac.signal);
-  if (list.length < 3) { toast('Не получилось собрать волну — попробуй другой режим', 'info'); return false; }
-  player.startWave(list);
-  usePlayer.setState({ expanded: false });
-  toast(`Волна по «${seed.title}»: ${list.length - 1} треков`, 'waves');
-  return true;
+  const ok=await startPersonalWave(seed,mode);
+  if(!ok)toast('Пока не удалось собрать волну — попробуй ещё раз','info');
+  return ok;
 }
 
 function WaveSheet({ seed }: { seed: Track }) {
   const {colors:C}=useTheme();
   const reco = useTaste((s) => s.reco);
+  const colors=useCoverColors(seed.artwork,seed.id);
   const [busy, setBusy] = useState(false);
   return (
     <View style={{ gap: 14 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      <View style={{height:124,borderRadius:28,overflow:'hidden'}}><WaveArt colors={colors}/><View style={{flex:1,backgroundColor:'rgba(0,0,0,.45)',padding:20,flexDirection:'row',alignItems:'center',gap:14}}>
         <Cover uri={seed.artwork} size={56} />
-        <View style={{ flex: 1 }}><T v="h3">Волна по треку</T><T v="small" numberOfLines={1}>{seed.title} · {seed.artist}</T></View>
-      </View>
-      <View style={{ gap: 6 }}>
+        <View style={{ flex: 1 }}><T v="h3" style={{color:'#fff'}}>Волна по треку</T><T numberOfLines={1} style={{fontSize:12,color:'#ddd',marginTop:6}}>{seed.title}</T></View>
+      </View></View>
+      <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
         {WAVE_MODES.map((m) => {
           const on = reco.waveMode === m.id;
           return (
             <Pressable key={m.id} onPress={() => { haptic(); useTaste.getState().setReco('waveMode', m.id); }} accessibilityRole="radio" accessibilityState={{ checked: on }}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20, backgroundColor: on ? C.s3 : 'transparent' }}>
-              <View style={{ flex: 1 }}><T style={{ fontFamily: on ? F.bold : F.semi }}>{m.title}</T><T v="small">{m.text}</T></View>
-              {on ? <Icon name="check" size={22} /> : null}
+              style={{flexGrow:1,flexBasis:'40%',flexDirection:'row',alignItems:'center',gap:8,padding:16,borderRadius:24,backgroundColor:on?C.tx:C.s1}}>
+              <View style={{ flex: 1 }}><T style={{fontFamily:F.semi,fontSize:13,color:on?C.inverse:C.tx}}>{m.title}</T></View>
+              {on ? <Icon name="check" size={18} color={C.inverse}/> : null}
             </Pressable>
           );
         })}

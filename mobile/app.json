@@ -2,12 +2,12 @@
   "expo": {
     "name": "Lull",
     "slug": "lull",
-    "version": "0.2.1",
+    "version": "0.3.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "lull",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#f8f9fc",
+    "backgroundColor": "#0b0b0e",
     "ios": {
       "bundleIdentifier": "website.lull.app",
       "supportsTablet": true,
@@ -16,36 +16,35 @@
           "audio"
         ]
       },
-      "buildNumber": "3"
+      "buildNumber": "4"
     },
     "android": {
       "package": "website.lull.app",
       "adaptiveIcon": {
-        "backgroundColor": "#000000",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ],
-      "versionCode": 3
+      "versionCode": 4
     },
     "web": {
       "output": "single",
       "favicon": "./assets/images/favicon.png",
       "name": "Lull",
       "shortName": "Lull",
-      "themeColor": "#f8f9fc",
-      "backgroundColor": "#f8f9fc"
+      "themeColor": "#0b0b0e",
+      "backgroundColor": "#0b0b0e"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#000000",
+          "backgroundColor": "#0b0b0e",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 96
         }
@@ -59,7 +58,8 @@
           "microphonePermission": false
         }
       ],
-      "./plugins/withCrashLog"
+      "./plugins/withCrashLog",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

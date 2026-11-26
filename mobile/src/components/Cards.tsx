@@ -14,19 +14,19 @@ export const openPlaylist = (p: Pick<Playlist, 'id' | 'source' | 'kind'>) =>
 
 export function openCard(c: Card) {
   if (c.kind === 'artist') openArtist({ id: c.id, source: 'yt' });
-  else if (c.kind === 'track' && c.track) player.play([c.track], c.track.id);
+  else if (c.track) player.play([c.track], c.track.id);
   else openPlaylist({ id: c.id, source: 'yt', kind: c.kind === 'album' ? 'album' : 'playlist' });
 }
 
-export function CardItem({ c, w = 150 }: { c: Card; w?: number }) {
+export function CardItem({ c, w = 156 }: { c: Card; w?: number }) {
   const round = c.kind === 'artist';
   const wide = c.kind === 'track';
   return (
-    <Press onPress={() => openCard(c)} accessibilityRole="button" accessibilityLabel={c.title} style={{ width: wide ? w * 1.4 : w, gap: 8, alignItems: round ? 'center' : 'stretch' }}>
+    <Press onPress={() => openCard(c)} accessibilityRole="button" accessibilityLabel={c.title} style={{ width: wide ? w * 1.4 : w, gap: 10, alignItems: round ? 'center' : 'stretch' }}>
       {wide ? (
         <View style={{ width: '100%', aspectRatio: 16 / 9, borderRadius: 20, overflow: 'hidden' }}><Cover uri={c.image} size="100%" radius={0} style={{ aspectRatio: 16 / 9 }} /></View>
-      ) : <Cover uri={c.image} fallbackUri={round ? artistPhoto(c.id) : undefined} label={c.title} size={w} radius={round ? w / 2 : 24} />}
-      <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 15.5, textAlign: round ? 'center' : 'left' }}>{c.title}</T>
+      ) : <Cover uri={c.image} fallbackUri={round ? artistPhoto(c.id) : undefined} label={c.title} size={w} radius={round ? w / 2 : 18} />}
+      <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: 14, textAlign: round ? 'center' : 'left' }}>{c.title}</T>
       {c.subtitle && !round ? <T v="small" numberOfLines={1}>{c.subtitle}</T> : null}
     </Press>
   );
@@ -35,7 +35,7 @@ export function CardItem({ c, w = 150 }: { c: Card; w?: number }) {
 export function CardRail({ items }: { items: Card[] }) {
   return (
     <Reveal>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 16 }}>
       {items.map((c) => <CardItem key={c.kind + c.id} c={c} />)}
     </ScrollView>
     </Reveal>
@@ -45,7 +45,7 @@ export function CardRail({ items }: { items: Card[] }) {
 export function ArtistRail({ items, size = 112 }: { items: Artist[]; size?: number }) {
   return (
     <Reveal>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 16 }}>
       {items.map((a) => (
         <Press key={a.id} onPress={() => openArtist(a)} accessibilityRole="button" accessibilityLabel={a.name} style={{ width: size, alignItems: 'center', gap: 8 }}>
           <Cover uri={a.avatar} fallbackUri={a.source==='yt' ? artistPhoto(a.id) : undefined} label={a.name} size={size} radius={size / 2} />

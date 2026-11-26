@@ -5,10 +5,10 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { DARK, LIGHT, type ThemeColors } from './palette';
 
 export type ThemeMode='light'|'dark'|'system';
-type AppearanceState={mode:ThemeMode;systemDark:boolean;setMode:(mode:ThemeMode)=>void};
+type AppearanceState={mode:ThemeMode;systemDark:boolean;motion:boolean;setMode:(mode:ThemeMode)=>void};
 export const useAppearance=create<AppearanceState>()(persist((set)=>({
-  mode:'light',systemDark:Appearance?.getColorScheme?.()==='dark',setMode:mode=>set({mode}),
-}),{name:'lull.appearance.v1',storage:createJSONStorage(()=>AsyncStorage),partialize:state=>({mode:state.mode})}));
+  mode:'dark',systemDark:Appearance?.getColorScheme?.()==='dark',motion:true,setMode:mode=>set({mode}),
+}),{name:'lull.appearance.v1',storage:createJSONStorage(()=>AsyncStorage),partialize:state=>({mode:state.mode,motion:state.motion})}));
 const darkFrom=(state:{mode:ThemeMode;systemDark:boolean})=>state.mode==='dark'||state.mode==='system'&&state.systemDark;
 export const isDarkTheme=()=>darkFrom(useAppearance.getState());
 export const getPalette=()=>isDarkTheme() ? DARK : LIGHT;

@@ -1,13 +1,11 @@
 import { resolveThemeValues , useTheme, themeValues } from '@/theme/state';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useLayout } from './layout';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, type PressableProps, type ScrollViewProps, StyleSheet, Text, type TextProps, View, type ViewStyle } from 'react-native';
-import Animated, { cancelAnimation, cubicBezier, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
+import Animated, { cancelAnimation, cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DOCK, EASE, F, R } from '@/theme/tokens';
@@ -15,8 +13,7 @@ import { Icon, type IconName } from './Icon';
 import { PlayPause } from './PlayPause';
 import { slideIn } from './anim';
 import { usePlayer } from '@/player/player';
-import { Glass } from './Glass';
-import { setChromeCollapsed } from './chrome';
+import { Surface } from './Surface';
 
 export const haptic = () => { if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {}); };
 /** A short entrance on mount, with no perpetual animation or per-frame JS. */
@@ -35,9 +32,9 @@ export function Reveal({children,step=0,style}:{children:ReactNode;step?:number;
 /* ---------- текст ---------- */
 type V = 'xl' | 'h1' | 'h2' | 'h3' | 'title' | 'body' | 'sub' | 'small' | 'label';
 const TV: Record<V, any> = themeValues((C) => ({
-  xl: { fontFamily: F.bold, fontSize: 46, lineHeight: 48, letterSpacing: -1.6 },
-  h1: { fontFamily: F.bold, fontSize: 32, lineHeight: 36, letterSpacing: -1 },
-  h2: { fontFamily: F.bold, fontSize: 22, lineHeight: 27, letterSpacing: -0.4 },
+  xl: { fontFamily: F.bold, fontSize: 44, lineHeight: 52, letterSpacing: -1.8 },
+  h1: { fontFamily: F.bold, fontSize: 30, lineHeight: 38, letterSpacing: -1.2 },
+  h2: { fontFamily: F.bold, fontSize: 21, lineHeight: 28, letterSpacing: -0.65 },
   h3: { fontFamily: F.bold, fontSize: 18, lineHeight: 23 },
   title: { fontFamily: F.semi, fontSize: 17, lineHeight: 22 },
   body: { fontFamily: F.medium, fontSize: 15.5, lineHeight: 23, color: C.tx2 },
@@ -87,7 +84,7 @@ export function IconBtn({ name, onPress, label, size = 48, iconSize = 24, ghost,
   return (
     <Press accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={6}
       style={[{ width: size, height: size, borderRadius: size/2, alignItems: 'center', justifyContent: 'center' }, style]}>
-      {!ghost&&<Glass pointerEvents="none" radius={size/2} blur={false} style={StyleSheet.absoluteFill}/>}
+      {!ghost&&<Surface pointerEvents="none" radius={size/2} style={StyleSheet.absoluteFill}/>}
       <Icon name={name} size={iconSize} color={color} />
     </Press>
   );
@@ -96,11 +93,11 @@ export function IconBtn({ name, onPress, label, size = 48, iconSize = 24, ghost,
 export function Btn({ label, icon, kind = 'white', onPress, disabled, small, style, playing }: { label: string; icon?: IconName | 'playpause'; kind?: 'white' | 'dark' | 'flat'; onPress?: () => void; disabled?: boolean; small?: boolean; style?: ViewStyle; playing?: boolean }) {
   const {colors:C}=useTheme();
  const s=resolveThemeValues(sThemeTable,C);
-  const fg = kind === 'white' ? C.inverse : C.tx;
+  const fg = kind === 'white' ? C.onAccent : C.tx;
   return (
     <Press accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
-      style={[s.btn, { minHeight: small ? 48 : 58,paddingVertical:12, backgroundColor: kind === 'white' ? C.tx : kind === 'dark' ? C.s2 : C.s1, opacity: disabled ? 0.32 : 1 }, style]}>
-      {kind!=='white'&&<Glass pointerEvents="none" blur={false} radius={999} style={StyleSheet.absoluteFill}/>}
+      style={[s.btn, { minHeight: small ? 48 : 58,paddingVertical:12, backgroundColor: kind === 'white' ? C.sky : kind === 'dark' ? C.s2 : C.s1, opacity: disabled ? 0.32 : 1 }, style]}>
+      {kind!=='white'&&<Surface pointerEvents="none" radius={999} style={StyleSheet.absoluteFill}/>}
       <T v="title" style={{ color: fg, fontFamily: F.bold, fontSize: small ? 15.5 : 17, flexShrink: 1 }} numberOfLines={2}>{label}</T>
       {icon === 'playpause' ? <PlayPause playing={!!playing} size={22} color={fg} /> : icon ? <Icon name={icon} size={24} color={kind==='white' ? fg : undefined} /> : null}
     </Press>
@@ -125,11 +122,6 @@ export function Cover({ uri, size, radius = R.cover, style, source, label,fallba
 /* ---------- экран со скроллом: отступ под капсулу ---------- */
 /* В браузере стек экранов без анимации переходов — добавляем свою: экран мягко въезжает */
 const WEB_ENTER = Platform.OS === 'web' ? slideIn(0, 1, 360) : undefined;
-function Ambient() {
-  const {dark}=useTheme();
-  return <LinearGradient pointerEvents="none" colors={dark ? ['rgba(50,76,120,.12)','rgba(50,76,120,.035)','transparent'] : ['rgba(115,155,215,.08)','rgba(115,155,215,.025)','transparent']}
-    start={{x:0,y:0}} end={{x:0,y:1}} style={{position:'absolute',top:0,left:0,right:0,height:380}}/>;
-}
 export function Screen({ children, dock = true, scroll = true, style, ...p }: ScrollViewProps & { dock?: boolean; scroll?: boolean; children?: ReactNode }) {
   const {colors:C}=useTheme();
   const reduced=useReducedMotion();
@@ -137,28 +129,13 @@ export function Screen({ children, dock = true, scroll = true, style, ...p }: Sc
   const layout=useLayout();
   const side = Math.max(layout.side, ins.left + 12, ins.right + 12);
   const hasTrack = usePlayer((x) => x.index >= 0);
-  const lastY=useSharedValue(0),travel=useSharedValue(0),direction=useSharedValue(0),collapsed=useSharedValue(false);
-  const externalScroll=p.onScroll;
-  const notifyScroll=useCallback((event:unknown)=>externalScroll?.({nativeEvent:event} as Parameters<NonNullable<ScrollViewProps['onScroll']>>[0]),[externalScroll]);
-  const hasExternal=!!externalScroll;
-  const trackScroll=useAnimatedScrollHandler(event=>{
-    const y=Math.max(0,event.contentOffset.y),delta=y-lastY.get();lastY.set(y);
-    if(Math.abs(delta)>.2){
-      const sign=delta>0 ? 1 : -1;
-      if(sign!==direction.get()){travel.set(0);direction.set(sign);}
-      travel.set(travel.get()+delta);
-      const next=y<24 ? false : travel.get()>36 ? true : travel.get()<-18 ? false : collapsed.get();
-      if(next!==collapsed.get()){collapsed.set(next);scheduleOnRN(setChromeCollapsed,next);}
-    }
-    if(hasExternal)scheduleOnRN(notifyScroll,event);
-  });
   const pb = dock ? (hasTrack ? DOCK.mini : DOCK.compact) + Math.max(ins.bottom, 14) + 30 : Math.max(ins.bottom, 14) + 24;
   const pad = { paddingTop: Math.max(ins.top, 18) + 14, paddingBottom: pb, paddingHorizontal: side };
-  if (!scroll) return <Animated.View entering={reduced ? undefined : WEB_ENTER} style={[{ flex: 1, backgroundColor: C.bg }, pad, style as any]}><Ambient/>{children}</Animated.View>;
+  if (!scroll) return <Animated.View entering={reduced ? undefined : WEB_ENTER} style={[{ flex: 1, backgroundColor: C.bg }, pad, style as any]}>{children}</Animated.View>;
   return (
     <Animated.View entering={reduced ? undefined : WEB_ENTER} style={{ flex: 1, backgroundColor: C.bg }}>
-      <Ambient/>
-      <Animated.ScrollView {...p} onScroll={trackScroll} scrollEventThrottle={16} style={{ flex: 1 }} contentContainerStyle={[pad, style as any]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+      <Animated.ScrollView {...p} style={{ flex: 1 }} contentContainerStyle={[pad, style as any]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {children}
       </Animated.ScrollView>
     </Animated.View>
@@ -196,7 +173,7 @@ export function Empty({ icon, title, text, children }: { icon: IconName; title: 
   const {colors:C}=useTheme();
   return (
     <View style={{ alignItems: 'center', gap: 18, paddingTop: 60, paddingHorizontal: 10 }}>
-      <View style={{ width: 120, height: 120, borderRadius: 36, backgroundColor: C.s2, alignItems: 'center', justifyContent: 'center' }}><Icon name={icon} size={64} /></View>
+      <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: C.s1,borderWidth:1,borderColor:C.line,alignItems: 'center', justifyContent: 'center' }}><Icon name={icon} size={40} /></View>
       <View style={{ gap: 8, alignItems: 'center' }}>
         <T v="h2" style={{ fontSize: 25, textAlign: 'center' }}>{title}</T>
         {text ? <T v="body" style={{ textAlign: 'center' }}>{text}</T> : null}
@@ -243,13 +220,13 @@ export function Segmented<K extends string>({ items, value, onChange, label }: {
   const cell=Math.max(0,(width-8)/items.length),selected=Math.max(0,items.findIndex(([k])=>k===value));
   return (
     <View onLayout={e=>setWidth(e.nativeEvent.layout.width)} style={s.seg} accessibilityRole="tablist" accessibilityLabel={label}>
-      <Glass pointerEvents="none" blur={false} radius={999} style={StyleSheet.absoluteFill}/>
-      <Animated.View pointerEvents="none" style={{position:'absolute',left:4+selected*cell,top:4,bottom:4,width:cell,borderRadius:999,backgroundColor:C.s4,borderWidth:.5,borderColor:C.glassLine,transitionProperty:'left',transitionDuration:reduced?0:240}}/>
+      <Surface pointerEvents="none" radius={999} style={StyleSheet.absoluteFill}/>
+      <Animated.View pointerEvents="none" style={{position:'absolute',left:4+selected*cell,top:4,bottom:4,width:cell,borderRadius:999,backgroundColor:C.tx,borderWidth:0,transitionProperty:'left',transitionDuration:reduced?0:240}}/>
       {items.map(([k, l]) => {
         const on = k === value;
         return (
           <Pressable key={k} onPress={() => { haptic(); onChange(k); }} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} style={s.segBtn}>
-            <T v="small" style={{ color: on ? C.tx : C.tx3, fontFamily: F.bold, fontSize: items.length > 3 ? 12.5 : 14 }} numberOfLines={1}>{l}</T>
+            <T v="small" style={{ color: on ? C.inverse : C.tx2, fontFamily: F.bold, fontSize: items.length > 3 ? 12.5 : 14 }} numberOfLines={1}>{l}</T>
           </Pressable>
         );
       })}
@@ -261,9 +238,9 @@ export const s = themeValues((C) => (StyleSheet.create({
   btn: { borderRadius: R.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingLeft: 26, paddingRight: 22 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
   sec: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',gap:12, marginBottom: 12 },
-  seg: { flexDirection: 'row', height: 50, padding: 4, borderRadius: R.pill, backgroundColor: C.s1 },
+  seg: { flexDirection: 'row', height: 50, padding: 4, borderRadius: R.pill, backgroundColor: C.s2 },
   segBtn: { flex: 1, borderRadius: R.pill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
-  field: { height: 54, borderRadius: R.pill, backgroundColor: C.s2, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 20, paddingRight: 8 },
+  field: { height: 56, borderRadius: 18, backgroundColor: C.s2, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 20, paddingRight: 8 },
   input: { flex: 1, minWidth: 0, height: '100%', color: C.tx, fontFamily: F.semi, fontSize: 16, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null) },
 })));
 

@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
-import { GlassSwitch as Switch } from '@/ui/GlassSwitch';
-import { useAppearance, useTheme, type ThemeMode } from '@/theme/state';
+import { Toggle as Switch } from '@/ui/Toggle';
+import { useAppearance, useTheme } from '@/theme/state';
 import { router } from 'expo-router';
 import { resetTo } from '@/nav';
 import { Linking, Pressable, View } from 'react-native';
@@ -17,25 +17,29 @@ import { F } from '@/theme/tokens';
 import { Icon, type IconName } from '@/ui/Icon';
 import { Cover, Screen, T, TopBar } from '@/ui/kit';
 import { confirm, toast } from '@/ui/overlay';
-import { Glass } from '@/ui/Glass';
+import { Surface } from '@/ui/Surface';
+import { ThemeChoices } from '@/components/ThemeChoices';
+import { WaveArt } from '@/ui/WaveArt';
+import { useCoverColors } from '@/theme/useCoverColors';
 
 function Row({ icon, label, sub, onPress, right }: { icon: IconName; label: string; sub?: string; onPress?: () => void; right?: React.ReactNode }) {
+  const {colors:C}=useTheme();
   const Wrapper=onPress ? Pressable : View;
-  return (
-    <Wrapper onPress={onPress} accessibilityRole={onPress ? 'button' : undefined} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 64, paddingVertical: sub ? 10 : 0 }}>
-      <Icon name={icon} size={28} /><View style={{ flex: 1 }}><T style={{ fontSize: 16.5 }}>{label}</T>{sub ? <T v="small" style={{ marginTop: 3 }}>{sub}</T> : null}</View>{right ?? (onPress ? <Icon name="chev" size={22} /> : null)}
-    </Wrapper>
-  );
+  return <Wrapper onPress={onPress} accessibilityRole={onPress?'button':undefined} style={{flexDirection:'row',alignItems:'center',gap:12,minHeight:70,paddingVertical:12,borderBottomWidth:.5,borderBottomColor:C.line}}>
+    <View style={{width:34,height:34,borderRadius:12,backgroundColor:C.s2,alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={19} color={icon==='trash'?C.danger:C.tx2}/></View>
+    <View style={{flex:1,minWidth:0}}><T style={{fontSize:14,fontFamily:F.semi}}>{label}</T>{sub?<T style={{fontSize:11,lineHeight:17,color:C.tx3,marginTop:4}}>{sub}</T>:null}</View>{right??(onPress?<Icon name="chev" size={17} color={C.tx3}/>:null)}
+  </Wrapper>;
 }
-const Group = ({ title, children }: { title: string; children: React.ReactNode }) => {  return ((
-  <View><T v="h2" style={{ fontSize: 20, marginTop: 24, marginBottom: 12 }}>{title}</T><Glass blur={false} radius={28} style={{ paddingHorizontal: 18, paddingVertical: 4 }}>{children}</Glass></View>
-)); };
+function Group({title,children}:{title:string;children:React.ReactNode}){
+ const {colors:C}=useTheme();return <View style={{marginTop:26}}><T style={{fontSize:10,letterSpacing:1.8,color:C.tx3,fontFamily:F.bold,marginBottom:10,paddingLeft:4}}>{title.toLocaleUpperCase('ru')}</T><Surface radius={22} style={{paddingHorizontal:16,paddingVertical:2}}>{children}</Surface></View>;
+}
 
 export default function Settings() {
   const {colors:C}=useTheme();
   const appearance=useAppearance();
   const lib = useLibrary();
   const mix = !!lib.settings.mixAudio;
+  const colors=useCoverColors(lib.history[0]?.track.artwork,lib.account.name||'profile');
   function toggleMix(v: boolean) {
     if (!canMix) return toast('На iPhone Safari сам останавливает звук сайта, когда играет другое приложение. Это ограничение iOS', 'info');
     player.setMix(v);
@@ -49,20 +53,15 @@ export default function Settings() {
   }
   return (
     <Screen>
-      <TopBar title="Настройки" />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, padding: 14, borderRadius: 26, backgroundColor: C.s1, marginTop: 14 }}>
-        {lib.account.avatar ? <Cover uri={lib.account.avatar} size={60} radius={30} /> : <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.s3, alignItems: 'center', justifyContent: 'center' }}><Icon name="user" size={32} /></View>}
-        <View style={{ flex: 1 }}><T style={{ fontFamily: F.bold, fontSize: 18 }}>{lib.account.name || 'Мой аккаунт'}</T><T v="small">{lib.account.provider ? `Вход через ${lib.account.provider}` : 'Локальный профиль'}</T></View>
+      <TopBar title="Твой Lull"/>
+      <View style={{flexDirection:'row',alignItems:'center',gap:16,marginTop:30,marginBottom:24}}>
+       {lib.account.avatar?<Cover uri={lib.account.avatar} size={66} radius={33}/>:<View style={{width:66,height:66,borderRadius:33,backgroundColor:C.tx,alignItems:'center',justifyContent:'center'}}><T style={{fontSize:27,color:C.inverse,fontFamily:F.bold}}>{Array.from(lib.account.name||'L')[0].toUpperCase()}</T></View>}
+       <View style={{flex:1,minWidth:0}}><T style={{fontSize:10,letterSpacing:2,color:C.tx3}}>ТВОЙ ПРОФИЛЬ</T><T numberOfLines={2} style={{fontSize:27,lineHeight:35,fontFamily:F.bold,letterSpacing:-.8,marginTop:5}}>{lib.account.name||'Твой ритм'}</T><T v="small" style={{marginTop:4}}>{lib.account.provider?'Синхронизация подключена':'Музыка остаётся с тобой'}</T></View>
       </View>
-      <Group title="Оформление">
-        <View accessibilityRole="radiogroup" accessibilityLabel="Тема приложения" style={{flexDirection:'row',gap:6,paddingVertical:12}}>
-          {([['light','Светлая'],['dark','Тёмная'],['system','Системная']] as [ThemeMode,string][]).map(([mode,label])=><Pressable key={mode} accessibilityRole="radio" accessibilityState={{checked:appearance.mode===mode}} aria-checked={appearance.mode===mode} accessibilityLabel={label} onPress={()=>appearance.setMode(mode)} style={{flex:1,minWidth:0,minHeight:48,paddingHorizontal:4,paddingVertical:10,borderRadius:24,alignItems:'center',justifyContent:'center',backgroundColor:appearance.mode===mode ? C.tx : C.s2}}>
-            <T numberOfLines={1} style={{fontSize:12,color:appearance.mode===mode ? C.inverse : C.tx2}}>{label}</T>
-          </Pressable>)}
-        </View>
-      </Group>
+      <Pressable accessibilityRole="button" accessibilityLabel="Настроить рекомендации и волну" onPress={()=>router.push('/prefs')} style={{height:112,borderRadius:24,overflow:'hidden',marginBottom:16}}><WaveArt colors={colors}/><View style={{flex:1,padding:20,flexDirection:'row',alignItems:'center',gap:14}}><View style={{flex:1}}><T style={{fontSize:20,color:'#fff',fontFamily:F.bold}}>Сделай волну своей</T><T style={{fontSize:11,color:'rgba(255,255,255,.7)',marginTop:6}}>Твой вкус. Твой характер музыки.</T></View><View style={{width:36,height:36,borderRadius:18,backgroundColor:'#fff',alignItems:'center',justifyContent:'center'}}><Icon name="arrowUR" size={19} color="#111"/></View></View></Pressable>
+      <View style={{flexDirection:'row',gap:9}}>{([{icon:'heart',label:'Любимое',path:'/favorites'},{icon:'clock',label:'История',path:'/history'},{icon:'download',label:'Перенос',path:'/import'}] as const).map(item=><Pressable key={item.path} accessibilityRole="button" onPress={()=>router.push(item.path)} style={{flex:1,minWidth:0,height:80,borderRadius:20,backgroundColor:C.s1,alignItems:'center',justifyContent:'center',gap:9}}><Icon name={item.icon} size={22} color={C.tx}/><T style={{fontSize:11,fontFamily:F.semi}}>{item.label}</T></Pressable>)}</View>
+      <Group title="Как выглядит Lull"><ThemeChoices/><Row icon="waves" label="Живые фоны" sub="Движение останавливается на скрытых экранах" right={<Switch value={appearance.motion} onValueChange={v=>useAppearance.setState({motion:v})} accessibilityLabel="Живые фоны"/>}/></Group>
       <Group title="Музыка">
-        <Row icon="sliders" label="Рекомендации и волна" onPress={() => router.push('/prefs')} />
         <Row icon="chart" label="Итоги месяца" onPress={() => router.push('/month')} />
         <Row icon="heart" label={`Любимые исполнители · ${lib.favArtists.length}`} onPress={() => router.push('/onboarding')} />
         <Row icon="clock" label="Сохранять историю" right={<Switch value={lib.settings.saveHistory} onValueChange={(v) => lib.setSetting('saveHistory', v)}   accessibilityLabel="Сохранять историю" />} />
@@ -100,7 +99,7 @@ export default function Settings() {
       <Group title="О приложении">
         <Row icon="doc" label="Политика конфиденциальности" onPress={() => Linking.openURL('https://lull.website/privacy.html')} />
         <Row icon="info" label="Музыка — каталог Lull и Audius" />
-        <Row icon="doc" label={`Версия ${Constants.expoConfig?.version ?? '0.2.0'}`} />
+        <Row icon="doc" label={`Версия ${Constants.expoConfig?.version ?? '0.3.0'}`} />
         <Row icon="doc" label="Журнал — отправить разработчику" onPress={() => router.push('/log')} />
         <Row icon="info" label="Показать последнюю ошибку" onPress={async () => { const e = await lastError(); if (e) useCrash.setState({ error: e }); else toast('Ошибок не было', 'check'); }} />
       </Group>

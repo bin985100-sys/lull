@@ -10,7 +10,7 @@ import { DOCK, EASE, F } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
 import { Btn, T } from './kit';
 import { usePlayer } from '@/player/player';
-import { Glass } from './Glass';
+import { Surface } from './Surface';
 
 type Toast = { id: number; icon?: IconName; text: string; action?: { label: string; fn: () => void } };
 type Dialog = { icon?: IconName; title: string; text?: string; safe: string; danger: string; onDanger: () => void };
@@ -64,7 +64,7 @@ export function Overlays() {
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} accessibilityRole="button" accessibilityLabel="Закрыть панель" />
           </Animated.View>
           <Animated.View entering={reduced ? undefined : anchor ? ZoomIn.duration(340).withInitialValues({transform:[{scale:.92}]}) : SlideInDown.duration(520).easing(ease)} exiting={reduced ? undefined : anchor ? ZoomOut.duration(150).withTargetValues({transform:[{scale:.94}]}) : SlideOutDown.duration(360)} style={[st.sheet, { bottom: 8 + ins.bottom * 0.4 },anchored]}>
-            <Glass pointerEvents="none" radius={38} style={StyleSheet.absoluteFill}/>
+            <Surface pointerEvents="none" radius={28} style={StyleSheet.absoluteFill}/>
             {!anchor&&<View style={st.grab} />}
             <ScrollView onContentSizeChange={(_w,h)=>setContentHeight(h)} style={{flexGrow:0,flexShrink:1}} contentContainerStyle={{paddingBottom:8}} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">{sheet()}</ScrollView>
           </Animated.View>
@@ -74,7 +74,7 @@ export function Overlays() {
         <Animated.View entering={reduced ? undefined : FadeIn.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} accessibilityViewIsModal>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
           <View style={st.dlg} accessibilityRole="alert">
-            <Glass pointerEvents="none" radius={34} style={StyleSheet.absoluteFill}/>
+            <Surface pointerEvents="none" radius={26} style={StyleSheet.absoluteFill}/>
             {dialog.icon ? <Icon name={dialog.icon} size={44} /> : null}
             <T v="h2" style={{ fontSize: 24, textAlign: 'center' }}>{dialog.title}</T>
             {dialog.text ? <T v="body" style={{ textAlign: 'center', fontSize: 15 }}>{dialog.text}</T> : null}
@@ -102,9 +102,9 @@ export function Overlays() {
 }
 
 const st = themeValues((C) => (StyleSheet.create({
-  sheet: { position: 'absolute', left: 8, right: 8, borderRadius: 38, overflow: 'hidden', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 22, maxHeight: '84%', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
-  grab: { width: 44, height: 5, borderRadius: 3, backgroundColor: C.tx3, opacity:.35, alignSelf: 'center', marginBottom: 14 },
-  dlg: { width: '86%', maxWidth: 340, borderRadius: 34, overflow:'hidden',padding: 24, paddingBottom: 20, gap: 8, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
+  sheet: { position: 'absolute', left: 8, right: 8, borderRadius: 28, overflow: 'hidden', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 22, maxHeight: '84%', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
+  grab: { width: 44, height: 5, borderRadius: 3, backgroundColor: C.sky, opacity:.6, alignSelf: 'center', marginBottom: 14 },
+  dlg: { width: '86%', maxWidth: 340, borderRadius: 26, overflow:'hidden',padding: 24, paddingBottom: 20, gap: 8, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
   toast: { position: 'absolute', left: 16, right: 16, minHeight: 56, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 18, paddingRight: 8, paddingVertical: 8, backgroundColor: C.s1, borderWidth: StyleSheet.hairlineWidth, borderColor: C.glassLine },
   tAct: { height: 40, paddingHorizontal: 14, borderRadius: 14, backgroundColor: C.s4, justifyContent: 'center' },
 })));

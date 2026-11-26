@@ -22,7 +22,7 @@ export default function Search() {
   const layout=useLayout();
   /* фокус после анимации входа экрана, иначе браузер его теряет */
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
-  useEffect(() => { if(!layout.rail)return;const t = setTimeout(() => inputRef.current?.focus(), 340); return () => clearTimeout(t); }, [layout.rail]);
+  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 340); return () => clearTimeout(t); }, [layout.rail]);
   const q=useChrome(s=>s.query),setQ=setSearchQuery;
   const [debounced, setDebounced] = useState('');
   const [f, setF] = useState<Filter>('all');
@@ -52,7 +52,7 @@ export default function Search() {
 
   return (
     <Screen>
-      {layout.rail?<View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+      {<View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
         <IconBtn name="back" label="Назад" onPress={() => router.back()} />
         <View style={[s.field, { flex: 1 }]}>
           <Icon name="search" size={22} color={C.tx2} />
@@ -60,8 +60,7 @@ export default function Search() {
             onSubmitEditing={() => q.trim() && useLibrary.getState().pushSearch(q.trim())} accessibilityLabel="Поиск" autoCorrect={false} />
           {q ? <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityLabel="Очистить запрос" style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={20} /></Pressable> : null}
         </View>
-      </View>
-      :<T v="h1">Поиск</T>}
+      </View>}
       <View style={{ marginTop: 16, marginBottom: 20 }}>
         <Segmented label="Фильтр" value={f} onChange={setF} items={[['all', 'Всё'], ['tracks', 'Треки'], ['albums', 'Альбомы'], ['artists', 'Артисты']]} />
       </View>

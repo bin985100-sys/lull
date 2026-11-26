@@ -128,8 +128,7 @@ export function LyricsFull({ track }: { track: Track }) {
   return (
     <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(180)} style={[StyleSheet.absoluteFill, { zIndex: 20 }]}>
       {/* плотный фон: размытая обложка под тёмной вуалью — плеер под текстом не просвечивает */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor:C.bg, borderRadius: 44, overflow: 'hidden' }]}>
-        {track.artworkLarge || track.artwork ? <Image source={{ uri: track.artworkLarge || track.artwork }} blurRadius={60} style={[StyleSheet.absoluteFill, { opacity: 0.55, transform: [{ scale: 1.4 }] }]} contentFit="cover" /> : null}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor:C.bg, borderRadius: 28, overflow: 'hidden' }]}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor:C.glass }]} />
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 10 }}>

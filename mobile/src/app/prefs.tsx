@@ -1,4 +1,4 @@
-import { GlassSwitch as Switch } from '@/ui/GlassSwitch';
+import { Toggle as Switch } from '@/ui/Toggle';
 import { useTheme } from '@/theme/state';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
@@ -21,9 +21,9 @@ const BAL: [Balance, string, string][] = [
   [4, 'Только новое', 'То, что ты ещё не слушал'],
 ];
 
-const Group = ({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) => {  return ((
-  <View style={{ marginTop: 26 }}>
-    <T v="h2" style={{ fontSize: 20 }}>{title}</T>
+const Group = ({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) => {  const {colors:C}=useTheme();return ((
+  <View style={{ marginTop: 28 }}>
+    <T style={{fontSize:11,letterSpacing:1.4,fontFamily:F.bold,color:C.tx2}}>{title.toLocaleUpperCase('ru')}</T>
     {hint ? <T v="small" style={{ marginTop: 4 }}>{hint}</T> : null}
     <View style={{ marginTop: 12 }}>{children}</View>
   </View>
@@ -48,17 +48,17 @@ export default function Prefs() {
   const hiddenA = Object.entries(t.hiddenArtists), hiddenT = Object.entries(t.hiddenTracks);
   return (
     <Screen>
-      <TopBar title="Рекомендации" />
+      <TopBar title="Волна по-твоему" />
       <T v="body" style={{ marginTop: 10 }}>Lull учитывает, что и сколько ты слушаешь, лайки, пропуски в первые 30 секунд и то, что ты скрыл. Здесь можно подкрутить, как он подбирает музыку.</T>
 
       <Group title="Знакомое и новое">
-        <View style={{ gap: 6 }}>
+        <View style={{flexDirection:'row',flexWrap:'wrap',gap:10}}>
           {BAL.map(([v, l, h]) => {
             const on = r.balance === v;
             return (
               <Pressable key={v} onPress={() => { haptic(); set('balance', v); }} accessibilityRole="radio" accessibilityState={{ checked: on }}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 20, backgroundColor: on ? C.s2 : 'transparent' }}>
-                <View style={{ flex: 1 }}><T style={{ fontFamily: on ? F.bold : F.semi }}>{l}</T><T v="small">{h}</T></View>
+                style={{flexGrow:1,flexBasis:'42%',minHeight:120,padding:15,borderRadius:20,backgroundColor:C.s1,borderWidth:on?1.5:1,borderColor:on?C.tx:C.line,justifyContent:'space-between',gap:10}}>
+                <View style={{minWidth:0}}><T style={{fontSize:14,fontFamily: on ? F.bold : F.semi }}>{l}</T><T v="small">{h}</T></View>
                 {on ? <Icon name="check" size={22} /> : null}
               </Pressable>
             );
@@ -85,13 +85,13 @@ export default function Prefs() {
       </Group>
 
       <Group title="Волна по умолчанию" hint="Так соберётся волна, если запустить её одним нажатием">
-        <View style={{ gap: 6 }}>
+        <View style={{flexDirection:'row',flexWrap:'wrap',gap:10}}>
           {WAVE_MODES.map((m) => {
             const on = r.waveMode === m.id;
             return (
               <Pressable key={m.id} onPress={() => { haptic(); set('waveMode', m.id); }} accessibilityRole="radio" accessibilityState={{ checked: on }}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 20, backgroundColor: on ? C.s2 : 'transparent' }}>
-                <View style={{ flex: 1 }}><T style={{ fontFamily: on ? F.bold : F.semi }}>{m.title}</T><T v="small">{m.text}</T></View>
+                style={{flexGrow:1,flexBasis:'42%',minHeight:120,padding:15,borderRadius:20,backgroundColor:C.s1,borderWidth:on?1.5:1,borderColor:on?C.tx:C.line,justifyContent:'space-between',gap:10}}>
+                <View style={{minWidth:0}}><T style={{fontSize:14,fontFamily: on ? F.bold : F.semi }}>{m.title}</T><T v="small">{m.text}</T></View>
                 {on ? <Icon name="check" size={22} /> : null}
               </Pressable>
             );

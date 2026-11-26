@@ -16,10 +16,10 @@ function Card({ img, eyebrow, title, sub, icon, onPress, wide }: { img?: string;
   const {colors:C}=useTheme();
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={`${eyebrow}. ${title}. ${sub ?? ''}`}
-      style={{ width: wide ? 300 : 230, height: 176, borderRadius: 28, overflow: 'hidden', backgroundColor: C.s1, padding: 18, justifyContent: 'space-between' }}>
+      style={{ width: wide ? 300 : 230, height: 176, borderRadius: 22, overflow: 'hidden', backgroundColor: C.s1, padding: 18, justifyContent: 'space-between' }}>
       {img ? (
         <>
-          <Image source={{ uri: img }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={28} />
+          <Image source={{ uri: img }} style={StyleSheet.absoluteFill} contentFit="cover"  />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
         </>
       ) : null}

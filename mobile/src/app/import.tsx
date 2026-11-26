@@ -1,4 +1,4 @@
-import { GlassSwitch as Switch } from '@/ui/GlassSwitch';
+import { Toggle as Switch } from '@/ui/Toggle';
 import { resolveThemeValues, useTheme } from '@/theme/state';
 import { FileImport } from '@/components/FileImport';
 /* Перенос музыки из Spotify, Apple Music, SoundCloud, Яндекс Музыки, Deezer и YouTube Music по ссылке. */

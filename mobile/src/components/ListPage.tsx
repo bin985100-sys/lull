@@ -1,7 +1,7 @@
 import { useTheme } from '@/theme/state';
 import { Image } from 'expo-image';
 import { type ReactNode, useEffect } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { FlatList, Platform, StyleSheet, View } from 'react-native';
 import { useLayout } from '@/ui/layout';
 
 import type { Track } from '@/api/audius';
@@ -32,7 +32,7 @@ type Props = {
 };
 const EMPTY_TRACKS:Track[]=[];
 
-export function CoverArt({ cover, size, radius = 34 }: { cover?: Props['cover']; size: number | '100%'; radius?: number }) {
+export function CoverArt({ cover, size, radius = 22 }: { cover?: Props['cover']; size: number | '100%'; radius?: number }) {
   const {colors:C}=useTheme();
   const col = (cover?.collage || []).filter(Boolean).slice(0, 3) as string[];
   return (
@@ -54,6 +54,7 @@ export function CoverArt({ cover, size, radius = 34 }: { cover?: Props['cover'];
 }
 
 export function ListPage(p: Props) {
+  const {colors:C}=useTheme();
 
   const layout=useLayout();
   const size = Math.min(270, layout.content * 0.7);
@@ -62,18 +63,17 @@ export function ListPage(p: Props) {
   useEffect(() => { if (tracks.length) warm(tracks.slice(0, 2)); }, [tracks]);
   const playingHere = usePlayer((s) => s.playing && !!currentTrack(s) && tracks.some((t) => t.id === currentTrack(s)!.id));
   const disabled = !tracks.length;
-  return (
-    <Screen>
+  const header=(<View>
       <TopBar right={p.right} />
-      <View style={{flexDirection:wide ? 'row' : 'column',alignItems:wide ? 'center' : 'stretch',gap:wide ? 28 : 0}}>
+      <View style={{flexDirection:wide ? 'row' : 'column',alignItems:wide ? 'center' : 'stretch',gap:wide ? 28 : 0,backgroundColor:C.s1,padding:20,borderRadius:28,marginTop:16}}>
       <View style={{ marginTop: 4, marginBottom: 18, width:wide ? 270 : undefined }}>{p.cover?.wide ? (
         <Banner source={p.cover.source} label={p.title}/>
       ) : p.loading && !p.cover?.uri && !p.cover?.source ? <Skeleton h={size} w={size} r={34} style={{ alignSelf: 'center' }} /> : <CoverArt cover={p.cover} size={size} />}</View>
       <View style={{flex:wide ? 1 : undefined,minWidth:0}}>
-      <T v="h1" accessibilityRole="header">{p.title}</T>
-      {p.sub ? <View style={{ marginTop: 6 }}>{p.sub}</View> : null}
-      <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
-        <Btn label={playingHere ? 'Пауза' : 'Слушать'} icon="playpause" playing={playingHere} disabled={disabled} style={{ flex: 1 }}
+      <T v="small" style={{color:C.sky,letterSpacing:1.6,marginBottom:8}}>ТВОЯ МУЗЫКА</T><T v="h1" accessibilityRole="header">{p.title}</T>
+      {p.sub ? <View style={{ marginTop: 6 }}>{p.sub}</View> : null}<T v="small" style={{marginTop:8}}>{tracks.length} треков</T>
+      <View style={{ flexDirection: 'row', flexWrap:'wrap', gap: 12, marginTop: 18 }}>
+        <Btn label={playingHere ? 'Пауза' : 'Слушать'} icon="playpause" playing={playingHere} disabled={disabled} style={{ flex: 1,minWidth:layout.content<340?'100%':undefined }}
           onPress={() => (playingHere ? player.toggle() : player.play(tracks, undefined, { shuffle: false }))} />
         <IconBtn name="shuffle" label="Перемешать" size={58} iconSize={26} onPress={() => !disabled && player.play(tracks, undefined, { shuffle: true })} style={{ opacity: disabled ? 0.32 : 1 }} />
         {p.extraBtn}
@@ -83,9 +83,14 @@ export function ListPage(p: Props) {
       </View>
       {p.below}
       <View style={{ height: 18 }} />
-      {p.error && !tracks.length ? <Offline onRetry={p.onRetry || (() => {})} /> : p.loading && !tracks.length ? <ListSkeleton n={6} /> : !tracks.length ? p.empty : (
-        tracks.map((t, i) => <TrackRow key={t.id + i} track={t} list={tracks} num={p.numbered ? i + 1 : undefined} sub={p.sub2} playlistId={p.playlistId} />)
-      )}
-    </Screen>
-  );
+</View>);
+  return <Screen scroll={false}><FlatList
+    style={{flex:1}} data={tracks} keyExtractor={(t,i)=>t.id+':'+i}
+    ListHeaderComponent={header}
+    ListEmptyComponent={p.error?<Offline onRetry={p.onRetry||(()=>{})}/>:p.loading?<ListSkeleton n={6}/>:<View>{p.empty}</View>}
+    renderItem={({item:t,index:i})=><TrackRow track={t} list={tracks} num={p.numbered?i+1:undefined} sub={p.sub2} playlistId={p.playlistId}/>}
+    initialNumToRender={12} maxToRenderPerBatch={8} windowSize={5} updateCellsBatchingPeriod={50}
+    showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled"
+    ListFooterComponent={<View style={{height:16}}/>}
+  /></Screen>;
 }

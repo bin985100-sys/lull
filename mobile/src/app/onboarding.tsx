@@ -52,7 +52,7 @@ export default function Onboarding() {
             {picked.map((a) => (
               <Pressable key={a.id} onPress={() => { haptic(); toggle(a); }} accessibilityRole="button" accessibilityLabel={`Убрать ${a.name}`}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingLeft: 14, paddingRight: 10, borderRadius: 18, backgroundColor: C.tx }}>
-                <T v="small" style={{ color: C.inverse, fontFamily: 'Montserrat_700Bold' }} numberOfLines={1}>{a.name}</T><Icon name="close" size={16} color={C.inverse} />
+                <T v="small" style={{ color: C.inverse, fontFamily: 'Manrope_700Bold' }} numberOfLines={1}>{a.name}</T><Icon name="close" size={16} color={C.inverse} />
               </Pressable>
             ))}
           </View>
