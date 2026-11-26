@@ -20,6 +20,8 @@ import { useLibrary } from '@/store/library';
 import { CrashBanner, Guard, ScreenError } from '@/ui/Crash';
 import { Overlays } from '@/ui/overlay';
 import { SurfaceScene } from '@/ui/Surface';
+import { routeScreenLayout } from '@/ui/RouteMotion';
+import { softBack } from '@/nav';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -30,7 +32,7 @@ const subscribeLibrary=(notify:()=>void)=>useLibrary.persist.onFinishHydration((
 const edge = PanResponder.create({
   onStartShouldSetPanResponder: () => router.canGoBack(),
   onMoveShouldSetPanResponder: (_, g) => g.dx > 8 && Math.abs(g.dy) < 30,
-  onPanResponderRelease: (_, g) => { if (g.dx > 70 && router.canGoBack()) router.back(); },
+  onPanResponderRelease: (_, g) => { if (g.dx > 70 && router.canGoBack()) softBack(); },
 });
 function EdgeBack() {
 
@@ -70,7 +72,7 @@ export default function Root() {
           </>}>
           <Animated.View pointerEvents={expanded?'none':'auto'} aria-hidden={expanded} accessibilityElementsHidden={expanded} style={{flex:1,marginLeft:rail,borderRadius:expanded?24:0,overflow:'hidden',transform:[{scale:expanded?.975:1}],transitionProperty:['transform','borderRadius'],transitionDuration:reduced?0:560}}>
           <Guard name="screens">
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: 'fade_from_bottom' }}>
+          <Stack screenLayout={routeScreenLayout} screenOptions={{headerShown:false,contentStyle:{backgroundColor:C.bg},animation:reduced?'none':'fade_from_bottom',animationDuration:560}}>
             <Stack.Screen name="index" options={{ animation: 'none' }} />
             <Stack.Screen name="listen" options={{ animation: 'fade' }} />
             <Stack.Screen name="wave" options={{ animation: 'fade' }} />

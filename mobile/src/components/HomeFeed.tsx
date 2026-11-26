@@ -25,9 +25,9 @@ export default function HomeFeed(){
  const favorites=liked.length?liked.slice(0,12):personal.data?.slice(0,8)??[];
  const releases=charts.data?.filter(s=>s.layout==='cards'&&s.items.length)??[];
  const shelves=home.data?.filter(s=>s.layout==='cards'&&s.items.length)??[];
- return <Screen scrollEventThrottle={160} onScroll={e=>setWaveVisible(e.nativeEvent.contentOffset.y<640)}>
+ return <Screen scrollEventThrottle={160} onScroll={e=>setWaveVisible(e.nativeEvent.contentOffset.y<800)}>
   <View style={{gap:28}}>
-   <WaveHero fallback={personal.data?.[0]} header={<HomeHeader/>} visible={waveVisible}/>
+   <WaveHero fallback={personal.data?.[0]} candidates={personal.data} header={<HomeHeader/>} visible={waveVisible}/>
    <View><SectionHead title={liked.length?'Твои любимые':'Попадание в твой ритм'} more={liked.length?'Все':'Обновить'} onMore={()=>liked.length?router.push('/favorites'):useMixSeed.setState(s=>({n:s.n+1}))}/>
     {favorites.length?<CardRail items={favorites.map(t=>({kind:'album',id:t.id,title:t.title,subtitle:t.artist,image:t.artwork,track:t}))}/>:personal.error?<Offline onRetry={personal.reload}/>:<ListSkeleton n={2}/>}</View>
    <MoodTiles/>

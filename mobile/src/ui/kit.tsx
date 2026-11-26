@@ -1,3 +1,4 @@
+import { softExit } from '@/nav';
 import { resolveThemeValues , useTheme, themeValues } from '@/theme/state';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -11,7 +12,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DOCK, EASE, F, R } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
 import { PlayPause } from './PlayPause';
-import { slideIn } from './anim';
 import { usePlayer } from '@/player/player';
 import { Surface } from './Surface';
 
@@ -55,7 +55,7 @@ export function T({ v = 'title', style, ...p }: TextProps & { v?: V }) {
 
 /* ---------- нажатие: лёгкое сжатие через CSS-переход, без работы JS на каждом кадре ---------- */
 const PRESS_EASE = cubicBezier(EASE[0], EASE[1], EASE[2], EASE[3]);
-export function Press({ style, outer, children, scaleTo = 0.96, onPress, ...p }: PressableProps & { style?: any; outer?: any; scaleTo?: number; children?: ReactNode }) {
+export function Press({ style, outer, children, scaleTo = 0.98, onPress, ...p }: PressableProps & { style?: any; outer?: any; scaleTo?: number; children?: ReactNode }) {
 
   const [down, setDown] = useState(false);
   const reduced=useReducedMotion();
@@ -74,7 +74,7 @@ export function Press({ style, outer, children, scaleTo = 0.96, onPress, ...p }:
       onPressIn={(e) => { setDown(true); p.onPressIn?.(e); }}
       onPressOut={(e) => { setDown(false); p.onPressOut?.(e); }}
     >
-      <Animated.View style={[visual, { transform: [{ scale: down && !reduced ? scaleTo : 1 }], transitionProperty: 'transform', transitionDuration: reduced ? 0 : down ? 140 : 320, transitionTimingFunction: PRESS_EASE }]}>{children}</Animated.View>
+      <Animated.View style={[visual, { transform: [{ scale: down && !reduced ? scaleTo : 1 }], transitionProperty: 'transform', transitionDuration: reduced ? 0 : down ? 170 : 460, transitionTimingFunction: PRESS_EASE }]}>{children}</Animated.View>
     </Pressable>
   );
 }
@@ -113,7 +113,7 @@ export function Cover({ uri, size, radius = R.cover, style, source, label,fallba
   const initial=label ? Array.from(label.trim())[0]?.toUpperCase() : undefined;
   return (
     <View style={[{ width: size, aspectRatio: 1, borderRadius: radius, overflow: 'hidden', backgroundColor: C.s2 }, style]}>
-      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center',backgroundColor:initial ? '#202434' : C.s2 }]}>{initial ? <T style={{color:C.sky,fontSize:typeof size==='number' ? Math.max(20,size*.32) : 38}}>{initial}</T> : <Icon name="note" size={typeof size === 'number' ? size * 0.4 : 40} color={C.tx3}/>}</View>
+      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center',backgroundColor:C.s2 }]}>{initial ? <T style={{color:C.sky,fontSize:typeof size==='number' ? Math.max(20,size*.32) : 38}}>{initial}</T> : <Icon name="note" size={typeof size === 'number' ? size * 0.4 : 40} color={C.tx3}/>}</View>
       {show ? <Image source={source ?? { uri:effective }} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced ? 0 : 180} recyclingKey={effective} onError={()=>{if(effective)setFailed(old=>[...old.slice(-3),effective]);}}/> : null}
     </View>
   );
@@ -121,19 +121,17 @@ export function Cover({ uri, size, radius = R.cover, style, source, label,fallba
 
 /* ---------- экран со скроллом: отступ под капсулу ---------- */
 /* В браузере стек экранов без анимации переходов — добавляем свою: экран мягко въезжает */
-const WEB_ENTER = Platform.OS === 'web' ? slideIn(0, 1, 360) : undefined;
 export function Screen({ children, dock = true, scroll = true, style, ...p }: ScrollViewProps & { dock?: boolean; scroll?: boolean; children?: ReactNode }) {
   const {colors:C}=useTheme();
-  const reduced=useReducedMotion();
   const ins = useSafeAreaInsets();
   const layout=useLayout();
   const side = Math.max(layout.side, ins.left + 12, ins.right + 12);
   const hasTrack = usePlayer((x) => x.index >= 0);
   const pb = dock ? (hasTrack ? DOCK.mini : DOCK.compact) + Math.max(ins.bottom, 14) + 30 : Math.max(ins.bottom, 14) + 24;
   const pad = { paddingTop: Math.max(ins.top, 18) + 14, paddingBottom: pb, paddingHorizontal: side };
-  if (!scroll) return <Animated.View entering={reduced ? undefined : WEB_ENTER} style={[{ flex: 1, backgroundColor: C.bg }, pad, style as any]}>{children}</Animated.View>;
+  if (!scroll) return <Animated.View style={[{ flex: 1, backgroundColor: C.bg }, pad, style as any]}>{children}</Animated.View>;
   return (
-    <Animated.View entering={reduced ? undefined : WEB_ENTER} style={{ flex: 1, backgroundColor: C.bg }}>
+    <Animated.View style={{ flex: 1, backgroundColor: C.bg }}>
 
       <Animated.ScrollView {...p} style={{ flex: 1 }} contentContainerStyle={[pad, style as any]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {children}
@@ -147,7 +145,7 @@ export function TopBar({ title, right, onBack, close }: { title?: string; right?
  const s=resolveThemeValues(sThemeTable,C);
   return (
     <View style={s.top}>
-      <IconBtn name={close ? 'close' : 'back'} label={close ? 'Закрыть' : 'Назад'} onPress={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/listen')))} />
+      <IconBtn name={close ? 'close' : 'back'} label={close ? 'Закрыть' : 'Назад'} onPress={()=>softExit(onBack??(()=>router.canGoBack()?router.back():router.replace('/listen')))} />
       <T v="h2" numberOfLines={1} style={{ flex: 1, fontSize: 21 }} accessibilityRole="header">{title ?? ''}</T>
       {right}
     </View>
@@ -198,7 +196,7 @@ export function Skeleton({ h, w = '100%', r = 18, style }: { h: number; w?: numb
   const o = useSharedValue(0.45);
   useEffect(() => { o.set(reduced ? .65 : withRepeat(withTiming(1, { duration: 900 }), -1, true));return ()=>cancelAnimation(o); }, [o,reduced]);
   const a = useAnimatedStyle(() => ({ opacity: o.get() }));
-  return <Animated.View style={[{ height: h, width: w, borderRadius: r, backgroundColor: C.s2 }, a, style]} />;
+  return <Animated.View style={[{ height: h, width: w, borderRadius: r, backgroundColor:C.line }, a, style]} />;
 }
 export function ListSkeleton({ n = 4 }: { n?: number }) {
 
@@ -238,9 +236,9 @@ export const s = themeValues((C) => (StyleSheet.create({
   btn: { borderRadius: R.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingLeft: 26, paddingRight: 22 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
   sec: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',gap:12, marginBottom: 12 },
-  seg: { flexDirection: 'row', height: 50, padding: 4, borderRadius: R.pill, backgroundColor: C.s2 },
+  seg: { flexDirection: 'row', height: 50, padding: 4, borderRadius: R.pill, backgroundColor: C.s2,borderWidth:.8,borderColor:C.line },
   segBtn: { flex: 1, borderRadius: R.pill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
-  field: { height: 56, borderRadius: 18, backgroundColor: C.s2, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 20, paddingRight: 8 },
+  field: { height:56,borderRadius:28,backgroundColor:C.s2,borderWidth:.8,borderColor:C.line, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 20, paddingRight: 8 },
   input: { flex: 1, minWidth: 0, height: '100%', color: C.tx, fontFamily: F.semi, fontSize: 16, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null) },
 })));
 

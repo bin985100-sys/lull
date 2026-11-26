@@ -1,7 +1,7 @@
 export const DARK = {
- bg:'#000000',s1:'#171719',s2:'#252527',s3:'#333335',s4:'#474749',
- line:'rgba(255,255,255,.085)',tx:'#f7f5f1',tx2:'#aaa8b0',tx3:'#787780',
- glass:'#18181c',glassLine:'rgba(255,255,255,.10)',
+ bg:'#000000',s1:'#000000',s2:'#000000',s3:'#000000',s4:'#000000',
+ line:'rgba(255,255,255,.15)',tx:'#f7f5f1',tx2:'#aaa8b0',tx3:'#787780',
+ glass:'#000000',glassLine:'rgba(255,255,255,.15)',
  danger:'#ff737d',rose:'#ff617b',sky:'#f7f5f1',violet:'#bc9aff',gold:'#eac573',
  inverse:'#111114',onAccent:'#161112',shadow:'rgba(0,0,0,.22)',
 };

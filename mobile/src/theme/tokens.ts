@@ -7,7 +7,7 @@ export const F = {
   heavy: 'Manrope_800ExtraBold',
 } as const;
 
-export const DOCK = { compact: 84, mini: 158, side: 12 } as const;
+export const DOCK = { compact: 96, mini: 188, side: 12 } as const;
 
 /* Плавности как в прототипе: cubic-bezier(.22,.8,.2,1) */
 export const EASE = [0.22, 0.8, 0.2, 1] as const;

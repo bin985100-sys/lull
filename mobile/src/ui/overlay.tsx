@@ -15,8 +15,8 @@ import { Surface } from './Surface';
 type Toast = { id: number; icon?: IconName; text: string; action?: { label: string; fn: () => void } };
 type Dialog = { icon?: IconName; title: string; text?: string; safe: string; danger: string; onDanger: () => void };
 export type MenuAnchor={x:number;y:number};
-type O = { anchor:MenuAnchor|null;toast: Toast | null; sheet: (() => ReactNode) | null; dialog: Dialog | null };
-export const useOverlay = create<O>(() => ({ anchor:null,toast: null, sheet: null, dialog: null }));
+type O = { anchor:MenuAnchor|null;toast: Toast | null; sheet: (() => ReactNode) | null; backdrop:(()=>ReactNode)|null; dialog: Dialog | null };
+export const useOverlay = create<O>(() => ({ anchor:null,toast: null, sheet: null, backdrop:null, dialog: null }));
 
 let tt: ReturnType<typeof setTimeout> | undefined;
 export function toast(text: string, icon?: IconName, action?: Toast['action']) {
@@ -24,9 +24,9 @@ export function toast(text: string, icon?: IconName, action?: Toast['action']) {
   useOverlay.setState({ toast: { id: Date.now(), text, icon, action } });
   tt = setTimeout(() => useOverlay.setState({ toast: null }), action ? 5000 : 2600);
 }
-export const openSheet = (render: () => ReactNode) => useOverlay.setState({ sheet: render,anchor:null });
-export const openPopover=(render:()=>ReactNode,anchor:MenuAnchor)=>useOverlay.setState({sheet:render,anchor});
-export const closeSheet = () => useOverlay.setState({ sheet: null,anchor:null });
+export const openSheet = (render: () => ReactNode,backdrop?:()=>ReactNode) => useOverlay.setState({ sheet: render,anchor:null,backdrop:backdrop??null });
+export const openPopover=(render:()=>ReactNode,anchor:MenuAnchor)=>useOverlay.setState({sheet:render,anchor,backdrop:null});
+export const closeSheet = () => useOverlay.setState({ sheet: null,anchor:null,backdrop:null });
 export const confirm = (d: Dialog) => useOverlay.setState({ dialog: d });
 
 const ease = Easing.bezier(...EASE);
@@ -34,7 +34,7 @@ const ease = Easing.bezier(...EASE);
 export function Overlays() {
   const {colors:C}=useTheme();
  const st=resolveThemeValues(stThemeTable,C);
-  const { toast: t, sheet, dialog,anchor } = useOverlay();
+  const { toast: t, sheet, dialog,anchor,backdrop } = useOverlay();
   const ins = useSafeAreaInsets();
   const {width,height}=useWindowDimensions();
   const [contentHeight,setContentHeight]=useState(0);
@@ -59,19 +59,20 @@ export function Overlays() {
   return (
     <>
       {sheet ? (
-        <View style={StyleSheet.absoluteFill} accessibilityViewIsModal>
-          <Animated.View entering={reduced ? undefined : FadeIn.duration(220)} exiting={reduced ? undefined : FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { backgroundColor: anchor ? 'rgba(0,0,0,.14)' : 'rgba(0,0,0,0.35)' }]}>
+        <Animated.View collapsable={false} exiting={reduced?undefined:FadeOut.duration(540)} style={StyleSheet.absoluteFill} accessibilityViewIsModal>
+          <Animated.View entering={reduced ? undefined : FadeIn.duration(220)} exiting={reduced ? undefined : FadeOut.duration(420)} style={[StyleSheet.absoluteFill, { backgroundColor: anchor ? 'rgba(0,0,0,.14)' : 'rgba(0,0,0,0.35)' }]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} accessibilityRole="button" accessibilityLabel="Закрыть панель" />
           </Animated.View>
-          <Animated.View entering={reduced ? undefined : anchor ? ZoomIn.duration(340).withInitialValues({transform:[{scale:.92}]}) : SlideInDown.duration(520).easing(ease)} exiting={reduced ? undefined : anchor ? ZoomOut.duration(150).withTargetValues({transform:[{scale:.94}]}) : SlideOutDown.duration(360)} style={[st.sheet, { bottom: 8 + ins.bottom * 0.4 },anchored]}>
+          <Animated.View entering={reduced ? undefined : anchor ? ZoomIn.duration(340).withInitialValues({transform:[{scale:.92}]}) : SlideInDown.duration(600).easing(ease)} exiting={reduced ? undefined : anchor ? ZoomOut.duration(150).withTargetValues({transform:[{scale:.94}]}) : SlideOutDown.duration(500)} style={[st.sheet, { bottom: 8 + ins.bottom * 0.4 },anchored]}>
             <Surface pointerEvents="none" radius={34} style={StyleSheet.absoluteFill}/>
+            {backdrop?.()}
             {!anchor&&<View style={st.grab} />}
             <ScrollView onContentSizeChange={(_w,h)=>setContentHeight(h)} style={{flexGrow:0,flexShrink:1}} contentContainerStyle={{paddingBottom:8}} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">{sheet()}</ScrollView>
           </Animated.View>
-        </View>
+        </Animated.View>
       ) : null}
       {dialog ? (
-        <Animated.View entering={reduced ? undefined : FadeIn.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} accessibilityViewIsModal>
+        <Animated.View entering={reduced?undefined:FadeIn.duration(420)} exiting={reduced?undefined:FadeOut.duration(400)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} accessibilityViewIsModal>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
           <View style={st.dlg} accessibilityRole="alert">
             <Surface pointerEvents="none" radius={32} style={StyleSheet.absoluteFill}/>
@@ -86,7 +87,7 @@ export function Overlays() {
         </Animated.View>
       ) : null}
       {t ? (
-        <Animated.View key={t.id} entering={reduced ? undefined : FadeIn.duration(220)} exiting={reduced ? undefined : FadeOut.duration(200)}
+        <Animated.View key={t.id} entering={reduced ? undefined : FadeIn.duration(220)} exiting={reduced ? undefined : FadeOut.duration(420)}
           style={[st.toast, expanded ? { top: Math.max(ins.top, 18) + 64 } : { bottom }]} accessibilityLiveRegion="polite" accessibilityRole="alert">
           {t.icon ? <Icon name={t.icon} size={22} /> : null}
           <T v="title" style={{ flex: 1, fontSize: 15 }}>{t.text}</T>

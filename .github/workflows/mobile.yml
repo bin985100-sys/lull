@@ -38,6 +38,10 @@ jobs:
         run: node scripts/player.test.mjs
       - name: Тесты продолжения волны
         run: node scripts/wave-session.test.mjs
+      - name: Тесты 3D-карусели
+        run: node scripts/deck.test.mjs
+      - name: Тесты вывода звука
+        run: node scripts/audio-output.test.mjs
       - name: Тесты цветов обложки
         run: node scripts/cover-colors.test.mjs
       - name: Тесты локального кэша звука

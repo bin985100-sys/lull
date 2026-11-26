@@ -36,6 +36,8 @@ export const useProgress = create<Progress>(() => ({ time: 0, duration: 0 }));
 export const currentTrack = (s: PlayerState = usePlayer.getState()) => (s.index >= 0 ? s.queue[s.index] : undefined);
 
 let pl: AudioPlaylist | null = null;
+/** Output routing can inspect the live web host; playback and buffering remain owned here. */
+export const audioOutputHost=()=>pl;
 let ready: Promise<void> | null = null;
 /* В плеере телефона лежат только текущий и следующий треки; base — номер первого из них в очереди приложения.
    Так очередь приложения и плеера не расходятся: раньше после волны и пропусков мог играть не тот трек. */
