@@ -37,6 +37,7 @@ function preserveUpcoming(seed: Track, tracks: Track[]) {
 function apply(seed: Track, tracks: Track[], intent: Intent) {
   const s = usePlayer.getState(), cur = currentTrack(s);
   if (!cur || key(cur) !== key(seed)) return;
+  if (intent === 'continue' && s.continueQueue === false) return;
   if (!s.playing) { pending = { seed: key(seed), session: s.session, tracks, queue: s.queue, intent }; return; }
   applying = true;
   try {
@@ -133,7 +134,7 @@ export function startWaveContinuation() {
       apply(cur, s.queue === next.queue ? next.tracks : preserveUpcoming(cur, next.tracks), next.intent);
       return;
     }
-    if (!s.playing || s.error || !ui.autoContinue || s.repeat !== 'off' || useConnectivity.getState().offline) return;
+    if (!s.playing || s.error || s.continueQueue === false || !ui.autoContinue || s.repeat !== 'off' || useConnectivity.getState().offline) return;
     const remaining = s.queue.length - s.index - 1;
     if (remaining > (waveSession === s.session ? 2 : 0) || continued === nextContext) return;
     if (request) {

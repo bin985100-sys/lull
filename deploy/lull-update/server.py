@@ -372,6 +372,7 @@ def audio_session(s: dict):
 
 # Only preparation requests ask the catalog for bytes. Link-only API clients keep JSON.
 prepare_audio = contextvars.ContextVar("prepare_audio", default=False)
+rejected_audio_methods = contextvars.ContextVar("rejected_audio_methods", default=frozenset())
 READ_AHEAD = os.environ.get("LULL_READ_AHEAD", "1") != "0"
 verified_audio = OrderedDict()
 AUDIO_FRAME = "application/vnd.lull.prepared-audio"
@@ -512,6 +513,8 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
     route_failed = asyncio.Event()
     async def one(client: str, media_id: str | None = None):
         nonlocal deadline
+        if client in rejected_audio_methods.get():
+            return
         started = time.monotonic()
         target = media_id or vid
         try:
@@ -570,9 +573,10 @@ async def resolve_checked(vid: str, fmt: str) -> dict:
             log.info("audio_failure video=%s route=%s reason=%s", vid, client or "default", reason)
             if media_id is None and client != "regional":
                 route_failed.set()
-            if media_id is None and any(x in low for x in ("unavailable", "not available", "country", "claimed content")):
+            recording_age_limit = any(x in low for x in ("sign in to confirm your age", "age-restricted", "age restricted", "inappropriate for some users"))
+            if media_id is None and (recording_age_limit or any(x in low for x in ("unavailable", "not available", "country", "claimed content"))):
                 unavailable.set()
-            if not any(x in low for x in ("unavailable", "not available", "claimed content", "country", "private", "removed")):
+            if not recording_age_limit and not any(x in low for x in ("unavailable", "not available", "claimed content", "country", "private", "removed")):
                 if client in ("regional", "regional_ytdlp") and "403" in low:
                     # A regional 403 can be specific to this recording. Penalize
                     # its speed score without disabling it for unrelated songs.
@@ -953,6 +957,12 @@ class AudioVersionChanged(RuntimeError):
     pass
 
 
+class InvalidAudioContainer(AudioVersionChanged):
+    def __init__(self, message, method=None):
+        super().__init__(message)
+        self.method = method
+
+
 def range_getter(vid: str, fmt: str, s: dict):
     """Загрузчик кусков файла: при 403 одна новая ссылка на всех (остальные куски ждут и повторяют с ней)."""
     state = {"s": s, "refreshes": 0}
@@ -1022,11 +1032,16 @@ def prep_cleanup():
 async def _prepare(vid: str, fmt: str) -> Path:
     try:
         return await _prepare_once(vid, fmt)
-    except AudioVersionChanged:
+    except AudioVersionChanged as failure:
         # A refreshed URL may select another valid format/recording. Start the
         # complete file again; never concatenate bytes from different versions.
         log.info("prepare_restart video=%s reason=version_changed", vid)
-        return await _prepare_once(vid, fmt)
+        method = getattr(failure, "method", None)
+        flag = rejected_audio_methods.set(rejected_audio_methods.get() | ({method} if method else set()))
+        try:
+            return await _prepare_once(vid, fmt)
+        finally:
+            rejected_audio_methods.reset(flag)
 
 
 async def read_chunks(get, spans):
@@ -1083,6 +1098,9 @@ async def download_ranges(get, path: Path, prefix: bytes, total: int):
             await asyncio.gather(*tasks,return_exceptions=True)
 
 
+from audio_validation import validate_audio
+
+
 async def _prepare_once(vid: str, fmt: str) -> Path:
     async with prep_sem:
         t0 = time.monotonic()
@@ -1126,13 +1144,21 @@ async def _prepare_once(vid: str, fmt: str) -> Path:
                 "-movflags", "+faststart", "-f", "ipod", str(tmp),
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
             _, err = await proc.communicate()
-            if proc.returncode == 0 and tmp.exists() and tmp.stat().st_size > 10000:
+            if proc.returncode == 0 and not err and tmp.exists() and tmp.stat().st_size > 10000:
+                try:
+                    await validate_audio(tmp, s.get("durationSec"), "aac")
+                except Exception as failure:
+                    tmp.unlink(missing_ok=True)
+                    raw.unlink(missing_ok=True)
+                    cache.pop(f"{fmt}:{vid}", None)
+                    raise InvalidAudioContainer(str(failure), s.get("method")) from failure
                 tmp.replace(out)
                 raw.unlink(missing_ok=True)
             else:
                 tmp.unlink(missing_ok=True)
                 raw.unlink(missing_ok=True)
-                raise RuntimeError("audio container preparation failed: " + (err or b"").decode(errors="ignore")[:160])
+                cache.pop(f"{fmt}:{vid}", None)
+                raise InvalidAudioContainer("audio container preparation failed: " + (err or b"").decode(errors="ignore")[:160], s.get("method"))
         else:
             raw.replace(out)
         log.info("prepare %s: %d КБ, без повторной загрузки %d КБ, скачано за %.1fs, всего %.1fs", vid, total // 1024, reused // 1024, t1 - t0, time.monotonic() - t0)

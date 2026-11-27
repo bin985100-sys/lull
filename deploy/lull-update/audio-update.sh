@@ -7,16 +7,20 @@ if [ -f "$HERE/resources.sh" ]; then bash "$HERE/resources.sh"; fi
 if [ -f "$HERE/pot-provider-install.sh" ]; then bash "$HERE/pot-provider-install.sh"; fi
 BACKUP="$APP/backups/audio-$(date -u +%Y%m%dT%H%M%SZ)"
 echo 'Checking Python, Node and offline regression tests'
-"$PY" -m py_compile "$HERE/server.py"
+"$PY" -m py_compile "$HERE/server.py" "$HERE/audio_validation.py"
 node --check "$HERE/lull-api.mjs"
 "$PY" "$HERE/test_server.py"
+"$PY" "$HERE/test_audio_validation.py"
+"$PY" "$HERE/test_source_retry.py"
 mkdir -p "$BACKUP"
 cp "$APP/server.py" "$BACKUP/server.py"
 cp "$APP/lull-api.mjs" "$BACKUP/lull-api.mjs"
+if [ -f "$APP/audio_validation.py" ]; then cp "$APP/audio_validation.py" "$BACKUP/audio_validation.py"; fi
 rollback() {
   echo "Update failed; restoring $BACKUP"
   cp "$BACKUP/server.py" "$APP/server.py"
   cp "$BACKUP/lull-api.mjs" "$APP/lull-api.mjs"
+  if [ -f "$BACKUP/audio_validation.py" ]; then cp "$BACKUP/audio_validation.py" "$APP/audio_validation.py"; fi
   systemctl restart lull-api lull-relay
   if systemctl is-active --quiet lull-region-api; then systemctl restart lull-region-api; fi
   if systemctl is-active --quiet lull-us-api; then systemctl restart lull-us-api; fi
@@ -24,6 +28,8 @@ rollback() {
 trap 'rollback' ERR
 install -m 644 "$HERE/server.py" "$APP/server.py.new"
 install -m 644 "$HERE/lull-api.mjs" "$APP/lull-api.mjs.new"
+install -m 644 "$HERE/audio_validation.py" "$APP/audio_validation.py.new"
+mv "$APP/audio_validation.py.new" "$APP/audio_validation.py"
 mv "$APP/server.py.new" "$APP/server.py"
 mv "$APP/lull-api.mjs.new" "$APP/lull-api.mjs"
 systemctl restart lull-api lull-relay

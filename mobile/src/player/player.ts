@@ -16,10 +16,14 @@ import { localAudio, pinAudio, prefetchAudio } from '@/player/audio-cache';
 
 export type Repeat = 'off' | 'all' | 'one';
 type Dir = 'next' | 'prev';
+export type QueueTrack = Track & { queueEntryId?: string };
+let queueEntrySerial = 0;
+const queueEntry = (track: Track): QueueTrack => ({ ...track, queueEntryId: `queued-${++queueEntrySerial}` });
 
 type PlayerState = {
   session: number; // changes only when a listener starts a different playback context
-  queue: Track[]; // весь список, index — текущий
+  queue: QueueTrack[]; // весь список, index — текущий
+  continueQueue: boolean;
   index: number;
   playing: boolean;
   buffering: boolean;
@@ -32,7 +36,7 @@ type PlayerState = {
 type Progress = { time: number; duration: number };
 
 export const usePlayer = create<PlayerState>(() => ({
-  session: 0, queue: [], index: -1, playing: false, buffering: false, shuffle: false, repeat: 'off', expanded: false, lastDir: 'next', error: null,
+  session: 0, queue: [], continueQueue: true, index: -1, playing: false, buffering: false, shuffle: false, repeat: 'off', expanded: false, lastDir: 'next', error: null,
 }));
 export const useProgress = create<Progress>(() => ({ time: 0, duration: 0 }));
 
@@ -313,6 +317,9 @@ async function jump(i: number, dir: 'next' | 'prev') {
 }
 /* Поставить в плеер трек i очереди и следующий за ним, и сразу играть */
 function mount(i: number, resumeAt = 0) {
+  // Web playlists emit skipTo/clear events synchronously. Suppress the old
+  // window before rebuilding, including a jump to an already primed song.
+  loading = true;
   const q = usePlayer.getState().queue;
   pinAudio(q.slice(i, i + 2).map((t) => t.id));
   log(`mount: ${i} «${q[i]?.title}» ${q[i]?.id}`);
@@ -387,12 +394,24 @@ function ensureNext() {
   prime(want).then((ok) => { const st = usePlayer.getState(); if (ok && st.queue[base + nativeLen]?.id === want.id) ensureNext(); });
 }
 
+// A hardware transition may already be audible while its JS event is still in
+// transit. Queue edits must first acknowledge it, never remove that live item.
+function syncNativeTrack() {
+  if (!pl || loading || !nativeLen) return;
+  const nativeIndex = pl.currentIndex;
+  const s = usePlayer.getState(), index = base + nativeIndex;
+  if (nativeIndex < 0 || nativeIndex >= nativeLen || !s.queue[index] || index === s.index) return;
+  touch();
+  usePlayer.setState({ index, lastDir: index < s.index ? 'prev' : 'next' });
+  onTrackStart();
+}
+
 async function jumpInner(i: number, dir: 'next' | 'prev') {
   const seq = ++loadSeq;
   const t = usePlayer.getState().queue[i];
   if (!t) return;
   wantPlay = true;
-  usePlayer.setState({ index: i, lastDir: dir, playing: true });
+  usePlayer.setState({ index: i, lastDir: dir, playing: true, error: null });
   useProgress.setState({ time: 0, duration: t.duration || 0 });
   /* следующий трек уже лежит в плеере и готов — просто переходим на него, без перезагрузки */
   const k = i - base;
@@ -419,7 +438,7 @@ async function load(queue: Track[], index: number) {
   startup = { id: queue[index].id, at: Date.now() };
   loading = true; wantPlay = true;
   silence();
-  usePlayer.setState(s => ({ session: s.session + 1, queue, index, lastDir: 'next', error: null, playing: true, buffering: true }));
+  usePlayer.setState(s => ({ session: s.session + 1, queue, continueQueue: true, index, lastDir: 'next', error: null, playing: true, buffering: true }));
   useProgress.setState({ time: 0, duration: queue[index]?.duration || 0 });
   const t0 = Date.now();
   log(`play: «${queue[index]?.title}» ${queue[index]?.id}, в очереди ${queue.length}, local=${!!localAudio(queue[index]?.id || '')}`);
@@ -499,9 +518,10 @@ export const player = {
     jump(i, i < s.index ? 'prev' : 'next');
   },
   playNext(t: Track) {
+    syncNativeTrack();
     const s = usePlayer.getState();
     if (!currentTrack(s)) { void player.play([t], t.id); return; }
-    const entry = { ...t };
+    const entry = queueEntry(t);
     const q = s.queue.slice(); q.splice(s.index + 1, 0, entry);
     usePlayer.setState({ queue: q });
     ensureNext();
@@ -512,32 +532,52 @@ export const player = {
     };
   },
   addToQueue(t: Track) {
+    syncNativeTrack();
     const s = usePlayer.getState();
-    if (!currentTrack(s)) return player.play([t], t.id);
-    usePlayer.setState({ queue: [...s.queue, t] });
-    if (s.index === s.queue.length - 1) ensureNext();
+    if (!currentTrack(s)) { void player.play([t], t.id); return; }
+    const q = s.queue.slice();
+    let position = s.index + 1;
+    // Manual additions are FIFO and take priority over the album/radio tail.
+    for (let i = position; i < q.length; i++) if (q[i].queueEntryId) position = i + 1;
+    const entry = queueEntry(t);
+    q.splice(position, 0, entry);
+    usePlayer.setState({ queue: q });
+    ensureNext();
+    return () => {
+      const state = usePlayer.getState(), index = state.queue.indexOf(entry);
+      if (index > state.index) player.removeAt(index);
+    };
   },
   removeAt(i: number) {
+    syncNativeTrack();
     const s = usePlayer.getState();
-    if (i === s.index) return;
+    if (!Number.isInteger(i) || i <= s.index || i >= s.queue.length) return;
     const q = s.queue.slice(); q.splice(i, 1);
-    if (i < s.index) base--;
-    usePlayer.setState({ queue: q, index: i < s.index ? s.index - 1 : s.index });
-    if (i === s.index + 1) ensureNext();
+    usePlayer.setState({ queue: q });
+    ensureNext();
   },
   move(from: number, to: number) {
+    syncNativeTrack();
     const s = usePlayer.getState();
-    if (from === s.index || to <= s.index || from === to) return;
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from <= s.index || to <= s.index || from >= s.queue.length || to >= s.queue.length || from === to) return;
     const q = s.queue.slice(); const [t] = q.splice(from, 1); q.splice(to, 0, t);
     usePlayer.setState({ queue: q });
     ensureNext();
   },
   /* Волна: если исходный трек уже играет, не перезапускаем его, а меняем всё, что дальше */
   startWave(list: Track[]) {
+    syncNativeTrack();
     const s = usePlayer.getState();
     const cur = currentTrack(s);
     if (cur && list[0] && trackKey(list[0]) === trackKey(cur)) {
-      usePlayer.setState({ queue: [...s.queue.slice(0, s.index + 1), ...list.slice(1)], shuffle: false });
+      const manual = s.queue.slice(s.index + 1).filter(t => t.queueEntryId);
+      const proposed = new Set(list.slice(1).map(t => (t as QueueTrack).queueEntryId));
+      const missing = manual.filter(t => !proposed.has(t.queueEntryId));
+      const missingKeys = new Set(missing.map(trackKey));
+      const tail = list.slice(1).filter(t => (t as QueueTrack).queueEntryId || !missingKeys.has(trackKey(t)));
+      // A merged wave may already contain the edited manual order. Preserve it;
+      // prepend only entries absent from the newly generated recommendations.
+      usePlayer.setState({ queue: [...s.queue.slice(0, s.index + 1), ...missing, ...tail], continueQueue: true, shuffle: false });
       ensureNext();
       if (!s.playing) player.toggle();
       return;
@@ -545,8 +585,9 @@ export const player = {
     return player.play(list, list[0]?.id, { shuffle: false });
   },
   clearUpcoming() {
+    syncNativeTrack();
     const s = usePlayer.getState();
-    usePlayer.setState({ queue: s.queue.slice(0, s.index + 1) });
+    usePlayer.setState({ queue: s.queue.slice(0, s.index + 1), continueQueue: false });
     ensureNext();
   },
   toggleShuffle() {

@@ -15,7 +15,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lull-player-'));
 /* ---------- имитация AudioPlaylist ---------- */
 globalThis.__makePlaylist = () => {
   const L = {}; const lag = () => 20 + Math.random() * 60;
-  const emit = (ev, data) => setTimeout(() => (L[ev] || []).forEach((f) => f(data)), lag());
+  const emit = (ev, data) => globalThis.__syncPlaylistEvents ? (L[ev] || []).forEach(f=>f(data)) : setTimeout(() => (L[ev] || []).forEach((f) => f(data)), lag());
   const p = {
     sources: [], currentIndex: 0, playing: false, time: 0, loop: 'none', log: [], isLoaded:true,isBuffering:false,
     get currentTime(){return p.time;},get duration(){return 200;},
@@ -33,7 +33,7 @@ globalThis.__makePlaylist = () => {
     play() { p.playing = p.sources.length > 0; p.isLoaded=true; },
     pause() { p.playing = false; },
     seekTo(t) { p.time = t; },
-    setActiveForLockScreen(active,meta) { p.lastMeta=meta; p.lockSets = (p.lockSets || 0) + 1; }, updateLockScreenMetadata(meta) { p.lastMeta=meta; if (Date.now() - (p.lastChange || 0) < 300) throw new Error('Invalid PlayerInfo update: метаданные во время переключения'); p.lockUpdates = (p.lockUpdates || 0) + 1; }, clearLockScreenControls() {},
+    setActiveForLockScreen(active,meta) { p.lastMeta=meta; p.lockSets = (p.lockSets || 0) + 1; }, updateLockScreenMetadata(meta) { p.lastMeta=meta; if (globalThis.__platform !== 'web' && Date.now() - (p.lastChange || 0) < 300) throw new Error('Invalid PlayerInfo update: метаданные во время переключения'); p.lockUpdates = (p.lockUpdates || 0) + 1; }, clearLockScreenControls() {},
     get current() { return p.playing ? p.sources[p.currentIndex]?.uri : null; },
     /* «звук идёт»: раз в 100 мс шлём статус, как настоящий плеер */
     tick() {
@@ -51,7 +51,7 @@ const STUBS = {
   '@/player/audio-cache': `export const localAudio=id=>globalThis.__localAudio?.get(id); export const pinAudio=()=>{}; export const prefetchAudio=()=>{};`,
   'expo-audio': `export const createAudioPlaylist=()=>globalThis.__makePlaylist(); export const setAudioModeAsync=async()=>{};`,
   '@react-native-async-storage/async-storage': `const m=new Map(); export default { getItem:async k=>m.get(k)??null, setItem:async (k,v)=>{m.set(k,v)}, removeItem:async k=>{m.delete(k)} };`,
-  'react-native': `export const Platform={OS:'android'}; export const AppState={addEventListener(){return {remove(){}}}};`,
+  'react-native': `export const Platform={OS:globalThis.__platform||'android'}; export const AppState={addEventListener(){return {remove(){}}}};`,
   '@/ui/Crash': `export const log=(m)=>{ if(process.env.V) console.log('   log:',m) }; export const logNow=async(m)=>{if(globalThis.__logDelay)await new Promise(r=>setTimeout(r,globalThis.__logDelay));}; export const report=(e,w)=>{ (globalThis.__reports ||= []).push(w+': '+e?.message); if(process.env.V) console.log('   REPORT',w,e?.message) };`,
   '@/api/lull': `export const streamUrlYt=id=>'yt:'+id; export const warm=()=>{}; export const lull={ upNext: async()=>[] };`,
   '@/api/audius': `export const streamUrl=id=>'au:'+id;`,
@@ -121,7 +121,6 @@ await test('Нажатие на готовый следующий в том же
   if (!item) throw new Error('следующий не подготовлен');
   m.player.move(3, 4); m.player.move(4, 3);
   if (native.sources[1] !== item) throw new Error('перестановка дальних треков сбросила буфер');
-  m.player.addToQueue(T('extra'));
   await m.player.play(LIST.map(t => ({...t})), 's1');
   if (native.currentIndex !== 1 || native.sources[1] !== item || native.current !== 'yt:s1') throw new Error('потерян буфер следующего');
   if (m.usePlayer.getState().queue.length !== LIST.length) throw new Error('не восстановлен выбранный список');
@@ -254,6 +253,59 @@ await test('Несколько аппаратных назад до достав
  p.next();await settle(700);p.next();await settle(700);if(p.currentIndex!==2)throw Error('Тест не подготовил очередь');
  p.previous();p.previous();await settle(1100);same(m,'Аппаратная серия');
  if(m.currentTrack().id!=='s0'||p.lastMeta?.title!==LIST[0].title)throw Error('Метаданные застряли после серии аппаратных кнопок');m.player.stop();
+});
+await test('Ручная очередь играет следующей в порядке добавления, перед альбомом', async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(700);
+ m.player.addToQueue(T('manual-a'));m.player.addToQueue(T('manual-b'));await settle(600);
+ if(m.usePlayer.getState().queue.slice(1,3).map(t=>t.id).join()!=='manual-a,manual-b')throw Error('Ручные треки затерялись в конце альбома');
+ m.player.next();await settle(650);if(same(m,'Первый из очереди')!=='manual-a')throw Error('Первый ручной трек не заиграл');
+ globalThis.__pl.next();await settle(650);if(same(m,'Второй из очереди')!=='manual-b')throw Error('Аппаратная кнопка пропустила ручную очередь');m.player.stop();
+});
+await test('Холодный добавленный трек играет при немедленном переключении',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(300);slow.add('cold-manual');
+ m.player.addToQueue(T('cold-manual'));m.player.next();await settle(1100);
+ if(same(m,'Холодная очередь')!=='cold-manual')throw Error('Добавленный трек не включился');m.player.stop();
+});
+await test('Перестановка и удаление очереди обновляют звук, сохраняя текущий трек',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(800);const p=globalThis.__pl;p.time=42;
+ m.player.move(3,1);await settle(500);if(p.current!=='yt:s0'||p.time<42)throw Error('Редактирование перезапустило текущий трек');
+ m.player.removeAt(1);await settle(400);m.player.move(3,1);await settle(500);p.next();await settle(600);
+ if(same(m,'Порядок после редактирования')!=='s4')throw Error('Нативная очередь не приняла новый порядок');m.player.stop();
+});
+await test('Неверные индексы и редактирование текущего трека не портят очередь',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(400);const q=m.usePlayer.getState().queue;
+ m.player.removeAt(-1);m.player.removeAt(500);m.player.move(-1,2);m.player.move(1,500);m.player.move(0,1);m.player.removeAt(0);
+ if(m.usePlayer.getState().queue!==q)throw Error('Неверный индекс изменил очередь');m.player.stop();
+});
+await test('Добавление до доставки нативного перехода не подменяет уже играющую песню',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(900);const p=globalThis.__pl;
+ p.next();m.player.playNext(T('manual-race'));await settle(650);
+ if(same(m,'Переход в фоне')!=='s1')throw Error('Добавление подменило уже играющий трек');
+ p.next();await settle(650);if(same(m,'Ручной трек после перехода')!=='manual-race')throw Error('Добавление потерялось после нативного перехода');m.player.stop();
+});
+
+await test('Синхронный плеер веба не откатывает трек при открытии готовой песни из очереди',async()=>{
+ globalThis.__syncPlaylistEvents=true;globalThis.__platform='web';
+ try{const m=await freshApp();await m.player.play(LIST,'s0');await settle(700);m.player.next();await settle(600);
+ m.player.skipTo(3);await settle(800);if(same(m,'Выбор готового дальнего трека')!=='s3')throw Error('Синхронное событие очистки откатило индекс');
+ if(globalThis.__pl.lastMeta?.title!==LIST[3].title)throw Error('Метаданные не следуют выбранному треку');m.player.stop();
+ }finally{globalThis.__syncPlaylistEvents=false;globalThis.__platform='android';}
+});
+await test('Новая волна сохраняет ручную очередь и повторные добавления одной песни',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(500);m.player.addToQueue(T('chosen'));m.player.addToQueue(T('chosen'));
+ m.player.startWave([LIST[0],T('radio')]);
+ if(m.usePlayer.getState().queue.slice(1).map(t=>t.id).join()!=='chosen,chosen,radio')throw Error('Волна затёрла ручные добавления');
+ const q=m.usePlayer.getState().queue;m.player.move(3,1);const edited=m.usePlayer.getState().queue;
+ m.player.startWave([edited[0],...edited.slice(1),T('more')]);
+ if(m.usePlayer.getState().queue.slice(1).map(t=>t.id).join()!=='radio,chosen,chosen,more')throw Error('Волна сбросила изменённый порядок');
+ if(q[1]===q[2])throw Error('Повторные добавления неразличимы');m.player.stop();
+});
+await test('Недоступная песня в очереди не оставляет ошибку при выборе следующей',async()=>{
+ const fetch=globalThis.fetch;try{globalThis.fetch=async(url,...args)=>String(url).includes('unavailable')?{ok:false}:fetch(url,...args);
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(400);m.player.playNext(T('unavailable'));m.player.next();await settle(400);
+ if(!m.usePlayer.getState().error)throw Error('Ошибка источника не обнаружена');m.player.next();await settle(650);
+ if(same(m,'После недоступного трека')!=='s1'||m.usePlayer.getState().error)throw Error('Следующая песня сохранила состояние ошибки');m.player.stop();
+ }finally{globalThis.fetch=fetch;}
 });
 console.log(`\n${pass} прошло, ${fail} упало`);
 process.exit(fail ? 1 : 0);

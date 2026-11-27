@@ -12,7 +12,7 @@ import { useTaste } from '@/store/taste';
 import { Artwork } from '@/ui/Artwork';
 import { router, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Platform, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
+import { ActivityIndicator, Keyboard, Platform, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance, type ViewStyle } from 'react-native';
 import Animated, {
   Easing, cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -81,7 +81,7 @@ function BigPlay({ playing, loading, size=84 }: { playing: boolean; loading?: bo
 }
 
 /* ---------- прогресс ---------- */
-function Seek({ active }: { active: boolean }) {
+function Seek({ active, onScrubChange }: { active: boolean; onScrubChange: (scrubbing: boolean) => void }) {
   const {colors:C}=useTheme();
   /* скрытый плеер не перерисовывается от прогресса */
   const time = useProgress((x) => (active ? x.time : 0));
@@ -96,26 +96,35 @@ function Seek({ active }: { active: boolean }) {
   const fill=useAnimatedStyle(()=>({transform:[{scaleX:progress.get()}]}));
   const toSec = useCallback((x: number) => Math.max(0, Math.min(duration, (x / w) * duration)),[duration,w]);
   const toSecRef = useRef(toSec);
+  const scrub = useRef({ at: (_dx: number): number => 0, track: currentTrack() });
   // eslint-disable-next-line react-hooks/refs -- PanResponder stores callbacks; refs are read only during touch events.
   const [pan] = useState(()=>PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e) => setDrag(toSecRef.current(e.nativeEvent.locationX)),
-    onPanResponderMove: (e) => setDrag(toSecRef.current(e.nativeEvent.locationX)),
-    onPanResponderRelease: (e) => { const s = toSecRef.current(e.nativeEvent.locationX); player.seek(s); setDrag(null); },
-    onPanResponderTerminate: () => setDrag(null),
+    onPanResponderGrant: (e) => {
+      const startX = e.nativeEvent.locationX, convert = toSecRef.current;
+      scrub.current = { at: dx => convert(startX + dx), track: currentTrack() };
+      onScrubChange(true); setDrag(scrub.current.at(0));
+    },
+    // locationX changes coordinate systems when the finger leaves a child or
+    // the rail. Gesture dx remains anchored to the original touch, even below it.
+    onPanResponderMove: (_, g) => { if (scrub.current.track === currentTrack()) setDrag(scrub.current.at(g.dx)); },
+    onPanResponderRelease: (_, g) => { if (scrub.current.track === currentTrack()) player.seek(scrub.current.at(g.dx)); setDrag(null); onScrubChange(false); },
+    onPanResponderTerminate: () => { setDrag(null); onScrubChange(false); },
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
   }));
   useEffect(()=>{toSecRef.current=toSec;},[toSec]);
   return (
     <View style={{ marginTop: 18 }}>
-      <View onLayout={(e) => setW(e.nativeEvent.layout.width)} {...pan.panHandlers} style={{height:36,justifyContent:'center'}}
+      <View testID="track-seek" onLayout={(e) => setW(e.nativeEvent.layout.width)} {...pan.panHandlers} style={[{height:36,justifyContent:'center'},Platform.OS==='web'?{touchAction:'none'} as ViewStyle:undefined]}
         {...(Platform.OS==='web'?{tabIndex:0,onFocus:()=>setFocused(true),onBlur:()=>setFocused(false),onKeyDown:(event:unknown)=>{const e=event as {key?:string;nativeEvent?:{key?:string};preventDefault():void},key=e.key??e.nativeEvent?.key;if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(key??'')||!duration)return;e.preventDefault();player.seek(Math.max(0,Math.min(duration,key==='Home'?0:key==='End'?duration:val+(['ArrowRight','ArrowUp'].includes(key??'')?5:-5))));}}:{})}
         accessibilityRole="adjustable" accessibilityLabel="Позиция в треке" accessibilityValue={{ min: 0, max: Math.round(duration), now: Math.round(val), text: `${fmt(val)} из ${fmt(duration)}` }}
         aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(val)} aria-valuetext={`${fmt(val)} из ${fmt(duration)}`}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={(e) => player.seek(Math.max(0, Math.min(duration, time + (e.nativeEvent.actionName === 'increment' ? 10 : -10))))}>
-        <Animated.View style={{height:drag!=null||focused?8:4,borderRadius:8,backgroundColor:C.tx+'33',overflow:'hidden',transitionProperty:'height',transitionDuration:reduced?0:240}}>
-          <Animated.View style={[{height:'100%',width:'100%',transformOrigin:'left',borderRadius:8,backgroundColor:C.tx},fill]}/>
+        <Animated.View pointerEvents="none" style={{height:drag!=null||focused?8:4,borderRadius:8,backgroundColor:C.tx+'33',overflow:'hidden',transitionProperty:'height',transitionDuration:reduced?0:240}}>
+          <Animated.View testID="track-seek-fill" style={[{height:'100%',width:'100%',transformOrigin:'left',borderRadius:8,backgroundColor:C.tx},fill]}/>
         </Animated.View>
         {drag!=null||focused?<View pointerEvents="none" style={{position:'absolute',left:`${p*100}%`,marginLeft:-6,width:12,height:12,borderRadius:6,backgroundColor:C.tx}}/>:null}
       </View>
@@ -148,10 +157,11 @@ function Full({ h, active }: { h: number; active: boolean }) {
   const [boxH, setBoxH] = useState(0);
   const sv = useRef<ScrollViewInstance>(null);
   const lyricsOpen = useLyricsUi((x) => x.open);
+  const [scrubbing, setScrubbing] = useState(false);
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}>
     <PlayerBackdrop uri={t.artwork} colors={palette} active={active}/>
-    <ScrollView ref={sv} style={{opacity:lyricsOpen?0:1}} pointerEvents={lyricsOpen?'none':'auto'} aria-hidden={lyricsOpen} accessibilityElementsHidden={lyricsOpen} importantForAccessibility={lyricsOpen?'no-hide-descendants':'auto'} showsVerticalScrollIndicator={false} scrollEnabled={!lyricsOpen} contentContainerStyle={{paddingBottom:84,alignItems:'center'}}>
+    <ScrollView ref={sv} style={{opacity:lyricsOpen?0:1}} pointerEvents={lyricsOpen?'none':'auto'} aria-hidden={lyricsOpen} accessibilityElementsHidden={lyricsOpen} importantForAccessibility={lyricsOpen?'no-hide-descendants':'auto'} showsVerticalScrollIndicator={false} scrollEnabled={!lyricsOpen&&!scrubbing} contentContainerStyle={{paddingBottom:84,alignItems:'center'}}>
     <View style={{ minHeight:boxH||undefined,width:'100%',maxWidth:680,paddingHorizontal:22+Math.max(safe.left,safe.right),paddingTop:Math.max(18,safe.top+8),paddingBottom:Math.max(44,safe.bottom+24) }}>
       <View style={{position:'absolute',top:8,alignSelf:'center',width:34,height:4,borderRadius:4,backgroundColor:C.tx3}}/>
       <View testID="full-player-track-swipe" {...swipe.handlers}>
@@ -175,7 +185,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
       </Animated.View>
       </View>
       {s.error && <Pressable accessibilityRole="button" onPress={() => player.toggle()}><T v="sub">{s.error} · Повторить</T></Pressable>}
-      <Seek active={active} />
+      <Seek active={active} onScrubChange={setScrubbing} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
         <Pressable onPress={() => { haptic(); player.toggleShuffle(); }} accessibilityRole="button" accessibilityLabel="Перемешивать" accessibilityState={{ selected: s.shuffle }} style={[st.ctl,{width:controlSize}]}><Icon name="shuffle" size={28} color={s.shuffle ? C.sky : C.tx3} /></Pressable>
         <SkipBtn dir="prev" size={32} box={controlSize} />
@@ -307,7 +317,7 @@ export function Dock(){
  const motion={transitionDuration:reduced?0:560,transitionTimingFunction:cubicBezier(.2,.75,.2,1)} as const;
  return <>
   {mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} style={[StyleSheet.absoluteFill,{backgroundColor:'rgba(0,0,0,.65)',opacity:fullOn?1:0,transitionProperty:'opacity',...motion}]}><Pressable accessibilityRole="button" accessibilityLabel="Закрыть полный плеер" onPress={()=>player.expand(false)} style={{flex:1}}/></Animated.View>}
-  {!layout.rail&&!hidden&&!expanded?<LinearGradient pointerEvents="none" colors={[C.bg+'00',C.bg,C.bg]} locations={[0,.5,1]} style={{position:'absolute',left:0,right:0,bottom:0,height:bottom+104}}/>:null}
+  {!hidden&&!expanded?<LinearGradient testID="dock-content-fade" pointerEvents="none" colors={[C.bg+'00',C.bg+'0A',C.bg+'45',C.bg+'C2',C.bg,C.bg]} locations={[0,.16,.38,.64,.83,1]} style={{position:'absolute',left:layout.rail,right:0,bottom:0,height:bottom+(layout.rail?136:has?264:140)}}/>:null}
   <View pointerEvents={hidden||expanded?'none':'box-none'} aria-hidden={hidden||expanded} accessibilityElementsHidden={hidden||expanded} importantForAccessibility={hidden||expanded?'no-hide-descendants':'auto'} style={{position:'absolute',left:layout.rail+side,width,bottom,height:has?168:84,opacity:hidden||expanded?0:1}}>
    {has&&<View style={{position:'absolute',left:0,right:0,bottom:miniBottom,borderRadius:36,overflow:'hidden',backgroundColor:C.s2}}><Mini width={width}/></View>}
    {!layout.rail&&<View style={{position:'absolute',left:0,right:0,bottom:0}}><BottomNav active={active} onSelect={tab=>{if(path===`/${tab}`){routeExit.cancel?.();return;}player.expand(false);switchTab(`/${tab}` as '/listen'|'/wave'|'/search'|'/collection');}}/></View>}

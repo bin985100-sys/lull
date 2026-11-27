@@ -1,12 +1,13 @@
 import {test,afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-const {outputFiles}=await build({entryPoints:[new URL('./stream-file.ts',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1')],bundle:true,platform:'node',format:'esm',write:false});
+const {outputFiles}=await build({entryPoints:[new URL('./stream-file.ts',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1')],bundle:true,platform:'node',format:'esm',write:false,plugins:[{name:'packet-validation-boundary',setup(b){b.onResolve({filter:/progressive-validation$/},()=>({path:'validation',namespace:'stub'}));b.onLoad({filter:/.*/,namespace:'stub'},()=>({contents:'export async function validateProgressiveAudio(data){globalThis.__validatedProgressive=data;}'}));}}]});
 const {smallMedia}=await import(`data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString('base64')}`);
 const base=global.fetch;afterEach(()=>{global.fetch=base;});
 test('unknown source size is discovered from actual complete bytes',async()=>{
  global.fetch=async()=>new Response(new Uint8Array([1,2,3]));
  assert.deepEqual(await smallMedia('https://fixture.invalid/audio',0),Buffer.from([1,2,3]));
+ assert.deepEqual(globalThis.__validatedProgressive,Buffer.from([1,2,3]));
 });
 test('declared or actual incomplete sources are rejected',async()=>{
  global.fetch=async()=>new Response('abc',{headers:{'content-length':'4'}});

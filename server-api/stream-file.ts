@@ -1,3 +1,4 @@
+import { validateProgressiveAudio } from './progressive-validation';
 /** Complete small progressive source. Never buffer an unbounded video in RAM. */
 export async function smallMedia(url:string, known:number, limit=8*1024*1024):Promise<Buffer> {
   if(known>limit)throw Error('progressive source exceeds size limit');
@@ -22,7 +23,9 @@ export async function smallMedia(url:string, known:number, limit=8*1024*1024):Pr
       chunks.push(Buffer.from(value));
     }
     if(!length||expected&&length!==expected)throw Error('incomplete progressive response');
-    return Buffer.concat(chunks,length);
+    const data = Buffer.concat(chunks,length);
+    await validateProgressiveAudio(data);
+    return data;
   } finally {
     clearTimeout(timer);abort.abort();
     await reader?.cancel().catch(()=>{});

@@ -18,6 +18,7 @@ import { CatalogIconButton, CatalogTopBar, CoverPlayButton, trackCountLabel } fr
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { DOCK } from '@/theme/tokens';
 
 type Props = {
   title: string;
@@ -58,6 +59,8 @@ function StandardListPage(p:Props){
   const {colors:C}=useTheme();
 
   const layout=useLayout();
+  const ins=useSafeAreaInsets(),hasTrack=usePlayer(s=>s.index>=0);
+  const bottomSpace=(hasTrack?DOCK.mini:DOCK.compact)+Math.max(ins.bottom,14)+30;
   const size = Math.min(270, layout.content * 0.7);
   const wide=layout.content>=680;
   const tracks = p.tracks ?? EMPTY_TRACKS;
@@ -85,8 +88,9 @@ function StandardListPage(p:Props){
       {p.below}
       <View style={{ height: 18 }} />
 </View>);
-  return <Screen scroll={false}><FlatList
+  return <Screen scroll={false} style={{paddingBottom:0}}><FlatList testID="catalog-track-list"
     style={{flex:1}} data={tracks} keyExtractor={(t,i)=>t.id+':'+i}
+    contentContainerStyle={{paddingBottom:bottomSpace}}
     ListHeaderComponent={header}
     ListEmptyComponent={p.error?<Offline onRetry={p.onRetry||(()=>{})}/>:p.loading?<ListSkeleton n={6}/>:<View>{p.empty}</View>}
     renderItem={({item:t,index:i})=><TrackRow track={t} list={tracks} num={p.numbered?i+1:undefined} sub={p.sub2} playlistId={p.playlistId}/>}
@@ -98,6 +102,7 @@ function StandardListPage(p:Props){
 
 function ImmersiveListPage(p:Props){
  const layout=useLayout(),ins=useSafeAreaInsets(),reduced=useReducedMotion(),[visible,setVisible]=useState(true);
+ const hasTrack=usePlayer(s=>s.index>=0),bottomSpace=(hasTrack?DOCK.mini:DOCK.compact)+Math.max(ins.bottom,14)+30;
  const tracks=p.tracks??EMPTY_TRACKS,wide=layout.content>=680,size=wide?Math.min(480,layout.content*.46):Math.max(0,layout.available-16);
  const artwork=p.cover?.uri??p.cover?.collage?.find(Boolean);
  useEffect(()=>{if(tracks.length)warm(tracks.slice(0,2));},[tracks]);
@@ -125,7 +130,7 @@ function ImmersiveListPage(p:Props){
   </View>
   <View style={{marginTop:20}}>{p.below}</View>
  </View>;
- return <Screen scroll={false} style={{paddingTop:0,paddingHorizontal:0,backgroundColor:'#000'}}><FlatList testID="catalog-track-list" style={{flex:1,backgroundColor:'#000'}} contentContainerStyle={{paddingHorizontal:layout.side}} data={tracks} keyExtractor={(t,i)=>t.id+':'+i} ListHeaderComponent={header}
+ return <Screen scroll={false} style={{paddingTop:0,paddingBottom:0,paddingHorizontal:0,backgroundColor:'#000'}}><FlatList testID="catalog-track-list" style={{flex:1,backgroundColor:'#000'}} contentContainerStyle={{paddingHorizontal:layout.side,paddingBottom:bottomSpace}} data={tracks} keyExtractor={(t,i)=>t.id+':'+i} ListHeaderComponent={header}
   onScroll={e=>{const next=e.nativeEvent.contentOffset.y<size+220;setVisible(old=>old===next?old:next);}} scrollEventThrottle={80}
   ListEmptyComponent={p.error?<Offline onRetry={p.onRetry||(()=>{})}/>:p.loading?<ListSkeleton n={6}/>:<View>{p.empty}</View>}
   renderItem={({item:t,index:i})=><TrackRow track={t} list={tracks} num={p.numbered?i+1:undefined} sub={p.sub2} playlistId={p.playlistId}/>}
