@@ -14,7 +14,7 @@ const tracks=raw.map(t=>({id:t.id,title:t.title,artist:t.artists[0].name,artistI
 const sections=[{title:'Песни',layout:'tracks',items:raw.map(track=>({kind:'track',id:track.id,title:track.title,track}))}];
 const browser=await webkit.launch({headless:true});fs.mkdirSync('web-smoke-artifacts',{recursive:true});
 try{for(const width of [412,840,1440]){
- const page=await browser.newPage({viewport:{width,height:915}}),errors=[],seeds=[];
+ const page=await browser.newPage({serviceWorkers:'block',viewport:{width,height:915}}),errors=[],seeds=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(tracks=>{localStorage.setItem('lull.appearance.v1',JSON.stringify({state:{mode:'dark'},version:0}));localStorage.setItem('lull.library.v1',JSON.stringify({version:1,state:{onboarded:true,account:{name:'Тест'},liked:tracks,history:[],playlists:[{id:'qa',name:'Проверка волны',tracks,createdAt:1}],savedPlaylists:[],favArtists:[]}}));window.__audios=[];const A=window.Audio;window.Audio=class extends A{constructor(...args){super(...args);window.__audios.push(this);}};},tracks);
  await page.route('https://api.lull.website/**',async route=>{const request=route.request(),u=new URL(request.url()),headers={'Access-Control-Allow-Origin':base,'Access-Control-Allow-Headers':'Content-Type,Range,Authorization','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};if(request.method()==='OPTIONS')return route.fulfill({status:204,headers});
