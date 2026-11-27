@@ -19,8 +19,8 @@ test('audio gate coalesces duplicates, bounds concurrency and recovers failed sl
 
 test('alternate recording tries MWEB when TV cannot play it',async()=>{
  const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('./stream.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false,plugins:[{name:'stream-fixture',setup(b){
-  b.onResolve({filter:/^(youtubei\.js|\.\/potoken|\.\/alternative|\.\/stream-client|.*electron\/yt)$/},a=>({path:a.path,namespace:'fixture'}));
-  b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='youtubei.js' ? 'export const Innertube={create:async()=>globalThis.audioFixture};' : a.path.includes('electron/yt') ? 'export const yt=async()=>globalThis.audioFixture;' : a.path==='./potoken' ? "export const mint=async()=> 'fixture';export const potState=()=>({});export const resetMinter=()=>{};export const warmMinter=()=>{};" : a.path==='./alternative' ? "export const alternatives=async()=>['alternate01'];" : 'export const streamFetch=f=>f;'}));
+  b.onResolve({filter:/^(youtubei\.js|\.\/potoken|\.\/alternative|\.\/stream-client|\.\/progressive-validation|.*electron\/yt)$/},a=>({path:a.path,namespace:'fixture'}));
+  b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='youtubei.js' ? 'export const Innertube={create:async()=>globalThis.audioFixture};' : a.path.includes('electron/yt') ? 'export const yt=async()=>globalThis.audioFixture;' : a.path==='./potoken' ? "export const mint=async()=> 'fixture';export const potState=()=>({});export const resetMinter=()=>{};export const warmMinter=()=>{};" : a.path==='./alternative' ? "export const alternatives=async()=>['alternate01'];" : a.path==='./progressive-validation' ? 'export const validateProgressiveAudio=async()=>{};' : 'export const streamFetch=f=>f;'}));
  }}]});
  const calls=[],requests=[];const oldFetch=globalThis.fetch;
  globalThis.audioFixture={session:{context:{client:{visitorData:'fixture'}},player:{}},getBasicInfo:async(id,opts)=>{
