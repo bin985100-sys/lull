@@ -57,7 +57,7 @@
     "lint": "expo lint",
     "test:sync": "node scripts/sync.test.mjs",
     "test:player": "node scripts/player.test.mjs",
-    "test": "node scripts/sync.test.mjs && node scripts/player.test.mjs && node scripts/lyrics.test.mjs && node --test scripts/audio-cache.test.mjs && node scripts/wave-session.test.mjs && node scripts/wave-engine.test.mjs && node scripts/cover-colors.test.mjs && node scripts/audio-output.test.mjs && node scripts/deck.test.mjs && node scripts/raster-texture.test.mjs && node scripts/history-artwork.test.mjs && node scripts/viewport.test.mjs",
+    "test": "node scripts/sync.test.mjs && node scripts/player.test.mjs && node scripts/lyrics.test.mjs && node --test scripts/audio-cache.test.mjs && node scripts/wave-session.test.mjs && node scripts/wave-engine.test.mjs && node scripts/cover-colors.test.mjs && node scripts/audio-output.test.mjs && node scripts/deck.test.mjs && node scripts/raster-texture.test.mjs && node scripts/history-artwork.test.mjs && node scripts/viewport.test.mjs && node scripts/stream-health.test.mjs",
     "test:lyrics": "node scripts/lyrics.test.mjs",
     "test:wave": "node scripts/wave-session.test.mjs",
     "test:colors": "node scripts/cover-colors.test.mjs",

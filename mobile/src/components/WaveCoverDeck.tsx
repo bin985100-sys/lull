@@ -36,7 +36,7 @@ export function WaveCoverDeck({tracks,activeIndex,compact=false,onSelect,onPrevi
  useAnimatedReaction(()=>Math.round(position.get()),(next,previous)=>{if(next!==previous)scheduleOnRN(preview,next);});
  useEffect(()=>{const track=data[wrapIndex(slot,data.length)];if(track)onPreview(track);},[data,slot,onPreview]);
  const complete=(choose:boolean,kind:PickKind='pick')=>{'worklet';if(done.get())return;done.set(true);touching.set(false);holdDistance.set(15);const target=Math.round(position.get());position.set(reduced?target:withSpring(target,spring));overview.set(false);circle.set(reduced?0:withTiming(0,{duration:600,easing:Easing.bezier(.22,.8,.2,1)}));scheduleOnRN(finish,target,choose,kind);};
- const pan=usePanGesture({activeOffsetX:[-8,8],failOffsetY:[-14,14],maxPointers:1,enableTrackpadTwoFingerGesture:true,
+ const pan=usePanGesture({activeOffsetX:[-8,8],failOffsetY:[-14,14],maxPointers:1,enableTrackpadTwoFingerGesture:Platform.OS!=='web',
   onBegin:()=>{'worklet';cancelAnimation(position);cancelAnimation(circle);origin.set(position.get());moving.set(false);done.set(false);touching.set(true);holdDistance.set(15);scheduleOnRN(freeze);},
   onActivate:()=>{'worklet';moving.set(true);},
   onUpdate:e=>{'worklet';position.set(origin.get()-e.translationX/(overview.get()?Math.max(42,size*.25):size*.69));},

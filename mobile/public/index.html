@@ -78,8 +78,9 @@
       }
       html[data-lull-standalone="true"] { height: var(--lull-app-height, 100vh); }
       html[data-lull-standalone="true"] body { height: var(--lull-app-height, 100vh); }
-      /* Внутренние списки прокручиваются с инерцией и не тянут за собой страницу */
-      #root [style*="overflow"] { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+      /* ScrollView owns scrolling. Applying containment to overflow:hidden
+         artwork/deck layers traps mouse wheels before they reach the list. */
+      #root { overscroll-behavior: none; }
       ::-webkit-scrollbar { display: none; }
       * { scrollbar-width: none; }
     </style>

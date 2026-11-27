@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lull",
     "slug": "lull",
-    "version": "0.4.4",
+    "version": "0.4.5",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "lull",
@@ -16,7 +16,7 @@
           "audio"
         ]
       },
-      "buildNumber": "15"
+      "buildNumber": "16"
     },
     "android": {
       "package": "website.lull.app",
@@ -29,7 +29,7 @@
       "permissions": [
         "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ],
-      "versionCode": 15
+      "versionCode": 16
     },
     "web": {
       "output": "single",

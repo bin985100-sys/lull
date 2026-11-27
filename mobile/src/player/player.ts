@@ -3,11 +3,13 @@
 import { createAudioPlaylist, setAudioModeAsync, type AudioPlaylist } from 'expo-audio';
 import { Platform } from 'react-native';
 import { create } from 'zustand';
+import { createStreamHealth } from './stream-health';
 
 import { streamUrl, type Track } from '@/api/audius';
 import { streamUrlYt, warm } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 import { useTaste } from '@/store/taste';
+import { useConnectivity } from '@/store/connectivity';
 import { log, logNow, report } from '@/ui/Crash';
 import { downloaded } from '@/player/downloads';
 import { localAudio, pinAudio, prefetchAudio } from '@/player/audio-cache';
@@ -102,7 +104,9 @@ function engine() {
     try { meter(st.playing, st.currentTime || 0); } catch (e) { report(e, 'meter'); }
     const s = usePlayer.getState();
     if (s.playing !== st.playing || s.buffering !== st.isBuffering) log(`статус: playing=${st.playing} buffering=${st.isBuffering} i=${st.currentIndex}/${st.trackCount}`);
-    if (!loading && (s.playing !== st.playing || s.buffering !== st.isBuffering)) usePlayer.setState({ playing: st.playing, buffering: st.isBuffering });
+    const transportPending=wantPlay&&!st.didJustFinish&&(st.isBuffering||st.isLoaded===false);
+    const playing=st.playing||transportPending,buffering=st.isBuffering||transportPending;
+    if (!loading && (s.playing !== playing || s.buffering !== buffering)) usePlayer.setState({ playing, buffering });
     /* «трек закончился» верим, только если играл именно текущий трек, он реально дошёл до конца
        и с переключения прошло больше пары секунд: после clear() плеер присылает такой сигнал от прошлого трека */
     const real = st.didJustFinish && base + st.currentIndex === s.index && Date.now() - mountedAt > 2500
@@ -184,6 +188,7 @@ function noteSkip() {
 function onTrackStart() {
   const t = currentTrack();
   if (!t || !pl) return;
+  watchdog();
   // Recommendation queue changes belong to wave-session, including auto-continue preferences.
   try { useLibrary.getState().pushHistory(t); } catch (e) { report(e, 'history'); }
   setTimeout(primeAhead, 200);
@@ -297,7 +302,7 @@ async function jump(i: number, dir: 'next' | 'prev') {
   try { await jumpInner(i, dir); } catch (e) { report(e, 'player.jump'); }
 }
 /* Поставить в плеер трек i очереди и следующий за ним, и сразу играть */
-function mount(i: number) {
+function mount(i: number, resumeAt = 0) {
   const q = usePlayer.getState().queue;
   pinAudio(q.slice(i, i + 2).map((t) => t.id));
   log(`mount: ${i} «${q[i]?.title}» ${q[i]?.id}`);
@@ -309,23 +314,44 @@ function mount(i: number) {
   nativeLen = 1;
   if (!useSleep.getState().endTrack && q[i + 1] && isPrimed(q[i + 1])) { stageNext(p, q[i + 1]); }
   p.skipTo(0); touch();
+  if(resumeAt>0)void Promise.resolve(p.seekTo(resumeAt)).catch(e=>report(e,'player.recover.seek'));
   if (wantPlay) p.play();
   mountedAt = Date.now();
   loading = false;
   usePlayer.setState({ playing: wantPlay, buffering: wantPlay });
   watchdog();
 }
-/* Трек не пошёл за 15 секунд — не зависаем на 0:00, а идём дальше */
+/* Watch the whole recording, including a transport error after minutes of
+   playback. Rebuild the same track at its last position, keeping its queue. */
 let dogTimer: ReturnType<typeof setTimeout> | null = null;
+const streamHealth=createStreamHealth();
 function watchdog() {
   if (dogTimer) clearTimeout(dogTimer);
   const seq = loadSeq, idx = usePlayer.getState().index;
-  dogTimer = setTimeout(() => {
-    const s = usePlayer.getState();
-    if (seq !== loadSeq || s.index !== idx || !wantPlay || useProgress.getState().time > 0.3) return;
-    log(`трек не загрузился за 15 с, пропускаю: ${currentTrack(s)?.title}`);
-    if (s.index < s.queue.length - 1) jump(s.index + 1, 'next');
-  }, 15000);
+  const tick=()=>{
+    dogTimer=null;
+    const state=usePlayer.getState(),track=currentTrack(state),p=pl;
+    if(seq!==loadSeq||state.index!==idx||!track||!p||!wantPlay)return;
+    const health=streamHealth.sample({key:`${seq}:${idx}:${trackKey(track)}`,wanted:wantPlay,loading,online:!useConnectivity.getState().offline,playing:p.playing,buffering:p.isBuffering,loaded:p.isLoaded,time:p.currentTime,duration:p.duration||track.duration||0},Date.now());
+    if(health.action==='failed'){
+      wantPlay=false;p.pause();
+      usePlayer.setState({playing:false,buffering:false,error:'Соединение прервалось. Нажми воспроизведение, чтобы повторить'});
+      return;
+    }
+    if(health.action==='retry'){
+      log(`восстанавливаю поток ${track.id} с ${health.position.toFixed(1)} с, попытка ${health.attempts}`);
+      loading=true;silence();primed.delete(track.id);
+      usePlayer.setState({playing:true,buffering:true,error:null});
+      void prime(track).then(ok=>{
+        if(seq!==loadSeq||usePlayer.getState().index!==idx)return;
+        if(ok){mount(idx,health.position);useProgress.setState({time:health.position,duration:track.duration||0});}
+        else{loading=false;watchdog();}
+      }).catch(e=>{if(seq===loadSeq){loading=false;watchdog();report(e,'player.recover');}});
+      return;
+    }
+    dogTimer=setTimeout(tick,2000);
+  };
+  dogTimer=setTimeout(tick,2000);
 }
 /* Следующий трек очереди должен лежать в плеере сразу за текущим (после добавлений, волны, перемешивания) */
 function ensureNext() {
@@ -432,7 +458,7 @@ export const player = {
     wantPlay = !usePlayer.getState().playing;
     usePlayer.setState({ playing: wantPlay });
     if (loading) return; // трек ещё готовится — включится сам, если не нажали паузу
-    if (wantPlay) p.play(); else p.pause();
+    if (wantPlay) { p.play(); watchdog(); } else p.pause();
   },
   next() {
     const s = usePlayer.getState();
@@ -538,7 +564,7 @@ export const player = {
   stop() {
     setSleep(null);
     playRequest++;
-    loadSeq++; loading = false; if (dogTimer) clearTimeout(dogTimer);
+    loadSeq++; loading = false; wantPlay=false; if (dogTimer) clearTimeout(dogTimer); dogTimer=null;
     if (metaT) { clearTimeout(metaT); metaT = null; }
     if (pl) { pl.pause(); wipe(pl); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }
     lockActive = false;

@@ -8,12 +8,16 @@ files:
   - main.cjs
   - offline.html
   - package.json
+  - assets/**
 asar: true
 npmRebuild: false
 win:
   icon: ../build/icon.ico
   target: nsis
 nsis:
+  installerIcon: ../build/icon.ico
+  uninstallerIcon: ../build/icon.ico
+  installerHeaderIcon: ../build/icon.ico
   oneClick: true
   perMachine: false
   deleteAppDataOnUninstall: false

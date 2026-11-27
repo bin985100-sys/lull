@@ -17,7 +17,8 @@ globalThis.__makePlaylist = () => {
   const L = {}; const lag = () => 20 + Math.random() * 60;
   const emit = (ev, data) => setTimeout(() => (L[ev] || []).forEach((f) => f(data)), lag());
   const p = {
-    sources: [], currentIndex: 0, playing: false, time: 0, loop: 'none', log: [],
+    sources: [], currentIndex: 0, playing: false, time: 0, loop: 'none', log: [], isLoaded:true,isBuffering:false,
+    get currentTime(){return p.time;},get duration(){return 200;},
     addListener(ev, f) { (L[ev] ||= []).push(f); return { remove() {} }; },
     get trackCount() { return p.sources.length; },
     /* как Media3: номер текущего трека вне списка — медиасессия роняет приложение (Invalid PlayerInfo update) */
@@ -29,7 +30,7 @@ globalThis.__makePlaylist = () => {
     skipTo(i) { if (i < p.sources.length) { p.currentIndex = i; p.time = 0; p.lastChange = Date.now(); emit('trackChanged', { currentIndex: i }); } },
     next() { p.skipTo(p.currentIndex + 1); },
     previous() { p.skipTo(p.currentIndex - 1); },
-    play() { p.playing = p.sources.length > 0; },
+    play() { p.playing = p.sources.length > 0; p.isLoaded=true; },
     pause() { p.playing = false; },
     seekTo(t) { p.time = t; },
     setActiveForLockScreen(active,meta) { p.lastMeta=meta; p.lockSets = (p.lockSets || 0) + 1; }, updateLockScreenMetadata(meta) { p.lastMeta=meta; if (Date.now() - (p.lastChange || 0) < 300) throw new Error('Invalid PlayerInfo update: метаданные во время переключения'); p.lockUpdates = (p.lockUpdates || 0) + 1; }, clearLockScreenControls() {},
@@ -37,7 +38,7 @@ globalThis.__makePlaylist = () => {
     /* «звук идёт»: раз в 100 мс шлём статус, как настоящий плеер */
     tick() {
       if (p.playing) p.time += 0.1;
-      emit('playlistStatusUpdate', { playing: p.playing, isBuffering: false, currentTime: p.time, duration: 200, currentIndex: p.currentIndex, trackCount: p.sources.length, didJustFinish: false });
+      emit('playlistStatusUpdate', { playing: p.playing, isLoaded:p.isLoaded,isBuffering:p.isBuffering, currentTime: p.time, duration: 200, currentIndex: p.currentIndex, trackCount: p.sources.length, didJustFinish: false });
     },
     finish() { /* трек доиграл: плеер сам переходит на следующий */ emit('playlistStatusUpdate', { playing: true, isBuffering: false, currentTime: 200, duration: 200, currentIndex: p.currentIndex, trackCount: p.sources.length, didJustFinish: true }); if (p.currentIndex < p.sources.length - 1) { p.currentIndex++; p.time = 0; emit('trackChanged', { currentIndex: p.currentIndex }); } },
   };
@@ -86,7 +87,7 @@ function same(m, what) {
 async function settle(ms = 1800) { const end = Date.now() + ms; while (Date.now() < end) { globalThis.__pl?.tick(); await sleep(100); } }
 
 let pass = 0, fail = 0;
-async function test(name, f) { slow = new Set(); globalThis.__reports = []; globalThis.__localAudio = new Map(); try { await f(); const crash = (globalThis.__reports || []).find((x) => x.includes('ВЫЛЕТ') || x.includes('удалён играющий')); if (crash) throw new Error(crash); pass++; console.log(`✓ ${name}`); } catch (e) { fail++; console.log(`✗ ${name}\n    ${e.message}`); } }
+async function test(name, f) { if(process.env.LULL_TEST_FILTER&&!name.includes(process.env.LULL_TEST_FILTER))return;slow = new Set(); globalThis.__reports = []; globalThis.__localAudio = new Map(); try { await f(); const crash = (globalThis.__reports || []).find((x) => x.includes('ВЫЛЕТ') || x.includes('удалён играющий')); if (crash) throw new Error(crash); pass++; console.log(`✓ ${name}`); } catch (e) { fail++; console.log(`✗ ${name}\n    ${e.message}`); } }
 
 await test('Готовый локальный трек играет без сетевой проверки prime', async () => {
   const m = await freshApp();
@@ -240,5 +241,13 @@ await test('Два быстрых перехода в шторке приним�
  const m=await freshApp();await m.player.play(LIST,'s0');await settle(1600);const p=globalThis.__pl;p.next();await settle(180);m.player.prev();await settle(300);p.next();await settle(1000);same(m,'Быстрый переход из шторки');if(p.lastMeta?.title!==m.currentTrack().title)throw Error('System title does not match current song');
 });
 
+await test('Поток после обрыва восстанавливает позицию и очередь, а пауза отменяет повтор',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(600);const p=globalThis.__pl;
+ p.time=93;p.isLoaded=false;p.playing=false;await settle(8500);
+ if(!p.playing||p.time<93||m.currentTrack().id!=='s0'||m.usePlayer.getState().queue.length!==LIST.length)throw Error('После обрыва потеряна позиция/очередь');
+ p.time=110;p.isLoaded=false;p.playing=false;await settle(250);m.player.toggle();await settle(6500);
+ if(p.playing||m.usePlayer.getState().playing)throw Error('Ручная пауза не отменила восстановление');
+ m.player.stop();
+});
 console.log(`\n${pass} прошло, ${fail} упало`);
 process.exit(fail ? 1 : 0);

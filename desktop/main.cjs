@@ -12,7 +12,7 @@ function createWindow(){
   let bounds={};
   const state=path.join(app.getPath('userData'),'web-window.json');
   try{bounds=JSON.parse(fs.readFileSync(state,'utf8'));}catch{}
-  window=new BrowserWindow({width:Math.max(360,Math.min(2400,Number(bounds.width)||1280)),height:Math.max(480,Math.min(1600,Number(bounds.height)||820)),minWidth:360,minHeight:480,backgroundColor:'#000000',show:false,autoHideMenuBar:true,title:'Lull',webPreferences:{partition:'persist:lull-web',nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,autoplayPolicy:'no-user-gesture-required'}});
+  window=new BrowserWindow({width:Math.max(360,Math.min(2400,Number(bounds.width)||1280)),height:Math.max(480,Math.min(1600,Number(bounds.height)||820)),minWidth:360,minHeight:480,icon:path.join(__dirname,'assets','icon.png'),backgroundColor:'#000000',show:false,autoHideMenuBar:true,title:'Lull',webPreferences:{partition:'persist:lull-web',nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,autoplayPolicy:'no-user-gesture-required'}});
   const wc=window.webContents;
   wc.setWindowOpenHandler(({url})=>{if(external(url))void shell.openExternal(url);return {action:'deny'};});
   wc.on('will-navigate',(event,url)=>{if(!trusted(url)){event.preventDefault();if(external(url))void shell.openExternal(url);}});
