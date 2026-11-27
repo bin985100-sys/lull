@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import appManifest from '../../app.json';
 import { Toggle as Switch } from '@/ui/Toggle';
 import { useAppearance, useTheme } from '@/theme/state';
 import { useIsFocused } from 'expo-router';
@@ -96,7 +97,7 @@ export default function Settings() {
       <Group title="О приложении">
         <Row icon="doc" label="Политика конфиденциальности" onPress={() => Linking.openURL('https://lull.website/privacy.html')} />
         <Row icon="info" label="Музыка — каталог Lull и Audius" />
-        <Row icon="doc" label={`Версия ${Constants.expoConfig?.version ?? '0.3.0'}`} />
+        <Row icon="doc" label={`Версия ${Constants.expoConfig?.version ?? appManifest.expo.version}`} />
         <Row icon="doc" label="Журнал — отправить разработчику" onPress={() => softPush('/log')} />
         <Row icon="info" label="Показать последнюю ошибку" onPress={async () => { const e = await lastError(); if (e) useCrash.setState({ error: e }); else toast('Ошибок не было', 'check'); }} />
       </Group>
