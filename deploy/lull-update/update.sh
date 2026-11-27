@@ -83,6 +83,7 @@ command -v ffmpeg >/dev/null 2>&1 || DEBIAN_FRONTEND=noninteractive apt-get inst
 echo "  ffmpeg: $(command -v ffmpeg >/dev/null && ffmpeg -version | head -1 | cut -d' ' -f3 || echo нет)"
 if [ -f "$HERE/server.py" ]; then
   cp "$APP/server.py" "$APP/server.py.bak-$(date +%s)" 2>/dev/null || true
+  if [ -f "$HERE/audio_validation.py" ]; then install -m 644 "$HERE/audio_validation.py" "$APP/audio_validation.py"; fi
   cp "$HERE/server.py" "$APP/server.py"
   # свежий yt-dlp: YouTube часто меняет защиту, старая версия получает звук медленнее или не получает вовсе
   PY=$(grep -oP '^ExecStart=\K\S+' /etc/systemd/system/lull-relay.service 2>/dev/null || echo python3)
