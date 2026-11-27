@@ -17,6 +17,7 @@ import { useLayout } from '@/ui/layout';
 import { useCoverColors } from '@/theme/useCoverColors';
 import { PlayPause } from '@/ui/PlayPause';
 import { WaveCoverDeck } from './WaveCoverDeck';
+import { offerWaveTracks, previewWaveTrack, useWavePresentation } from '@/reco/wave-presentation';
 const key=(t:Track)=>t.source+':'+t.id;
 
 export function WaveHero({fallback,candidates,large=false,header,visible=true}:{fallback?:Track;candidates?:Track[];large?:boolean;header?:ReactNode;visible?:boolean}){
@@ -25,10 +26,12 @@ export function WaveHero({fallback,candidates,large=false,header,visible=true}:{
  const playing=usePlayer(s=>s.playing),active=useWaveSession(s=>s.active)&&!!cur;
  const session=usePlayer(s=>s.session),prepared=useWaveSession(s=>s.tracks),preparedSeed=useWaveSession(s=>s.seed),epoch=useConnectivity(s=>s.epoch);
  const seed=cur??history[0]?.track??liked[0]??fallback,busy=useWaveSession(s=>s.busy),error=useWaveSession(s=>s.error),mode=useTaste(s=>s.reco.waveMode);
- const tracks=useMemo(()=>active&&queue.length?queue:cur?(preparedSeed&&key(preparedSeed)===key(cur)&&prepared.length?prepared:[cur]):Array.from(new Map([...(seed?[seed]:[]),...(candidates??[])].map(t=>[key(t),t])).values()),[active,queue,cur,preparedSeed,prepared,seed,candidates]);
+ const idle=useWavePresentation(s=>s.idleTracks),previewKey=useWavePresentation(s=>s.previewKey);
+ useEffect(()=>{if(!cur&&candidates?.length)offerWaveTracks([...(seed?[seed]:[]),...candidates]);},[cur,seed,candidates]);
+ const tracks=useMemo(()=>active&&queue.length?queue:cur?(preparedSeed&&key(preparedSeed)===key(cur)&&prepared.length?prepared:[cur]):idle.length?idle:seed?[seed]:[],[active,queue,cur,preparedSeed,prepared,idle,seed]);
  useEffect(()=>{if(visible&&cur)prepareTrackWave(cur);},[visible,cur,session,mode,epoch]);
- const [preview,setPreview]=useState<Track|null>(null),[settled,setSettled]=useState<Track|null>(null);
- const selected=preview&&tracks.some(t=>key(t)===key(preview))?preview:seed,selectedPlaying=active&&!!cur&&!!selected&&key(cur)===key(selected);
+ const [settled,setSettled]=useState<Track|null>(null);
+ const selected=tracks.find(t=>key(t)===previewKey)??cur??tracks[0]??seed,selectedPlaying=active&&!!cur&&!!selected&&key(cur)===key(selected);
  useEffect(()=>{const timer=setTimeout(()=>setSettled(selected??null),140);return()=>clearTimeout(timer);},[selected]);
  const background=settled??selected,colors=useCoverColors(background?.artwork,background?.id??mode);
  const pick=useCallback((track:Track,kind:'pick'|'tap')=>{const state=usePlayer.getState(),current=currentTrack(state),radio=useWaveSession.getState().active;
@@ -39,7 +42,7 @@ export function WaveHero({fallback,candidates,large=false,header,visible=true}:{
   <WaveArt animate={visible} colors={colors}/><LinearGradient pointerEvents="none" colors={[C.bg,'transparent','transparent',C.bg]} locations={[0,.24,.68,1]} style={{position:'absolute',inset:0}}/>
   {header?<View style={{paddingHorizontal:layout.side,zIndex:1}}>{header}</View>:null}
   <View style={{flex:1,justifyContent:'center',alignItems:'center',paddingBottom:header?22:0,gap:8}}>
-   <WaveCoverDeck tracks={tracks} activeIndex={Math.max(0,tracks.findIndex(t=>cur&&key(t)===key(cur)))} compact={compact||narrow} onSelect={pick} onPreview={setPreview}/>
+   <WaveCoverDeck tracks={tracks} activeIndex={Math.max(0,tracks.findIndex(t=>selected&&key(t)===key(selected)))} compact={compact||narrow} onSelect={pick} onPreview={previewWaveTrack}/>
    <Press accessibilityRole="button" accessibilityLabel={selectedPlaying?(playing?'Приостановить волну':'Продолжить волну'):'Включить мою волну'} disabled={busy&&!cur} onPress={()=>{haptic();if(selectedPlaying)player.toggle();else if(selected)pick(selected,'pick');else router.push('/onboarding');}} style={{minHeight:84,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:narrow?10:14}}>
     <T style={{fontSize:narrow?27:34,fontFamily:F.bold,letterSpacing:-1.4,color:'#fff'}}>Моя</T>
     <View style={{width:narrow?48:56,height:narrow?48:56,borderRadius:30,backgroundColor:'#fff',alignItems:'center',justifyContent:'center'}}>{busy&&!cur?<ActivityIndicator color="#111"/>:<PlayPause playing={selectedPlaying&&playing} size={narrow?26:30} color="#111"/>}</View>

@@ -29,7 +29,7 @@ async function get<T = any>(path: string, signal?: AbortSignal): Promise<T> {
 export function img(u?: string, size = 544): string | undefined {
   if (!u) return undefined;
   let url = (size>=720?u.replace(/\/(?:mqdefault|hqdefault|sddefault)\.(jpg|webp)(?=[?#]|$)/,'/maxresdefault.$1'):u).replace(/=w\d+-h\d+/, `=w${size}-h${size}`).replace(/=s\d+$/, `=s${size}`);
-  if (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(url)) url = `${LULL_API}/api/img?u=${enc(url)}&v=3`;
+  if (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(url)) url = `${LULL_API}/api/img?u=${enc(url)}&v=4`;
   return url;
 }
 
@@ -126,7 +126,16 @@ export const lull = {
       year: c.year,
     };
   },
-  upNext: (id: string, s?: AbortSignal) => get<Raw[]>(`upnext/${enc(id)}`, s).then((l) => l.map((t) => mapTrack(t))),
+  async upNext(id: string, s?: AbortSignal) {
+    const load=()=>get<Raw[]>(`upnext/${enc(id)}`,s);
+    const rows=await load().catch(error=>{
+      // YouTube can return an empty radio once for a valid playable song.
+      // Retry that transient server failure once within the caller's deadline.
+      if(s?.aborted||!(error instanceof ApiError)||!error.status||error.status<500||error.status>=600)throw error;
+      return load();
+    });
+    return rows.map(t=>mapTrack(t));
+  },
   /* Популярные исполнители для первого запуска: по одному запросу на имя, сервер кэширует */
   async popularArtists(s?: AbortSignal): Promise<Artist[]> {
     const names = ['The Weeknd', 'Billie Eilish', 'Taylor Swift', 'Drake', 'Dua Lipa', 'Ariana Grande', 'Travis Scott', 'Lana Del Rey', 'Imagine Dragons', 'Eminem', 'Rihanna', 'Kendrick Lamar', 'Miyagi', 'Скриптонит', 'Zivert', 'MACAN', 'Баста', 'Monetochka'];

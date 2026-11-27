@@ -1,7 +1,6 @@
 import { resolveThemeValues , useTheme, themeValues } from '@/theme/state';
 import { Surface } from '@/ui/Surface';
 import { PlayerBackdrop } from '@/ui/PlayerBackdrop';
-import { openDevices } from './Devices';
 import { WaveArt } from '@/ui/WaveArt';
 import { LinearGradient } from 'expo-linear-gradient';
 import { routeExit } from '@/ui/route-motion-state';
@@ -250,6 +249,7 @@ function Mini({compact=false,width=400}:{compact?:boolean;width?:number}) {
   const loading = useProgress((x) => s.buffering && x.time < 0.5);
   const t = currentTrack(s)!;
   const palette=useCoverColors(t.artwork,t.id);
+  const liked=useLibrary(s=>s.liked.some(track=>track.id===t.id&&track.source===t.source));
   const reduced = useReducedMotion();
   const enter=useMemo(()=>reduced?undefined:slideIn(s.lastDir==='next'?28:-28,1,420),[reduced,s.lastDir]);
   const swipe = useTrackSwipe();
@@ -272,7 +272,7 @@ function Mini({compact=false,width=400}:{compact?:boolean;width?:number}) {
       <Pressable onPress={() => { haptic(); player.toggle(); }} hitSlop={6} accessibilityRole="button" accessibilityLabel={s.playing ? 'Пауза' : 'Слушать'} style={{ width: compact?44:48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
         {loading ? <ActivityIndicator color="#fff"/> : <PlayPause playing={s.playing} size={32} color="#fff"/>}
       </Pressable>
-      {!compact&&width>220&&<Pressable accessibilityRole="button" accessibilityLabel="Устройства воспроизведения" onPress={openDevices} style={{width:48,height:48,alignItems:'center',justifyContent:'center'}}><Icon name="device" size={30} color="#fff"/></Pressable>}
+      <HeartButton testID="mini-favorite" liked={liked} label={liked?'Убрать текущий трек из избранного':'Добавить текущий трек в избранное'} onPress={()=>likeWithUndo(t)} onLongPress={()=>{haptic();openSelectPlaylist(t);}} size={compact?26:30} unlikedColor="#fff"/>
     </View>
   );
 }

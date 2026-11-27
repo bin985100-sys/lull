@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {pathToFileURL} from 'node:url';import {build} from 'esbuild';
+const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'lull-catalog-retry-')),out=path.join(tmp,'api.mjs');
+await build({entryPoints:['src/api/lull.ts'],bundle:true,outfile:out,platform:'node',format:'esm',logLevel:'silent',plugins:[{name:'native',setup(b){b.onResolve({filter:/^(\.\/audius|@\/player\/audio-cache)$/},a=>({path:a.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='./audius'?'export class ApiError extends Error{constructor(kind,message,status){super(message);this.kind=kind;this.status=status;}}':'export const prefetchAudio=()=>{};'}));}}]});
+const {lull}=await import(pathToFileURL(out).href);let calls=0;
+globalThis.fetch=async()=>++calls===1?new Response(JSON.stringify({error:'Music queue was empty'}),{status:500}):new Response(JSON.stringify([{id:'song',title:'Song',artists:[]}]),{status:200});
+assert.equal((await lull.upNext('seed'))[0].id,'song');assert.equal(calls,2);
+calls=0;globalThis.fetch=async()=>{calls++;return new Response('{}',{status:404});};await assert.rejects(lull.upNext('missing'));assert.equal(calls,1);
+calls=0;globalThis.fetch=async()=>{calls++;return new Response('{}',{status:502});};await assert.rejects(lull.upNext('down'));assert.equal(calls,2);
+calls=0;const ac=new AbortController();globalThis.fetch=async()=>{calls++;ac.abort();return new Response('{}',{status:500});};await assert.rejects(lull.upNext('cancelled',ac.signal));assert.equal(calls,1);
+console.log('Catalog radio retry: transient 500 recovers; 404, repeated failure and cancellation stay bounded');

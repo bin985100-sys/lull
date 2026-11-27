@@ -249,5 +249,11 @@ await test('Поток после обрыва восстанавливает п
  if(p.playing||m.usePlayer.getState().playing)throw Error('Ручная пауза не отменила восстановление');
  m.player.stop();
 });
+await test('Несколько аппаратных назад до доставки первого события обновляют живой трек и метаданные',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(900);const p=globalThis.__pl;
+ p.next();await settle(700);p.next();await settle(700);if(p.currentIndex!==2)throw Error('Тест не подготовил очередь');
+ p.previous();p.previous();await settle(1100);same(m,'Аппаратная серия');
+ if(m.currentTrack().id!=='s0'||p.lastMeta?.title!==LIST[0].title)throw Error('Метаданные застряли после серии аппаратных кнопок');m.player.stop();
+});
 console.log(`\n${pass} прошло, ${fail} упало`);
 process.exit(fail ? 1 : 0);

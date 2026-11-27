@@ -90,9 +90,14 @@ def client_ip(request: web.Request) -> str:
 
 def cors(request: web.Request, resp: web.StreamResponse) -> web.StreamResponse:
     origin = request.headers.get("Origin", "")
+    # Even an ordinary <img> request without Origin must vary by Origin.
+    # Otherwise its cached response is reused for canvas reads without CORS.
+    vary = [v.strip() for v in resp.headers.get("Vary", "").split(",") if v.strip()]
+    if "*" not in vary and not any(v.lower() == "origin" for v in vary):
+        vary.append("Origin")
+    resp.headers["Vary"] = ", ".join(vary)
     if origin in ORIGINS or origin.endswith(".vercel.app"):
         resp.headers["Access-Control-Allow-Origin"] = origin
-        resp.headers["Vary"] = "Origin"
         resp.headers["Access-Control-Expose-Headers"] = "Content-Range, Content-Length, Accept-Ranges"
     return resp
 

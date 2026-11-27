@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {pathToFileURL} from 'node:url';import {createStore} from 'zustand/vanilla';import {build} from 'esbuild';
+globalThis.__presentationPlayer=createStore(()=>({session:0,queue:[],index:-1}));
+const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'lull-presentation-')),output=path.join(tmp,'presentation.mjs');
+await build({entryPoints:['src/reco/wave-presentation.ts'],outfile:output,bundle:true,format:'esm',platform:'node',logLevel:'silent',plugins:[{name:'player',setup(b){b.onResolve({filter:/^@\/player\/player$/},()=>({path:'player',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const usePlayer=globalThis.__presentationPlayer;export const currentTrack=s=>s.queue[s.index];'}));}}]});
+const {offerWaveTracks,previewWaveTrack,useWavePresentation}=await import(pathToFileURL(output).href),t=id=>({id,source:'yt',title:id,artist:'A'}),a=t('a'),b=t('b'),c=t('c');
+offerWaveTracks([a,b,a,c]);assert.deepEqual(useWavePresentation.getState().idleTracks.map(t=>t.id),['a','b','c']);
+previewWaveTrack(c);offerWaveTracks([b,a,c]);assert.deepEqual(useWavePresentation.getState().idleTracks.map(t=>t.id),['a','b','c']);assert.equal(useWavePresentation.getState().previewKey,'yt:c');
+globalThis.__presentationPlayer.setState({session:1,queue:[b,a,c],index:0});assert.equal(useWavePresentation.getState().previewKey,'yt:b');
+previewWaveTrack(c);globalThis.__presentationPlayer.setState({queue:[b,a,c]});assert.equal(useWavePresentation.getState().previewKey,'yt:c','unrelated queue publication must not reset the preview');
+globalThis.__presentationPlayer.setState({index:1});assert.equal(useWavePresentation.getState().previewKey,'yt:a');
+assert.deepEqual(useWavePresentation.getState().idleTracks.map(t=>t.id),['a','b','c']);
+console.log('Shared wave presentation: stable first deck, provider-safe deduplication, shared preview, real-track synchronization and no tab reshuffle passed');

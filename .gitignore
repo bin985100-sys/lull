@@ -17,3 +17,4 @@ android/capacitor-cordova-android-plugins/build/
 relay.local
 qa/
 .ci/
+/release-desktop/

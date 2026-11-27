@@ -131,7 +131,9 @@ function engine() {
     const cur = s.index - base;
     if (currentIndex === cur) return;
     if (useSleep.getState().endTrack && currentIndex > cur) { finishSleep(); }
-    if (Math.abs(currentIndex - cur) !== 1) { log(`пропускаю странный trackChanged: ${currentIndex}, жду ${cur}±1`); return; }
+    // Several hardware presses can arrive before JS handles the first event.
+    // The live native index above is authoritative, including a jump by >1.
+    if (currentIndex < 0 || currentIndex >= nativeLen) return;
     touch();
     const idx = base + currentIndex;
     if (idx < 0 || idx >= s.queue.length) return;
@@ -159,7 +161,7 @@ async function init() {
   await ready;
 }
 
-const source = (t: Track) => ({ uri: downloaded(t) || (t.source === 'yt' ? localAudio(t.id) || streamUrlYt(t.id) : streamUrl(t.id)), name: t.title });
+const source = (t: Track) => ({ uri: downloaded(t) || (t.source === 'yt' ? localAudio(t.id) || streamUrlYt(t.id) : streamUrl(t.id)), name: t.title, metadata:{title:t.title,artist:t.artist,artworkUrl:t.artwork||t.artworkLarge} });
 
 /* ---------- учёт прослушивания: время, засчитанные прослушивания, пропуски ---------- */
 let lastTs = 0, buf = 0, bufTrack: Track | undefined, counted = false;
@@ -221,6 +223,14 @@ let pendingMeta: { title: string; artist: string; artworkUrl?: string } | null =
 function scheduleMeta(meta: { title: string; artist: string; artworkUrl?: string }) {
   pendingMeta = meta;
   if (metaT) clearTimeout(metaT);
+  if(Platform.OS==='web'){
+    // Safari suspends background timers. The media-key/track-change callback
+    // already has the new live index, so publish all fields synchronously.
+    const current=currentTrack();
+    if(pl&&lockActive&&current){pl.updateLockScreenMetadata({title:current.title,artist:current.artist,artworkUrl:current.artwork||current.artworkLarge});pendingMeta=null;}
+    metaT=null;
+    return;
+  }
   const run = () => {
     const wait = 500 - (Date.now() - lastMut);
     if (wait > 0) { metaT = setTimeout(run, wait + 20); return; }
