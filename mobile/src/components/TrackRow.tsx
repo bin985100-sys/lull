@@ -1,7 +1,9 @@
 import { useTheme } from '@/theme/state';
 import { router } from 'expo-router';
-import { memo, useEffect } from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import { memo, useCallback, useEffect, useRef } from 'react';
+import { Platform, View } from 'react-native';
+import { Pressable } from 'react-native-gesture-handler';
+import { SwipeToQueue } from '@/ui/SwipeToQueue';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import type { Track } from '@/api/audius';
@@ -23,6 +25,10 @@ type Props = { track: Track; list: Track[]; num?: number; sub?: boolean; right?:
 
 export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 'play', playlistId, noWarm }: Props) {
   const {colors:C}=useTheme();
+  const swipeUntil=useRef(0);
+  const swipeState=useCallback((active:boolean)=>{swipeUntil.current=active?Infinity:Date.now()+250;},[]);
+  const blocked=()=>Date.now()<swipeUntil.current;
+  const queue=useCallback(()=>{player.addToQueue(track);toast('Добавлено в очередь','queue');},[track]);
   const isCur = usePlayer((s) => currentTrack(s)?.id === track.id);
   const playing = usePlayer((s) => s.playing && currentTrack(s)?.id === track.id);
   const liked=useLibrary(s=>s.liked.some(t=>t.id===track.id));
@@ -33,33 +39,33 @@ export const TrackRow = memo(function TrackRow({ track, list, num, sub, right = 
   useEffect(() => { if (isCur && !reduced) lit.set(withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 800 }))); else lit.set(0); }, [isCur, reduced, lit]);
   /* прозрачность пишем обычным числом: «6e-8» из конца анимации ронял приложение на новых Android */
   const bg = useAnimatedStyle(() => ({ backgroundColor: `rgba(255,255,255,${(Math.max(0, lit.get()) * 0.1).toFixed(3)})` }));
-  const play = () => { haptic(); player.play(list, track.id); };
-  const more = (anchor?:MenuAnchor) => { haptic(); openTrackActions(track, playlistId,anchor); };
+  const play = () => { if(blocked())return;haptic(); player.play(list, track.id); };
+  const more = (anchor?:MenuAnchor) => { if(blocked())return;haptic(); openTrackActions(track, playlistId,anchor); };
 
   return (
-    <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 74, borderRadius: 24, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
-      <Pressable onPress={play} onPressIn={() => warm([track], true)} onLongPress={e=>more({x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} delayLongPress={420} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 }}
-        accessibilityRole="button" accessibilityLabel={`${track.title}, ${track.artist}`} accessibilityHint="Двойное касание — слушать, удержание — меню трека"
-        accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Меню трека' }]}
-        onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'longpress' ? more() : play())}>
-        {num ? <T v="sub" style={{ width: 24, fontSize: 16 }}>{num}</T> : <Cover uri={track.artwork} size={52} radius={18} />}
+    <SwipeToQueue onQueue={queue} onSwipeState={swipeState}><Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 74, borderRadius: 24, marginHorizontal: -8, paddingHorizontal: 8 }, bg]}>
+      <Pressable onPress={play} onPressIn={noWarm?undefined:()=>warm([track],true)} onLongPress={e=>more({x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} delayLongPress={420} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 }}
+        accessibilityRole="button" accessibilityLabel={`${track.title}, ${track.artist}`} accessibilityHint="Двойное касание — слушать, удержание — меню трека, свайп вправо — добавить в очередь"
+        accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Меню трека' },{name:'addToQueue',label:'Добавить в очередь'}]}
+        onAccessibilityAction={(e) => (e.nativeEvent.actionName==='addToQueue'?queue():e.nativeEvent.actionName === 'longpress' ? more() : play())}>
+        {num ? <T v="sub" style={{ width: 24, fontSize: 16 }}>{num}</T> : <Cover uri={track.artwork} trackId={track.source==='yt'?track.id:undefined} size={52} radius={18} />}
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T numberOfLines={1} style={{ color: isCur ? C.sky : C.tx, fontFamily: isCur ? F.bold : F.semi }}>{track.title}</T>
           {sub ? <T v="small" numberOfLines={1}>{track.artist}</T> : null}
         </View>
       </Pressable>
       {right === 'play' ? (
-        <Pressable onPress={()=>isCur ? player.toggle() : play()} hitSlop={6} accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : `Слушать ${track.title}`} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable onPress={()=>{if(!blocked()){if(isCur)player.toggle();else play();}}} hitSlop={6} accessibilityRole="button" accessibilityLabel={playing ? 'Пауза' : `Слушать ${track.title}`} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
           <PlayPause playing={playing} size={26} />
         </Pressable>
       ) : right === 'plus' ? (
-        <Pressable onPress={() => openSelectPlaylist(track)} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Добавить ${track.title} в плейлист`} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable onPress={() => {if(!blocked())openSelectPlaylist(track);}} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Добавить ${track.title} в плейлист`} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="plus" size={26} />
         </Pressable>
       ) : right === 'heart' ? (
-        <HeartButton liked={liked} size={24} onPress={()=>likeWithUndo(track)} label={`${liked?'Убрать':'Добавить'} ${track.title} ${liked?'из любимых':'в любимые'}`}/>
+        <HeartButton liked={liked} size={24} onPress={()=>{if(!blocked())likeWithUndo(track);}} label={`${liked?'Убрать':'Добавить'} ${track.title} ${liked?'из любимых':'в любимые'}`}/>
       ) : null}
-    </Animated.View>
+    </Animated.View></SwipeToQueue>
   );
 });
 

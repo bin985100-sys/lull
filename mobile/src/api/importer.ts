@@ -23,9 +23,11 @@ export function runImport(url: string, onState: (s: ImportState) => void, onErro
   (async () => {
     try {
       const { id, service } = await req('', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+      if (stop) return;
       onState({ status: 'reading', service, name: '', done: 0, total: 0, matched: 0 });
       while (!stop) {
         await new Promise((r) => setTimeout(r, 800));
+        if (stop) return;
         const s = await req(`/${encodeURIComponent(id)}`);
         if (stop) return;
         if (s.status === 'error') throw new Error(s.error || 'Не получилось перенести');

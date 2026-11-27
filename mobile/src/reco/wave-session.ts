@@ -4,73 +4,155 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { type Track } from '@/api/audius';
 import { currentTrack, player, usePlayer } from '@/player/player';
 import { useTaste, type WaveMode } from '@/store/taste';
+import { useConnectivity } from '@/store/connectivity';
 import { buildWave } from './engine';
 
-type WaveSession={autoContinue:boolean;active:boolean;busy:boolean;seed:Track|null;error:string|null};
-export const useWaveSession=create<WaveSession>()(persist(():WaveSession=>({autoContinue:true,active:false,busy:false,seed:null,error:null}),{name:'lull.wave.v1',storage:createJSONStorage(()=>AsyncStorage),partialize:s=>({autoContinue:s.autoContinue})}));
-let request:AbortController|null=null,pending:{seed:string;tracks:Track[];queue:Track[]}|null=null,applying=false;
-let members=new Set<string>();
-const attempted=new Set<string>();
-const key=(t:Track)=>`${t.source}:${t.id}`;
-function preserveUpcoming(seed:Track,tracks:Track[]){const s=usePlayer.getState(),seen=new Set(s.queue.map(key));return [seed,...s.queue.slice(s.index+1),...tracks.slice(1).filter(t=>!seen.has(key(t)))];}
+type WaveSession = {
+  autoContinue: boolean; active: boolean; busy: boolean;
+  seed: Track | null; tracks: Track[]; error: string | null;
+};
+export const useWaveSession = create<WaveSession>()(persist((): WaveSession => ({
+  autoContinue: true, active: false, busy: false, seed: null, tracks: [], error: null,
+}), { name: 'lull.wave.v1', storage: createJSONStorage(() => AsyncStorage), partialize: s => ({ autoContinue: s.autoContinue }) }));
 
-function apply(seed:Track,tracks:Track[]){
- const state=usePlayer.getState(),cur=currentTrack(state);
- if(!cur||key(cur)!==key(seed))return;
- if(!state.playing){pending={seed:key(seed),tracks,queue:state.queue};return;}
- applying=true;
- try{members=new Set(tracks.map(key));useWaveSession.setState({active:true});player.startWave(tracks);}finally{applying=false;}
+const key = (t: Track) => `${t.source || 'audius'}:${t.id}`;
+type Intent = 'preview' | 'continue' | 'manual';
+type Request = {
+  controller: AbortController; seed: Track; mode: WaveMode; session: number;
+  starting: boolean; intent: Intent; queue: Track[]; done: Promise<boolean>;
+};
+let request: Request | null = null;
+let pending: { seed: string; session: number; tracks: Track[]; queue: Track[]; intent: Intent } | null = null;
+let applying = false, waveSession = -1, continued = '';
+let prepared: { seed: string; mode: WaveMode; length: number; tracks: Track[]; session: number } | null = null;
+let failed: { seed: string; session: number; at: number } | null = null;
+
+function cancel() {
+  request?.controller.abort(); request = null; pending = null;
+}
+function preserveUpcoming(seed: Track, tracks: Track[]) {
+  const s = usePlayer.getState(), seen = new Set(s.queue.map(key));
+  return [seed, ...s.queue.slice(s.index + 1), ...tracks.slice(1).filter(t => !seen.has(key(t)))];
+}
+function apply(seed: Track, tracks: Track[], intent: Intent) {
+  const s = usePlayer.getState(), cur = currentTrack(s);
+  if (!cur || key(cur) !== key(seed)) return;
+  if (!s.playing) { pending = { seed: key(seed), session: s.session, tracks, queue: s.queue, intent }; return; }
+  applying = true;
+  try {
+    waveSession = s.session;
+    continued = `${s.session}:${key(seed)}`;
+    useWaveSession.setState({ active: true, error: null });
+    player.startWave(tracks);
+  } finally { applying = false; }
 }
 
-/** Explicit wave starts the seed immediately; recommendations arrive in the background. */
-export async function startPersonalWave(seed:Track,mode?:WaveMode){
- request?.abort();pending=null;
- const ac=new AbortController();request=ac;
- const r=useTaste.getState().reco;
- const cur=currentTrack();
- useWaveSession.setState({busy:true,error:null,seed,active:true});
- attempted.add(key(seed));
- if(!cur||key(cur)!==key(seed))void player.play([seed],seed.id);
- else if(!usePlayer.getState().playing)player.toggle();
- const originalQueue=usePlayer.getState().queue;
- try{
-  const list=await buildWave(seed,mode??r.waveMode,r.waveLength,ac.signal);
-  if(ac.signal.aborted||key(currentTrack()??seed)!==key(seed))return false;
-  if(list.length<2)throw Error('Пока не нашли похожие треки. Попробуй другой характер волны.');
-  apply(seed,usePlayer.getState().queue===originalQueue?list:preserveUpcoming(seed,list));
-  return true;
- }catch(e){if(!ac.signal.aborted)useWaveSession.setState({error:e instanceof Error?e.message:'Не удалось собрать волну'});return false;}
- finally{if(request===ac){request=null;useWaveSession.setState({busy:false});}}
+function begin(seed: Track, mode: WaveMode, intent: Intent): Promise<boolean> {
+  const state = usePlayer.getState(), length = useTaste.getState().reco.waveLength;
+  if (request && key(request.seed) === key(seed) && request.mode === mode && request.session === state.session) {
+    if (intent !== 'preview') request.intent = intent;
+    if (intent === 'manual' && !state.playing) player.toggle();
+    return request.done;
+  }
+  cancel();
+  const r: Request = { controller: new AbortController(), seed, mode, session: state.session,
+    starting: intent === 'manual' && (!currentTrack(state) || key(currentTrack(state)!) !== key(seed)),
+    intent, queue: state.queue, done: Promise.resolve(false) };
+  request = r;
+  failed = null;
+  const cached = prepared?.seed === key(seed) && prepared.mode === mode && prepared.length === length && prepared.session === state.session ? prepared.tracks : null;
+  useWaveSession.setState({ busy: !cached, seed, tracks: cached || [seed], error: null });
+
+  // Prepare recommendations alongside audio. Old status events must not cancel
+  // a manual launch while the audio subsystem is still initializing.
+  const playback = intent === 'manual' ? (() => {
+    if (r.starting) return Promise.resolve(player.play([seed], seed.id, { shuffle: false }));
+    if (!state.playing) player.toggle();
+    return Promise.resolve();
+  })() : Promise.resolve();
+  const result = cached ? Promise.resolve(cached) : buildWave(seed, mode, length, r.controller.signal);
+  r.done = Promise.all([playback, result]).then(([, list]) => {
+    const now = usePlayer.getState(), cur = currentTrack(now);
+    if (request !== r || r.controller.signal.aborted || !cur || key(cur) !== key(seed) || now.session !== r.session) return false;
+    if (list.length < 2) throw Error('Пока не нашли похожие треки. Попробуй другой характер волны.');
+    prepared = { seed: key(seed), mode, length, tracks: list, session: now.session };
+    useWaveSession.setState({ seed, tracks: list, error: null });
+    if (r.intent !== 'preview') apply(seed, now.queue === r.queue ? list : preserveUpcoming(seed, list), r.intent);
+    return true;
+  }).catch(e => {
+    if (request === r && !r.controller.signal.aborted) {
+      failed = { seed: key(seed), session: r.session, at: Date.now() };
+      useWaveSession.setState({ active: waveSession === usePlayer.getState().session,
+        error: e instanceof Error ? e.message : 'Не удалось собрать волну. Попробуй ещё раз.' });
+    }
+    return false;
+  }).finally(() => {
+    if (request === r) { request = null; useWaveSession.setState({ busy: false }); }
+  });
+  return r.done;
 }
 
-/** Appends only near the end. Explicit playlists keep their existing order. */
-export function startWaveContinuation(){
- const check=()=>{
-  if(applying)return;
-  const state=usePlayer.getState(),cur=currentTrack(state),ui=useWaveSession.getState();
-  if(!cur)return;
-  if(ui.active&&!request&&!pending&&members.size>0&&!members.has(key(cur)))useWaveSession.setState({active:false});
-  if(pending){if(pending.seed!==key(cur))pending=null;else if(state.playing){const next=pending;pending=null;apply(cur,state.queue===next.queue?next.tracks:preserveUpcoming(cur,next.tracks));return;}}
-  if(request&&ui.seed&&key(cur)!==key(ui.seed)){request.abort();request=null;useWaveSession.setState({busy:false});}
-  if(!state.playing||!ui.autoContinue||request)return;
-  const remaining=state.queue.length-state.index-1;
-  if(remaining>0&&(!ui.active||!members.has(key(cur))||remaining>2))return;
-  if(attempted.has(key(cur)))return;
-  attempted.add(key(cur));
-  // Bound bookkeeping over long sessions; queue history is owned by the player.
-  if(attempted.size>300)attempted.delete(attempted.values().next().value!);
-  const seed=cur,ac=new AbortController();request=ac;
-  useWaveSession.setState({active:true,seed,busy:true,error:null});
-  const r=useTaste.getState().reco;
-  void buildWave(seed,r.waveMode,r.waveLength,ac.signal).then(list=>{
-   const now=usePlayer.getState(),current=currentTrack(now);
-   if(ac.signal.aborted||!current||key(current)!==key(seed))return;
-   const seen=new Set(now.queue.map(key));
-   const more=list.filter(t=>!seen.has(key(t)));
-   if(more.length)apply(seed,[seed,...now.queue.slice(now.index+1),...more]);
-  }).catch(()=>{if(!ac.signal.aborted)useWaveSession.setState({error:'Не удалось продолжить волну. Можно попробовать снова.'});}).finally(()=>{if(request===ac){request=null;useWaveSession.setState({busy:false});}});
- };
- const offPlayer=usePlayer.subscribe(check),offSettings=useWaveSession.subscribe((s,p)=>{if(s.autoContinue!==p.autoContinue){if(!s.autoContinue){request?.abort();request=null;pending=null;useWaveSession.setState({busy:false});}else check();}});
- check();
- return()=>{offPlayer();offSettings();request?.abort();request=null;pending=null;};
+/** A library song gets its own cover deck without replacing the library queue. */
+export function prepareTrackWave(seed: Track) {
+  const s = usePlayer.getState(), ui = useWaveSession.getState(), r = useTaste.getState().reco;
+  if (ui.active || request?.intent === 'manual' || useConnectivity.getState().offline) return;
+  if (prepared?.seed === key(seed) && prepared.mode === r.waveMode && prepared.length === r.waveLength && prepared.session === s.session) return;
+  if (failed?.seed === key(seed) && failed.session === s.session && Date.now() - failed.at < 10000) return;
+  void begin(seed, r.waveMode, 'preview');
+}
+
+/** An explicit launch can always retry, including after an offline failure. */
+export function startPersonalWave(seed: Track, mode?: WaveMode) {
+  return begin(seed, mode ?? useTaste.getState().reco.waveMode, 'manual');
+}
+
+/** One owner for recommendations; the audio player has no separate radio task. */
+export function startWaveContinuation() {
+  let context = '';
+  const check = () => {
+    if (applying) return;
+    const s = usePlayer.getState(), cur = currentTrack(s), ui = useWaveSession.getState();
+    if (request?.starting && s.session !== request.session) {
+      if (cur && key(cur) === key(request.seed)) {
+        request.starting = false; request.session = s.session; request.queue = s.queue;
+      } else cancel();
+    }
+    const nextContext = `${s.session}:${cur ? key(cur) : ''}`;
+    if (context !== nextContext) {
+      context = nextContext;
+      if (request && !request.starting && (s.session !== request.session || !cur || key(cur) !== key(request.seed))) cancel();
+      if (pending && (pending.session !== s.session || !cur || pending.seed !== key(cur))) pending = null;
+      if (waveSession !== s.session) {
+        waveSession = -1;
+        useWaveSession.setState({ active: false, busy: !!request, seed: cur || null, tracks: cur ? [cur] : [], error: null });
+      }
+    }
+    if (!cur) return;
+    if (pending && s.playing) {
+      const next = pending; pending = null;
+      apply(cur, s.queue === next.queue ? next.tracks : preserveUpcoming(cur, next.tracks), next.intent);
+      return;
+    }
+    if (!s.playing || s.error || !ui.autoContinue || s.repeat !== 'off' || useConnectivity.getState().offline) return;
+    const remaining = s.queue.length - s.index - 1;
+    if (remaining > (waveSession === s.session ? 2 : 0) || continued === nextContext) return;
+    if (request) {
+      if (!request.starting && request.session === s.session && key(request.seed) === key(cur) && request.intent === 'preview') request.intent = 'continue';
+      return;
+    }
+    if (failed?.seed === key(cur) && failed.session === s.session && Date.now() - failed.at < 10000) return;
+    void begin(cur, useTaste.getState().reco.waveMode, 'continue');
+  };
+  const offPlayer = usePlayer.subscribe(check);
+  const offSettings = useWaveSession.subscribe((s, p) => {
+    if (s.autoContinue === p.autoContinue) return;
+    if (!s.autoContinue && pending?.intent === 'continue') pending = null;
+    if (!s.autoContinue && request?.intent === 'continue') { cancel(); useWaveSession.setState({ busy: false }); }
+    else if (s.autoContinue) check();
+  });
+  const offNetwork = useConnectivity.subscribe((s, p) => {
+    if (p.offline && !s.offline) { failed = null; check(); }
+  });
+  check();
+  return () => { offPlayer(); offSettings(); offNetwork(); cancel(); };
 }

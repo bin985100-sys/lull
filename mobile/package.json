@@ -21,6 +21,7 @@
     "expo-intent-launcher": "~58.0.3",
     "expo-linear-gradient": "~58.0.3",
     "expo-linking": "~58.0.16",
+    "expo-network": "~58.0.6",
     "expo-router": "~58.0.30",
     "expo-splash-screen": "~58.0.13",
     "expo-status-bar": "~58.0.4",
@@ -56,12 +57,23 @@
     "lint": "expo lint",
     "test:sync": "node scripts/sync.test.mjs",
     "test:player": "node scripts/player.test.mjs",
-    "test": "node scripts/sync.test.mjs && node scripts/player.test.mjs && node scripts/lyrics.test.mjs && node --test scripts/audio-cache.test.mjs && node scripts/wave-session.test.mjs && node scripts/cover-colors.test.mjs && node scripts/audio-output.test.mjs && node scripts/deck.test.mjs",
+    "test": "node scripts/sync.test.mjs && node scripts/player.test.mjs && node scripts/lyrics.test.mjs && node --test scripts/audio-cache.test.mjs && node scripts/wave-session.test.mjs && node scripts/wave-engine.test.mjs && node scripts/cover-colors.test.mjs && node scripts/audio-output.test.mjs && node scripts/deck.test.mjs && node scripts/raster-texture.test.mjs && node scripts/history-artwork.test.mjs",
     "test:lyrics": "node scripts/lyrics.test.mjs",
     "test:wave": "node scripts/wave-session.test.mjs",
     "test:colors": "node scripts/cover-colors.test.mjs",
     "test:output": "node scripts/audio-output.test.mjs",
-    "test:deck": "node scripts/deck.test.mjs"
+    "test:deck": "node scripts/deck.test.mjs",
+    "test:textures": "node scripts/raster-texture.test.mjs",
+    "test:history-artwork": "node scripts/history-artwork.test.mjs"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-audio"
+        ]
+      }
+    }
+  }
 }

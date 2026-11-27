@@ -6,9 +6,9 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { useTheme } from '@/theme/state';
 import { haptic } from './kit';
 
-type Props={value:boolean;onValueChange:(value:boolean)=>void;disabled?:boolean;accessibilityLabel:string};
+type Props={value:boolean;onValueChange:(value:boolean)=>void;disabled?:boolean;accessibilityLabel:string;accent?:string};
 /** A bounded UI-thread thumb drag; changing settings happens once on release. */
-export function Toggle({value,onValueChange,disabled=false,accessibilityLabel}:Props){
+export function Toggle({value,onValueChange,disabled=false,accessibilityLabel,accent}:Props){
  const {colors:C}=useTheme(),reduced=useReducedMotion();
  const progress=useSharedValue(value?1:0),pressure=useSharedValue(0),dragging=useSharedValue(false);
  const preventTap=useRef(false);
@@ -32,7 +32,7 @@ export function Toggle({value,onValueChange,disabled=false,accessibilityLabel}:P
    onPressOut={()=>{if(!dragging.get())pressure.set(withTiming(0,{duration:220}));}}
    onFocus={resetGuard} onPress={()=>{if(preventTap.current){preventTap.current=false;return;}haptic();onValueChange(!value);}} style={{height:44,justifyContent:'center'}}>
    <View style={{height:32,borderRadius:18,overflow:'hidden',backgroundColor:C.s4}}>
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill,{backgroundColor:C.sky,borderRadius:18},color]}/>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill,{backgroundColor:accent??C.sky,borderRadius:18},color]}/>
     <Animated.View pointerEvents="none" style={[{position:'absolute',left:2,top:2,width:28,height:28,borderRadius:14,backgroundColor:'#fff'},thumb]}></Animated.View>
    </View>
   </Pressable>

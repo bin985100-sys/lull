@@ -32,7 +32,7 @@ globalThis.__makePlaylist = () => {
     play() { p.playing = p.sources.length > 0; },
     pause() { p.playing = false; },
     seekTo(t) { p.time = t; },
-    setActiveForLockScreen() { p.lockSets = (p.lockSets || 0) + 1; }, updateLockScreenMetadata() { if (Date.now() - (p.lastChange || 0) < 300) throw new Error('Invalid PlayerInfo update: метаданные во время переключения'); p.lockUpdates = (p.lockUpdates || 0) + 1; }, clearLockScreenControls() {},
+    setActiveForLockScreen(active,meta) { p.lastMeta=meta; p.lockSets = (p.lockSets || 0) + 1; }, updateLockScreenMetadata(meta) { p.lastMeta=meta; if (Date.now() - (p.lastChange || 0) < 300) throw new Error('Invalid PlayerInfo update: метаданные во время переключения'); p.lockUpdates = (p.lockUpdates || 0) + 1; }, clearLockScreenControls() {},
     get current() { return p.playing ? p.sources[p.currentIndex]?.uri : null; },
     /* «звук идёт»: раз в 100 мс шлём статус, как настоящий плеер */
     tick() {
@@ -51,7 +51,7 @@ const STUBS = {
   'expo-audio': `export const createAudioPlaylist=()=>globalThis.__makePlaylist(); export const setAudioModeAsync=async()=>{};`,
   '@react-native-async-storage/async-storage': `const m=new Map(); export default { getItem:async k=>m.get(k)??null, setItem:async (k,v)=>{m.set(k,v)}, removeItem:async k=>{m.delete(k)} };`,
   'react-native': `export const Platform={OS:'android'}; export const AppState={addEventListener(){return {remove(){}}}};`,
-  '@/ui/Crash': `export const log=(m)=>{ if(process.env.V) console.log('   log:',m) }; export const logNow=async(m)=>{}; export const report=(e,w)=>{ (globalThis.__reports ||= []).push(w+': '+e?.message); if(process.env.V) console.log('   REPORT',w,e?.message) };`,
+  '@/ui/Crash': `export const log=(m)=>{ if(process.env.V) console.log('   log:',m) }; export const logNow=async(m)=>{if(globalThis.__logDelay)await new Promise(r=>setTimeout(r,globalThis.__logDelay));}; export const report=(e,w)=>{ (globalThis.__reports ||= []).push(w+': '+e?.message); if(process.env.V) console.log('   REPORT',w,e?.message) };`,
   '@/api/lull': `export const streamUrlYt=id=>'yt:'+id; export const warm=()=>{}; export const lull={ upNext: async()=>[] };`,
   '@/api/audius': `export const streamUrl=id=>'au:'+id;`,
 };
@@ -231,6 +231,13 @@ await test('Быстрый переход, потом неподготовлен
   if (same(m, 'итог') !== 's5') throw new Error('должен играть s5');
   m.player.next(); await settle(600); m.player.skipTo(2); await settle(1200);
   same(m, 'итог 2');
+});
+
+await test('Медленная запись диагностики не оставляет название первого трека в системном плеере',async()=>{
+ globalThis.__logDelay=2000;try{const m=await freshApp();await m.player.play(LIST,'s0');await settle(500);m.player.next();await settle(900);const p=globalThis.__pl;if(p.lastMeta?.title!==m.currentTrack().title)throw Error('System metadata is stale');if(p.lockSets!==1)throw Error('Media session registered more than once');}finally{globalThis.__logDelay=0;}
+});
+await test('Два быстрых перехода в шторке принимают живой индекс, а не теряют событие в окне 700 мс',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(1600);const p=globalThis.__pl;p.next();await settle(180);m.player.prev();await settle(300);p.next();await settle(1000);same(m,'Быстрый переход из шторки');if(p.lastMeta?.title!==m.currentTrack().title)throw Error('System title does not match current song');
 });
 
 console.log(`\n${pass} прошло, ${fail} упало`);

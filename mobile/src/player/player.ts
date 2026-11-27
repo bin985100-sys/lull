@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 import { streamUrl, type Track } from '@/api/audius';
-import { lull, streamUrlYt, warm } from '@/api/lull';
+import { streamUrlYt, warm } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 import { useTaste } from '@/store/taste';
 import { log, logNow, report } from '@/ui/Crash';
@@ -16,6 +16,7 @@ export type Repeat = 'off' | 'all' | 'one';
 type Dir = 'next' | 'prev';
 
 type PlayerState = {
+  session: number; // changes only when a listener starts a different playback context
   queue: Track[]; // весь список, index — текущий
   index: number;
   playing: boolean;
@@ -29,7 +30,7 @@ type PlayerState = {
 type Progress = { time: number; duration: number };
 
 export const usePlayer = create<PlayerState>(() => ({
-  queue: [], index: -1, playing: false, buffering: false, shuffle: false, repeat: 'off', expanded: false, lastDir: 'next', error: null,
+  session: 0, queue: [], index: -1, playing: false, buffering: false, shuffle: false, repeat: 'off', expanded: false, lastDir: 'next', error: null,
 }));
 export const useProgress = create<Progress>(() => ({ time: 0, duration: 0 }));
 
@@ -91,6 +92,7 @@ function engine() {
   log('engine: плеер создан');
   let said = false;
   pl.addListener('playlistStatusUpdate', (st) => {
+    if(loading||st.currentIndex!==pl?.currentIndex)return;
     if (startup && !loading && startup.id === currentTrack()?.id && (st.currentTime || 0) > 0) {
       log(`старт ${startup.id}: первый прогресс через ${Date.now() - startup.at} мс, local=${!!localAudio(startup.id)}`);
       startup = null;
@@ -116,17 +118,17 @@ function engine() {
     }
   });
   pl.addListener('trackChanged', ({ currentIndex }) => {
-    touch();
     log(`trackChanged: ${currentIndex} (base ${base})`);
     /* Верим только настоящему переходу на соседний трек (сам доиграл, кнопки на экране блокировки/в наушниках).
        Отголоски от clear()/skipTo() приходят с опозданием и раньше откатывали экран на прошлый трек,
        пока играл уже другой — отсюда «играет 505, а на экране Sparks». */
-    if (loading || !nativeLen || Date.now() - mountedAt < 700) return; // короткое окно: отголоски от пересборки плеера
+    if (loading || !nativeLen || currentIndex!==pl?.currentIndex) return; // delayed events cannot override the live native index
     const s = usePlayer.getState();
     const cur = s.index - base;
     if (currentIndex === cur) return;
     if (useSleep.getState().endTrack && currentIndex > cur) { finishSleep(); }
     if (Math.abs(currentIndex - cur) !== 1) { log(`пропускаю странный trackChanged: ${currentIndex}, жду ${cur}±1`); return; }
+    touch();
     const idx = base + currentIndex;
     if (idx < 0 || idx >= s.queue.length) return;
     usePlayer.setState({ index: idx, lastDir: currentIndex < cur ? 'prev' : 'next' });
@@ -179,29 +181,14 @@ function noteSkip() {
   if (t && time < 30 && (t.duration || 0) > 60) useTaste.getState().addSkip(t);
 }
 
-/* Радио: когда очередь подходит к концу, дозаполняем похожими треками, как в YouTube Music */
-let radioFor = '';
-async function extendRadio() {
-  const s = usePlayer.getState();
-  const t = currentTrack(s);
-  if (!t || t.source !== 'yt' || s.repeat !== 'off' || s.index < s.queue.length - 2 || radioFor === t.id) return;
-  radioFor = t.id;
-  try {
-    const more = (await lull.upNext(t.id)).filter((x) => x?.id && !usePlayer.getState().queue.some((q) => q.id === x.id)).slice(0, 10);
-    if (currentTrack()?.id !== t.id) return;
-    more.forEach((x) => player.addToQueue(x));
-  } catch {}
-}
-
 function onTrackStart() {
   const t = currentTrack();
   if (!t || !pl) return;
-  /* радио дозаполняем чуть позже, когда трек уже стартовал, и не больше 10 треков за раз */
-  setTimeout(() => extendRadio().catch((e) => report(e, 'radio')), 4000);
+  // Recommendation queue changes belong to wave-session, including auto-continue preferences.
   try { useLibrary.getState().pushHistory(t); } catch (e) { report(e, 'history'); }
   setTimeout(primeAhead, 200);
   useProgress.setState({ time: 0, duration: t.duration });
-  const meta = { title: t.title, artist: t.artist, artworkUrl: t.artworkLarge || t.artwork };
+  const meta = { title: t.title, artist: t.artist, artworkUrl: t.artwork || t.artworkLarge };
   const p = pl;
   /* Плеер на экране блокировки и в шторке регистрируем один раз, дальше только меняем название и обложку.
      Повторная регистрация пересоздаёт медиасессию Android: строка в шторке пропадала и кнопки «глючили». */
@@ -209,14 +196,14 @@ function onTrackStart() {
     scheduleMeta(meta);
     return;
   }
-  lockActive = true;
-  (async () => {
-    await logNow(`экран блокировки: включаю для «${t.title}»`);
-    try {
-      p.setActiveForLockScreen(true, meta, { showNextTrack: true, showPreviousTrack: true, showSeekForward: false, showSeekBackward: false });
-      log('экран блокировки: готово');
-    } catch (e) { lockActive = false; report(e, 'player.lockscreen'); }
-  })();
+  try {
+    // Register synchronously. Awaiting diagnostic storage here let a newer
+    // track's metadata update run before the media session even existed.
+    p.setActiveForLockScreen(true,meta,{showNextTrack:true,showPreviousTrack:true,showSeekForward:false,showSeekBackward:false});
+    lockActive=true;
+    void logNow(`экран блокировки: включён для «${t.title}»`);
+  } catch(e){lockActive=false;report(e,'player.lockscreen');}
+
 }
 let lockActive = false;
 /* Название в шторке меняем, только когда плеер телефона закончил переключение (полсекунды без изменений списка).
@@ -233,7 +220,13 @@ function scheduleMeta(meta: { title: string; artist: string; artworkUrl?: string
     const wait = 500 - (Date.now() - lastMut);
     if (wait > 0) { metaT = setTimeout(run, wait + 20); return; }
     metaT = null;
-    try { if (pl && lockActive && pendingMeta) pl.updateLockScreenMetadata(pendingMeta); } catch (e) { report(e, 'player.lockscreen.update'); }
+    try { if (pl && lockActive && pendingMeta) {
+      const state=usePlayer.getState();
+      if(loading||pl.currentIndex!==state.index-base){metaT=setTimeout(run,100);return;}
+      const current=currentTrack(state);
+      if(current)pl.updateLockScreenMetadata({title:current.title,artist:current.artist,artworkUrl:current.artwork||current.artworkLarge});
+      pendingMeta=null;
+    } } catch (e) { report(e, 'player.lockscreen.update'); }
   };
   metaT = setTimeout(run, 500);
 }
@@ -282,7 +275,7 @@ function primeAhead() {
   warm(s.queue.slice(s.index + 3, s.index + 6)); // дальние — только ссылка, два ближайших prime() качает целиком
 }
 
-let loadSeq = 0;
+let loadSeq = 0, playRequest = 0;
 /* loading — новый трек ещё готовится; wantPlay — что выбрал пользователь (играть/пауза) */
 let loading = false;
 let wantPlay = true;
@@ -390,7 +383,7 @@ async function load(queue: Track[], index: number) {
   startup = { id: queue[index].id, at: Date.now() };
   loading = true; wantPlay = true;
   silence();
-  usePlayer.setState({ queue, index, lastDir: 'next', error: null, playing: true, buffering: true });
+  usePlayer.setState(s => ({ session: s.session + 1, queue, index, lastDir: 'next', error: null, playing: true, buffering: true }));
   useProgress.setState({ time: 0, duration: queue[index]?.duration || 0 });
   const t0 = Date.now();
   log(`play: «${queue[index]?.title}» ${queue[index]?.id}, в очереди ${queue.length}, local=${!!localAudio(queue[index]?.id || '')}`);
@@ -408,7 +401,9 @@ export const player = {
   async play(list: Track[], startId?: string, opts: { shuffle?: boolean } = {}) {
     const ok = list.filter((t) => t.streamable);
     if (!ok.length) return;
+    const request = ++playRequest;
     await init();
+    if (request !== playRequest) return;
     const s = usePlayer.getState();
     const cur = currentTrack(s);
     if (startId && cur?.id === startId && !s.error) return player.toggle();
@@ -505,7 +500,7 @@ export const player = {
   startWave(list: Track[]) {
     const s = usePlayer.getState();
     const cur = currentTrack(s);
-    if (cur && list[0]?.id === cur.id) {
+    if (cur && list[0] && trackKey(list[0]) === trackKey(cur)) {
       usePlayer.setState({ queue: [...s.queue.slice(0, s.index + 1), ...list.slice(1)], shuffle: false });
       ensureNext();
       if (!s.playing) player.toggle();
@@ -542,11 +537,12 @@ export const player = {
   expand(v: boolean) { usePlayer.setState({ expanded: v && !!currentTrack() }); },
   stop() {
     setSleep(null);
+    playRequest++;
     loadSeq++; loading = false; if (dogTimer) clearTimeout(dogTimer);
     if (metaT) { clearTimeout(metaT); metaT = null; }
     if (pl) { pl.pause(); wipe(pl); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }
     lockActive = false;
-    usePlayer.setState({ queue: [], index: -1, playing: false, expanded: false });
+    usePlayer.setState(s => ({ session: s.session + 1, queue: [], index: -1, playing: false, buffering: false, error: null, expanded: false }));
   },
 };
 

@@ -7,8 +7,9 @@ import { ListPage } from '@/components/ListPage';
 import { useLibrary } from '@/store/library';
 
 import { Icon } from '@/ui/Icon';
-import { Btn, Empty, IconBtn, s, T } from '@/ui/kit';
+import { Btn, Empty, Press, s, T } from '@/ui/kit';
 import { closeSheet, confirm, openSheet, toast } from '@/ui/overlay';
+import { CatalogIconButton } from '@/components/CatalogControls';
 
 function EditSheet({ id }: { id: string }) {
   const {colors:C}=useTheme();
@@ -37,9 +38,9 @@ export default function MyPlaylist() {
   const pl = useLibrary((x) => x.playlists.find((p) => p.id === id));
   if (!pl) return <ListPage title="Плейлист удалён" tracks={[]} empty={<Empty icon="note" title="Плейлист не найден" />} />;
   return (
-    <ListPage title={pl.name} cover={{ collage: pl.tracks.map((t) => t.artwork) }} tracks={pl.tracks} sub2 playlistId={pl.id}
-      right={<IconBtn name="pencil" label="Изменить плейлист" onPress={() => openSheet(() => <EditSheet id={pl.id} />)} />}
-      below={<Btn label="Добавить треки" icon="plus" kind="flat" small style={{ marginTop: 12 }} onPress={() => router.push({ pathname: '/add-tracks', params: { id: pl.id } })} />}
+    <ListPage immersive title={pl.name} cover={{ collage: pl.tracks.map((t) => t.artwork) }} tracks={pl.tracks} sub2 playlistId={pl.id}
+      right={<CatalogIconButton name="pencil" label="Изменить плейлист" onPress={() => openSheet(() => <EditSheet id={pl.id} />)} />}
+      below={<Press accessibilityRole="button" accessibilityLabel="Добавить треки" onPress={() => router.push({ pathname: '/add-tracks', params: { id: pl.id } })} style={{minHeight:54,borderRadius:999,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:10}}><T style={{color:'#fff',fontFamily:'Manrope_700Bold'}}>Добавить треки</T><Icon name="plus" size={26} color="#fff"/></Press>}
       empty={<View style={{ padding: 24, borderRadius: 26, backgroundColor: C.s1, alignItems: 'center', gap: 6 }}><T v="h3">В плейлисте пока нет треков</T><T v="body">Добавь первые — и можно слушать.</T></View>} />
   );
 }

@@ -2,7 +2,7 @@ name: Lull Desktop
 on:
   workflow_dispatch:
   push:
-    branches: [mobile]
+    branches: [mobile, 'release/**']
     paths: ['desktop/**', '.github/workflows/desktop.yml']
 permissions:
   contents: read

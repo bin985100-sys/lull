@@ -70,7 +70,7 @@ export default function AddTracks() {
         <Btn label={n ? `Добавить ${n} ${plural(n)}` : 'Выбери треки'} icon="check" disabled={!n} onPress={() => {
           if (busy.current) return; busy.current = true;
           useLibrary.getState().setPlaylistTracks(pl.id, [...pl.tracks, ...sel.filter((t) => !inPl.has(t.id))]);
-          router.back(); toast(`Добавлено: ${n} ${plural(n)}`, 'check');
+          router.back(); toast(`Добавлено: ${n} ${plural(n)}`, 'check',undefined,sel.map(t=>t.artwork).filter((uri):uri is string=>!!uri));
         }} />
       </View>
     </View>

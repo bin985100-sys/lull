@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useEffectEvent, useState } from 'react';
 
+import { useConnectivity } from '@/store/connectivity';
 import { ApiError } from './audius';
 
 /* Небольшой кэш запросов: одинаковый ключ не грузится дважды за 5 минут. */
@@ -11,6 +12,7 @@ export type DataState<T> = { data: T | undefined; loading: boolean; error: ApiEr
 const isFresh=(entry:{at:number}|undefined)=>!!entry&&Date.now()-entry.at<TTL;
 
 export function useData<T>(key: string | null, fn: (signal: AbortSignal) => Promise<T>): DataState<T> {
+  const epoch=useConnectivity(s=>s.epoch);
   const [nonce,setNonce]=useState(0);
   const [result,setResult]=useState<{key:string;nonce:number;data:T|undefined;error:ApiError|null}|null>(null);
   const fetchData=useEffectEvent((signal:AbortSignal)=>fn(signal));
@@ -27,7 +29,7 @@ export function useData<T>(key: string | null, fn: (signal: AbortSignal) => Prom
       cache.set(key,{at:Date.now(),data});startTransition(()=>setResult({key,nonce,data,error:null}));
     },e=>{if(!ac.signal.aborted)startTransition(()=>setResult({key,nonce,data:c?.data as T|undefined,error:e instanceof ApiError ? e : new ApiError('http',String(e?.message||e))}));});
     return()=>ac.abort();
-  },[key,nonce]);
+  },[key,nonce,epoch]);
   const reload=useCallback(()=>{if(key)cache.delete(key);setNonce(n=>n+1);},[key]);
   return {data:key ? current?.data??hit?.data as T|undefined : undefined,loading:!!key&&!current&&!fresh,error:current?.error??null,reload};
 }

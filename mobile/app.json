@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lull",
     "slug": "lull",
-    "version": "0.4.3",
+    "version": "0.4.4",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "lull",
@@ -16,12 +16,12 @@
           "audio"
         ]
       },
-      "buildNumber": "9"
+      "buildNumber": "14"
     },
     "android": {
       "package": "website.lull.app",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff",
+        "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -29,7 +29,7 @@
       "permissions": [
         "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ],
-      "versionCode": 9
+      "versionCode": 14
     },
     "web": {
       "output": "single",
@@ -59,7 +59,8 @@
         }
       ],
       "./plugins/withCrashLog",
-      "expo-video"
+      "expo-video",
+      "./plugins/withAudioMetadata"
     ],
     "experiments": {
       "typedRoutes": true,

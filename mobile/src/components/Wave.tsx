@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import type { Track } from '@/api/audius';
-import { startPersonalWave } from '@/reco/wave-session';
+import { startPersonalWave, useWaveSession } from '@/reco/wave-session';
 import { WAVE_MODES } from '@/reco/engine';
 import { useTaste, type WaveMode } from '@/store/taste';
 import { F } from '@/theme/tokens';
@@ -19,7 +19,7 @@ export function openWave(t: Track) { openSheet(() => <WaveSheet seed={t} />); }
 
 export async function launchWave(seed: Track, mode?: WaveMode) {
   const ok=await startPersonalWave(seed,mode);
-  if(!ok)toast('Пока не удалось собрать волну — попробуй ещё раз','info');
+  if(!ok&&useWaveSession.getState().error)toast(useWaveSession.getState().error!,'info');
   return ok;
 }
 
@@ -30,7 +30,7 @@ function WaveSheet({ seed }: { seed: Track }) {
   const [busy, setBusy] = useState(false);
   return (
     <View style={{ gap: 14 }}>
-      <View style={{height:124,borderRadius:28,overflow:'hidden'}}><WaveArt colors={colors}/><View style={{flex:1,backgroundColor:'rgba(0,0,0,.45)',padding:20,flexDirection:'row',alignItems:'center',gap:14}}>
+      <View style={{height:124,borderRadius:28,overflow:'hidden'}}><WaveArt colors={colors} drift inPlayer/><View style={{flex:1,backgroundColor:'rgba(0,0,0,.45)',padding:20,flexDirection:'row',alignItems:'center',gap:14}}>
         <Cover uri={seed.artwork} size={56} />
         <View style={{ flex: 1 }}><T v="h3" style={{color:'#fff'}}>Волна по треку</T><T numberOfLines={1} style={{fontSize:12,color:'#ddd',marginTop:6}}>{seed.title}</T></View>
       </View></View>

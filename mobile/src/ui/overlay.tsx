@@ -11,18 +11,19 @@ import { Icon, type IconName } from './Icon';
 import { Btn, T } from './kit';
 import { usePlayer } from '@/player/player';
 import { Surface } from './Surface';
+import { Image } from 'expo-image';
 
-type Toast = { id: number; icon?: IconName; text: string; action?: { label: string; fn: () => void } };
-type Dialog = { icon?: IconName; title: string; text?: string; safe: string; danger: string; onDanger: () => void };
+type Toast = { id: number; icon?: IconName; text: string; action?: { label: string; fn: () => void };previews?:string[] };
+type Dialog = { borderless?:boolean; icon?: IconName; title: string; text?: string; safe: string; danger: string; onDanger: () => void };
 export type MenuAnchor={x:number;y:number};
 type O = { anchor:MenuAnchor|null;toast: Toast | null; sheet: (() => ReactNode) | null; backdrop:(()=>ReactNode)|null; dialog: Dialog | null };
 export const useOverlay = create<O>(() => ({ anchor:null,toast: null, sheet: null, backdrop:null, dialog: null }));
 
 let tt: ReturnType<typeof setTimeout> | undefined;
-export function toast(text: string, icon?: IconName, action?: Toast['action']) {
+export function toast(text: string, icon?: IconName, action?: Toast['action'],previews?:string[]) {
   clearTimeout(tt);
-  useOverlay.setState({ toast: { id: Date.now(), text, icon, action } });
-  tt = setTimeout(() => useOverlay.setState({ toast: null }), action ? 5000 : 2600);
+  useOverlay.setState({ toast: { id: Date.now(), text, icon, action,previews } });
+  tt = setTimeout(() => useOverlay.setState({ toast: null }), action ? 5000 : previews?.length?3600:2600);
 }
 export const openSheet = (render: () => ReactNode,backdrop?:()=>ReactNode) => useOverlay.setState({ sheet: render,anchor:null,backdrop:backdrop??null });
 export const openPopover=(render:()=>ReactNode,anchor:MenuAnchor)=>useOverlay.setState({sheet:render,anchor,backdrop:null});
@@ -74,23 +75,24 @@ export function Overlays() {
       {dialog ? (
         <Animated.View entering={reduced?undefined:FadeIn.duration(420)} exiting={reduced?undefined:FadeOut.duration(400)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} accessibilityViewIsModal>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
-          <View style={st.dlg} accessibilityRole="alert">
-            <Surface pointerEvents="none" radius={32} style={StyleSheet.absoluteFill}/>
+          <View style={[st.dlg,dialog.borderless?{borderWidth:0,backgroundColor:C.bg}:null]} accessibilityRole="alert">
+            {!dialog.borderless?<Surface pointerEvents="none" radius={32} style={StyleSheet.absoluteFill}/>:null}
             {dialog.icon ? <Icon name={dialog.icon} size={44} /> : null}
             <T v="h2" style={{ fontSize: 24, textAlign: 'center' }}>{dialog.title}</T>
             {dialog.text ? <T v="body" style={{ textAlign: 'center', fontSize: 15 }}>{dialog.text}</T> : null}
             <View style={{ alignSelf: 'stretch', gap: 10, marginTop: 10 }}>
-              <Btn label={dialog.safe} small onPress={() => useOverlay.setState({ dialog: null })} style={{ justifyContent: 'center' }} />
-              <Btn label={dialog.danger} small kind="flat" onPress={() => { const f = dialog.onDanger; useOverlay.setState({ dialog: null }); f(); }} style={{ justifyContent: 'center' }} />
+              <Btn borderless={dialog.borderless} label={dialog.safe} small onPress={() => useOverlay.setState({ dialog: null })} style={{ justifyContent: 'center' }} />
+              <Btn borderless={dialog.borderless} label={dialog.danger} small kind="flat" onPress={() => { const f = dialog.onDanger; useOverlay.setState({ dialog: null }); f(); }} style={{ justifyContent: 'center' }} />
             </View>
           </View>
         </Animated.View>
       ) : null}
       {t ? (
         <Animated.View key={t.id} entering={reduced ? undefined : FadeIn.duration(220)} exiting={reduced ? undefined : FadeOut.duration(420)}
-          style={[st.toast, expanded ? { top: Math.max(ins.top, 18) + 64 } : { bottom }]} accessibilityLiveRegion="polite" accessibilityRole="alert">
-          {t.icon ? <Icon name={t.icon} size={22} /> : null}
-          <T v="title" style={{ flex: 1, fontSize: 15 }}>{t.text}</T>
+          style={[st.toast,t.previews?.length?{borderWidth:0,borderRadius:999,backgroundColor:'#000',paddingRight:16}:null, expanded ? { top: Math.max(ins.top, 18) + 64 } : { bottom }]} accessibilityLiveRegion="polite" accessibilityRole="alert">
+          {t.icon&&(!t.previews?.length||width>=350) ? <Icon name={t.icon} size={22} /> : null}
+          <T v="title" numberOfLines={t.previews?.length?2:undefined} style={{ flex: 1,minWidth:0, fontSize:width<350&&t.previews?.length?14:15 }}>{t.text}</T>
+          {t.previews?.length?<View testID="added-tracks-covers" pointerEvents="none" accessibilityElementsHidden style={{flexDirection:'row',alignItems:'center',paddingVertical:3}}>{t.previews.slice(0,width<350?3:4).map((uri,i)=><Animated.View key={uri+':'+i} entering={reduced?undefined:ZoomIn.duration(480).delay(i*70)} style={{width:width<350?24:28,height:width<350?24:28,borderRadius:999,marginLeft:i?-8:0,overflow:'hidden',backgroundColor:'#000'}}><Image testID="toast-track-cover" source={{uri}} contentFit="cover" style={StyleSheet.absoluteFill}/></Animated.View>)}</View>:null}
           {t.action ? (
             <Pressable onPress={() => { useOverlay.setState({ toast: null }); t.action!.fn(); }} style={st.tAct} accessibilityRole="button">
               <T v="small" style={{ color: C.tx, fontFamily: F.bold }}>{t.action.label}</T>

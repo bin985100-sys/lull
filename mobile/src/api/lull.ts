@@ -28,8 +28,8 @@ async function get<T = any>(path: string, signal?: AbortSignal): Promise<T> {
 /* Обложки YouTube идут через сервер: так они грузятся и там, где сервисы Google медленные */
 export function img(u?: string, size = 544): string | undefined {
   if (!u) return undefined;
-  let url = u.replace(/=w\d+-h\d+/, `=w${size}-h${size}`).replace(/=s\d+$/, `=s${size}`);
-  if (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(url)) url = `${LULL_API}/api/img?u=${enc(url)}&v=2`;
+  let url = (size>=720?u.replace(/\/(?:mqdefault|hqdefault|sddefault)\.(jpg|webp)(?=[?#]|$)/,'/maxresdefault.$1'):u).replace(/=w\d+-h\d+/, `=w${size}-h${size}`).replace(/=s\d+$/, `=s${size}`);
+  if (/^https:\/\/([a-z0-9-]+\.)*(ytimg\.com|ggpht\.com|googleusercontent\.com)\//.test(url)) url = `${LULL_API}/api/img?u=${enc(url)}&v=3`;
   return url;
 }
 
@@ -38,8 +38,8 @@ export const mapTrack = (t: Raw, fallbackArt?: string): Track => ({
   title: t.title,
   artist: (t.artists || []).map((a: Raw) => a.name).filter(Boolean).join(', '),
   artistId: t.artists?.find((a: Raw) => a.id)?.id ?? '',
-  artwork: img(t.thumb || fallbackArt, 544),
-  artworkLarge: img(t.thumb || fallbackArt, 1080),
+  artwork: img(t.thumb || fallbackArt || (/^[\w-]{11}$/.test(String(t.id))?`https://i.ytimg.com/vi/${t.id}/hqdefault.jpg`:undefined), 544),
+  artworkLarge: img(t.thumb || fallbackArt || (/^[\w-]{11}$/.test(String(t.id))?`https://i.ytimg.com/vi/${t.id}/hqdefault.jpg`:undefined), 1080),
   duration: Number(t.durationSec) || 0,
   streamable: true,
   source: 'yt',

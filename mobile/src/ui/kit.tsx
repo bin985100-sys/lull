@@ -5,13 +5,14 @@ import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useLayout } from './layout';
 import { type ReactNode, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, type PressableProps, type ScrollViewProps, StyleSheet, Text, type TextProps, View, type ViewStyle } from 'react-native';
+import { ActivityIndicator, FlatList, type FlatListProps, Platform, Pressable, type PressableProps, type ScrollViewProps, StyleSheet, Text, type TextProps, View, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, cubicBezier, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DOCK, EASE, F, R } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
 import { PlayPause } from './PlayPause';
+import { Artwork } from './Artwork';
 import { usePlayer } from '@/player/player';
 import { Surface } from './Surface';
 import { SlidingPill, SlidingPillLabel, useSlidingPill } from './SlidingPill';
@@ -91,31 +92,28 @@ export function IconBtn({ name, onPress, label, size = 48, iconSize = 24, ghost,
   );
 }
 
-export function Btn({ label, icon, kind = 'white', onPress, disabled, small, style, playing }: { label: string; icon?: IconName | 'playpause'; kind?: 'white' | 'dark' | 'flat'; onPress?: () => void; disabled?: boolean; small?: boolean; style?: ViewStyle; playing?: boolean }) {
+export function Btn({ label, icon, kind = 'white', onPress, disabled, small, style, playing,borderless=false }: { label: string; icon?: IconName | 'playpause'; kind?: 'white' | 'dark' | 'flat'; onPress?: () => void; disabled?: boolean; small?: boolean; style?: ViewStyle; playing?: boolean;borderless?:boolean }) {
   const {colors:C}=useTheme();
  const s=resolveThemeValues(sThemeTable,C);
   const fg = kind === 'white' ? C.onAccent : C.tx;
   return (
     <Press accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
-      style={[s.btn, { minHeight: small ? 48 : 58,paddingVertical:12, backgroundColor: kind === 'white' ? C.sky : kind === 'dark' ? C.s2 : C.s1, opacity: disabled ? 0.32 : 1 }, style]}>
-      {kind!=='white'&&<Surface pointerEvents="none" radius={999} style={StyleSheet.absoluteFill}/>}
+      style={[s.btn, { minHeight: small ? 48 : 58,paddingVertical:12, backgroundColor: kind === 'white' ? C.sky : borderless ? C.bg : kind === 'dark' ? C.s2 : C.s1, opacity: disabled ? 0.32 : 1 }, style]}>
+      {kind!=='white'&&!borderless&&<Surface pointerEvents="none" radius={999} style={StyleSheet.absoluteFill}/>}
       <T v="title" style={{ color: fg, fontFamily: F.bold, fontSize: small ? 15.5 : 17, flexShrink: 1 }} numberOfLines={2}>{label}</T>
       {icon === 'playpause' ? <PlayPause playing={!!playing} size={22} color={fg} /> : icon ? <Icon name={icon} size={24} color={kind==='white' ? fg : undefined} /> : null}
     </Press>
   );
 }
 
-export function Cover({ uri, size, radius = R.cover, style, source, label,fallbackUri }: { uri?: string; size: number | `${number}%`; radius?: number; style?: any; source?: any;label?:string;fallbackUri?:string }) {
+export function Cover({ uri, size, radius = R.cover, style, source, label,fallbackUri,trackId }: { uri?: string; size: number | `${number}%`; radius?: number; style?: any; source?: any;label?:string;fallbackUri?:string;trackId?:string }) {
   const {colors:C}=useTheme();
-  const [failed,setFailed]=useState<string[]>([]);
   const reduced=useReducedMotion();
-  const effective=[uri,fallbackUri].find((url):url is string=>!!url && !failed.includes(url));
-  const show=effective || source;
   const initial=label ? Array.from(label.trim())[0]?.toUpperCase() : undefined;
   return (
     <View style={[{ width: size, aspectRatio: 1, borderRadius: radius, overflow: 'hidden', backgroundColor: C.s2 }, style]}>
       <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center',backgroundColor:C.s2 }]}>{initial ? <T style={{color:C.sky,fontSize:typeof size==='number' ? Math.max(20,size*.32) : 38}}>{initial}</T> : <Icon name="note" size={typeof size === 'number' ? size * 0.4 : 40} color={C.tx3}/>}</View>
-      {show ? <Image source={source ?? { uri:effective }} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced ? 0 : 180} recyclingKey={effective} onError={()=>{if(effective)setFailed(old=>[...old.slice(-3),effective]);}}/> : null}
+      {source?<Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced?0:180}/>:<Artwork uri={uri} fallbackUri={fallbackUri} trackId={trackId} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced?0:180}/>}
     </View>
   );
 }
@@ -141,12 +139,19 @@ export function Screen({ children, dock = true, scroll = true, style, ...p }: Sc
   );
 }
 
-export function TopBar({ title, right, onBack, close }: { title?: string; right?: ReactNode; onBack?: () => void; close?: boolean }) {
+/** Windowed feed with the same safe-area and dock spacing as Screen. */
+export function ScreenList<Item>({contentContainerStyle,style,...props}:FlatListProps<Item>){
+ const {colors:C}=useTheme(),ins=useSafeAreaInsets(),layout=useLayout();
+ const hasTrack=usePlayer(s=>s.index>=0),side=Math.max(layout.side,ins.left+12,ins.right+12);
+ return <FlatList {...props} style={[{flex:1,backgroundColor:C.bg},style]} contentContainerStyle={[{paddingTop:Math.max(ins.top,18)+14,paddingBottom:(hasTrack?DOCK.mini:DOCK.compact)+Math.max(ins.bottom,14)+30,paddingHorizontal:side},contentContainerStyle]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled"/>;
+}
+
+export function TopBar({ title, right, onBack, close, borderless=false }: { title?: string; right?: ReactNode; onBack?: () => void; close?: boolean;borderless?:boolean }) {
   const {colors:C}=useTheme();
  const s=resolveThemeValues(sThemeTable,C);
   return (
     <View style={s.top}>
-      <IconBtn name={close ? 'close' : 'back'} label={close ? 'Закрыть' : 'Назад'} onPress={()=>softExit(onBack??(()=>router.canGoBack()?router.back():router.replace('/listen')))} />
+      <IconBtn ghost={borderless} name={close ? 'close' : 'back'} label={close ? 'Закрыть' : 'Назад'} onPress={()=>softExit(onBack??(()=>router.canGoBack()?router.back():router.replace('/listen')))} />
       <T v="h2" numberOfLines={1} style={{ flex: 1, fontSize: 21 }} accessibilityRole="header">{title ?? ''}</T>
       {right}
     </View>
@@ -211,7 +216,7 @@ export function ListSkeleton({ n = 4 }: { n?: number }) {
 }
 export const Spinner = () => { const {colors:C}=useTheme(); return (<ActivityIndicator color={C.tx2} />); };
 
-export function Segmented<K extends string>({ items, value, onChange, label }: { items: [K, string][]; value: K; onChange: (k: K) => void; label: string }) {
+export function Segmented<K extends string>({ items, value, onChange, label, borderless=false }: { items: [K, string][]; value: K; onChange: (k: K) => void; label: string;borderless?:boolean }) {
   const {colors:C}=useTheme();
  const s=resolveThemeValues(sThemeTable,C);
   const pill=useSlidingPill();
@@ -219,8 +224,8 @@ export function Segmented<K extends string>({ items, value, onChange, label }: {
   const cell=Math.max(0,(width-8)/items.length),selected=Math.max(0,items.findIndex(([k])=>k===value));
   useEffect(()=>pill.move({x:4+selected*cell,y:4,width:cell,height:42}),[pill,selected,cell]);
   return (
-    <View onLayout={e=>setWidth(e.nativeEvent.layout.width)} style={s.seg} accessibilityRole="tablist" accessibilityLabel={label}>
-      <Surface pointerEvents="none" radius={999} style={StyleSheet.absoluteFill}/>
+    <View onLayout={e=>setWidth(e.nativeEvent.layout.width)} style={[s.seg,borderless?{borderWidth:0,backgroundColor:C.bg}:null]} accessibilityRole="tablist" accessibilityLabel={label}>
+      {!borderless?<Surface pointerEvents="none" radius={999} style={StyleSheet.absoluteFill}/>:null}
       <SlidingPill motion={pill} backgroundColor={C.tx}/>
       {items.map(([k, l],index) => {
         const on = k === value;

@@ -13,6 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { startSync } from '@/api/sync';
 import { startWaveContinuation } from '@/reco/wave-session';
 import { Dock } from '@/components/Dock';
+import { Connectivity } from '@/components/Connectivity';
 import { DesktopRail } from '@/components/DesktopRail';
 import { layoutMetrics } from '@/ui/layout';
 import { useLibrary } from '@/store/library';
@@ -41,7 +42,7 @@ function EdgeBack() {
 
 export default function Root() {
   const palette=useTheme();
-  const expanded=usePlayer(s=>s.expanded),reduced=useReducedMotion();
+  const expanded=usePlayer(s=>s.expanded),reduced=useReducedMotion(),native=Platform.OS!=='web';
  const {colors:C}=palette;
   const mode=useAppearance(s=>s.mode);
   const themeReady=useSyncExternalStore(subscribeAppearance,useAppearance.persist.hasHydrated,()=>false);
@@ -68,17 +69,24 @@ export default function Root() {
           <SurfaceScene overlay={<>
             <Guard name="dock" quiet><Dock /></Guard>
             <Guard name="overlays" quiet><Overlays /></Guard>
+            <Connectivity/>
             <CrashBanner />
           </>}>
-          <Animated.View pointerEvents={expanded?'none':'auto'} aria-hidden={expanded} accessibilityElementsHidden={expanded} style={{flex:1,marginLeft:rail,borderRadius:expanded?24:0,overflow:'hidden',transform:[{scale:expanded?.975:1}],transitionProperty:['transform','borderRadius'],transitionDuration:reduced?0:560}}>
+          <Animated.View pointerEvents={expanded?'none':'auto'} aria-hidden={expanded} accessibilityElementsHidden={expanded} style={{flex:1,marginLeft:rail,borderRadius:0,overflow:'hidden',transform:[{scale:1}],transitionProperty:['transform','borderRadius'],transitionDuration:reduced?0:560}}>
           <Guard name="screens">
-          <Stack screenLayout={routeScreenLayout} screenOptions={{headerShown:false,contentStyle:{backgroundColor:C.bg},animation:reduced?'none':'fade_from_bottom',animationDuration:560}}>
+          <Stack screenLayout={routeScreenLayout} screenOptions={{headerShown:false,contentStyle:{backgroundColor:C.bg},animation:reduced?'none':'fade_from_bottom',animationDuration:native?300:560}}>
             <Stack.Screen name="index" options={{ animation: 'none' }} />
+            <Stack.Screen name="onboarding" options={{ animation: 'none' }} />
             <Stack.Screen name="listen" options={{ animation: 'fade' }} />
-            <Stack.Screen name="wave" options={{ animation: 'fade' }} />
+            <Stack.Screen name="settings" options={{ animation: reduced?'none':'fade',animationDuration:native?340:760 }} />
+            <Stack.Screen name="prefs" options={{ animation: reduced?'none':'fade',animationDuration:native?340:760 }} />
+            <Stack.Screen name="import" options={{ animation: reduced?'none':'fade',animationDuration:native?340:760 }} />
+            <Stack.Screen name="wave" options={{ animation: reduced?'none':'fade',animationDuration:native?340:760 }} />
             <Stack.Screen name="search" options={{ animation: 'fade' }} />
             <Stack.Screen name="discover" options={{ animation: 'fade' }} />
-            <Stack.Screen name="collection" options={{ animation: 'fade' }} />
+            <Stack.Screen name="collection" options={{ animation: reduced?'none':'fade',animationDuration:native?340:760 }} />
+            <Stack.Screen name="playlist/[id]" options={{ animation: reduced?'none':'fade',animationDuration:native?340:760 }} />
+            <Stack.Screen name="my/[id]" options={{ animation: reduced?'none':'fade',animationDuration:native?340:760 }} />
             <Stack.Screen name="new-playlist" options={{ animation: 'slide_from_bottom' }} />
           </Stack>
           </Guard>

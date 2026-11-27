@@ -9,7 +9,7 @@ concurrency:
 on:
   workflow_dispatch:
   push:
-    branches: [mobile, main]
+    branches: [mobile, main, 'release/**']
     paths: ['mobile/**', '.github/workflows/mobile.yml']
 
 defaults:
@@ -38,6 +38,8 @@ jobs:
         run: node scripts/player.test.mjs
       - name: Тесты продолжения волны
         run: node scripts/wave-session.test.mjs
+      - name: Тесты источников волны и ограничений ожидания
+        run: node scripts/wave-engine.test.mjs
       - name: Тесты 3D-карусели
         run: node scripts/deck.test.mjs
       - name: Тесты вывода звука

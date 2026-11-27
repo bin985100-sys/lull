@@ -15,7 +15,7 @@ export default function MoodScreen() {
   return (
     <Screen>
       <TopBar />
-      <Reveal style={{marginTop:10,marginBottom:24}}><Banner source={m.image} label={m.title}/></Reveal>
+      <Reveal style={{marginTop:10,marginBottom:24}}><Banner source={m.image} label={m.title} tone={id==='focus'?1:id==='exhale'?2:id==='night'?0:undefined}/></Reveal>
       {error && !data ? <Offline onRetry={reload} /> : loading && !data ? <ListSkeleton n={5} /> : data?.length ? <Sections sections={data} /> : <Empty icon="note" title="Пока пусто" text="Попробуй позже — подборки обновляются." />}
     </Screen>
   );

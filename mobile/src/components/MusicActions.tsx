@@ -18,11 +18,13 @@ export async function saveTracks(tracks: Track[],progress?:(done:number)=>void) 
   }
   toast(`Скачано ${ok} из ${tracks.length}`, ok === tracks.length ? 'check' : 'info');
 }
-export function OfflineSaveButton({tracks}:{tracks:Track[]}) {
+export function OfflineSaveButton({tracks,plain=false}:{tracks:Track[];plain?:boolean}) {
   const [done,setDone]=useState<number | null>(null);
   const busy=useRef(false);
-  return <Btn label={done===null ? 'Скачать для офлайна' : `Скачиваем: ${done} из ${tracks.length}`} kind="dark" icon="download" disabled={done!==null} style={{marginTop:12,opacity:1}}
-    onPress={()=>{if(busy.current)return;busy.current=true;setDone(0);void saveTracks(tracks,setDone).catch(()=>toast('Не удалось начать скачивание','info')).finally(()=>{busy.current=false;setDone(null);});}}/>;
+  const label=done===null?'Скачать для офлайна':`Скачиваем: ${done} из ${tracks.length}`;
+  const start=()=>{if(busy.current)return;busy.current=true;setDone(0);void saveTracks(tracks,setDone).catch(()=>toast('Не удалось начать скачивание','info')).finally(()=>{busy.current=false;setDone(null);});};
+  if(plain)return <Press accessibilityRole="button" accessibilityLabel={label} disabled={done!==null} onPress={start} style={{minHeight:54,marginTop:12,borderRadius:999,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10,paddingHorizontal:10,paddingVertical:10}}><Icon name="download" size={24} color="#fff"/><T style={{color:'#fff',fontSize:14,flexShrink:1}}>{label}</T></Press>;
+  return <Btn label={label} kind="dark" icon="download" disabled={done!==null} style={{marginTop:12,opacity:1}} onPress={start}/>;
 }
 export function SleepButton() {
   const state = useSleep();

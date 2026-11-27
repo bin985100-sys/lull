@@ -3,12 +3,14 @@ import { Surface } from '@/ui/Surface';
 import { PlayerBackdrop } from '@/ui/PlayerBackdrop';
 import { openDevices } from './Devices';
 import { WaveArt } from '@/ui/WaveArt';
+import { LinearGradient } from 'expo-linear-gradient';
+import { routeExit } from '@/ui/route-motion-state';
 import { BottomNav, type NavKey } from './BottomNav';
 import { useCoverColors } from '@/theme/useCoverColors';
 import { useTaste } from '@/store/taste';
 
 /* Separate floating navigation, mini-player and search; full player expands from the mini-player. */
-import { Image } from 'expo-image';
+import { Artwork } from '@/ui/Artwork';
 import { router, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Platform, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
@@ -92,7 +94,7 @@ function Seek({ active }: { active: boolean }) {
   const val = drag ?? time;
   const p = duration ? Math.max(0,Math.min(1,val/duration)) : 0;
   useEffect(()=>{progress.set(drag!=null||reduced?p:withTiming(p,{duration:350,easing:Easing.linear}));},[p,drag,reduced,progress]);
-  const fill=useAnimatedStyle(()=>({width:`${progress.get()*100}%`}));
+  const fill=useAnimatedStyle(()=>({transform:[{scaleX:progress.get()}]}));
   const toSec = useCallback((x: number) => Math.max(0, Math.min(duration, (x / w) * duration)),[duration,w]);
   const toSecRef = useRef(toSec);
   // eslint-disable-next-line react-hooks/refs -- PanResponder stores callbacks; refs are read only during touch events.
@@ -114,7 +116,7 @@ function Seek({ active }: { active: boolean }) {
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={(e) => player.seek(Math.max(0, Math.min(duration, time + (e.nativeEvent.actionName === 'increment' ? 10 : -10))))}>
         <Animated.View style={{height:drag!=null||focused?8:4,borderRadius:8,backgroundColor:C.tx+'33',overflow:'hidden',transitionProperty:'height',transitionDuration:reduced?0:240}}>
-          <Animated.View style={[{height:'100%',borderRadius:8,backgroundColor:C.tx},fill]}/>
+          <Animated.View style={[{height:'100%',width:'100%',transformOrigin:'left',borderRadius:8,backgroundColor:C.tx},fill]}/>
         </Animated.View>
         {drag!=null||focused?<View pointerEvents="none" style={{position:'absolute',left:`${p*100}%`,marginLeft:-6,width:12,height:12,borderRadius:6,backgroundColor:C.tx}}/>:null}
       </View>
@@ -140,8 +142,8 @@ function Full({ h, active }: { h: number; active: boolean }) {
   const { width: ww } = useWindowDimensions();
   const playSize=ww<350 ? 64 : 84;
   const controlSize=Math.max(28,Math.min(56,(Math.min(680,ww-16)-44-playSize)/4));
-  const coverSize = Math.max(130, Math.min(ww - 60, ww > 700 ? 480 : 360, h - safe.top - safe.bottom - DOCK.compact - 465));
-  const enter=useMemo(()=>reduced?undefined:slideIn(s.lastDir==='next'?46:-46,.96,620),[reduced,s.lastDir]);
+  const coverSize = Math.max(160, Math.min(ww - 40, 480, h * .48));
+  const enter=useMemo(()=>reduced?undefined:slideIn(s.lastDir==='next'?22:-22,.98,380),[reduced,s.lastDir]);
   const close = () => player.expand(false);
   const swipe = useTrackSwipe(close);
   const [boxH, setBoxH] = useState(0);
@@ -150,7 +152,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}>
     <PlayerBackdrop uri={t.artwork} colors={palette} active={active}/>
-    <ScrollView ref={sv} style={{opacity:lyricsOpen?0:1}} pointerEvents={lyricsOpen?'none':'auto'} aria-hidden={lyricsOpen} accessibilityElementsHidden={lyricsOpen} importantForAccessibility={lyricsOpen?'no-hide-descendants':'auto'} showsVerticalScrollIndicator={false} scrollEnabled={!lyricsOpen} contentContainerStyle={{paddingBottom:24,alignItems:'center'}}>
+    <ScrollView ref={sv} style={{opacity:lyricsOpen?0:1}} pointerEvents={lyricsOpen?'none':'auto'} aria-hidden={lyricsOpen} accessibilityElementsHidden={lyricsOpen} importantForAccessibility={lyricsOpen?'no-hide-descendants':'auto'} showsVerticalScrollIndicator={false} scrollEnabled={!lyricsOpen} contentContainerStyle={{paddingBottom:84,alignItems:'center'}}>
     <View style={{ minHeight:boxH||undefined,width:'100%',maxWidth:680,paddingHorizontal:22+Math.max(safe.left,safe.right),paddingTop:Math.max(18,safe.top+8),paddingBottom:Math.max(44,safe.bottom+24) }}>
       <View style={{position:'absolute',top:8,alignSelf:'center',width:34,height:4,borderRadius:4,backgroundColor:C.tx3}}/>
       <View testID="full-player-track-swipe" {...swipe.handlers}>
@@ -159,7 +161,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
         <Pressable onPress={() => openSelectPlaylist(t)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Добавить в плейлист" style={{ width: 48, height: 48, alignItems: 'flex-end', justifyContent: 'center' }}><Icon name="plus" size={24} /></Pressable>
       </View>
       <Animated.View style={swipe.style}>
-      <Animated.View key={'c' + t.id} entering={enter} style={{alignSelf:'center',marginTop:8,width:coverSize,height:coverSize}}><View style={{width:coverSize,height:coverSize,borderRadius:36,overflow:'hidden',backgroundColor:C.s2}}><Image draggable={false} pointerEvents="none" source={{uri:t.artworkLarge||t.artwork}} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced?0:280}/></View></Animated.View>
+      <Animated.View key={'c' + t.id} entering={enter} style={{alignSelf:'center',marginTop:8,width:coverSize,height:coverSize}}><View style={{width:coverSize,height:coverSize,borderRadius:36,overflow:'hidden',backgroundColor:C.s2}}><Artwork draggable={false} pointerEvents="none" uri={t.artworkLarge||t.artwork} fallbackUri={t.artwork} trackId={t.source==='yt'?t.id:undefined} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduced?0:280}/></View></Animated.View>
       <Animated.View key={'m' + t.id} entering={enter} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 }}>
         <HeartButton liked={liked} onPress={()=>likeWithUndo(t)} label={liked?'Убрать из любимых':'В любимые'}/>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -192,7 +194,7 @@ function Full({ h, active }: { h: number; active: boolean }) {
       <Pressable accessibilityRole="button" accessibilityLabel="Волна по текущему треку" onPress={()=>openWave(t)} style={{height:56,borderRadius:28,overflow:'hidden',marginTop:14}}><WaveArt colors={palette} animate={active&&!lyricsOpen} inPlayer/><View style={{flex:1,backgroundColor:'rgba(0,0,0,.50)',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10}}><T style={{fontSize:14,color:'#fff',fontFamily:F.bold}}>Волна</T><View style={{width:24,height:24,borderRadius:12,backgroundColor:'#fff',alignItems:'center',justifyContent:'center'}}><Icon name="play" size={12} color="#111"/></View><T style={{fontSize:14,color:'#fff'}}>{{sound:'По треку',artist:'По артисту',discover:'Открытия',favorite:'Любимое',calm:'Спокойнее',energy:'Бодрее'}[mode]}</T></View></Pressable>
       {/* подсказка: ниже — текст песни */}
       <Pressable onPress={openLyrics} accessibilityRole="button" accessibilityLabel="Показать текст песни"
-        style={{ position: 'absolute', left: 0, right: 0, bottom: Math.max(6,safe.bottom+4), alignItems: 'center', paddingVertical: 6 }}>
+        style={{ marginTop:12, alignItems: 'center', paddingVertical: 6 }}>
         <View style={{flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:18,height:42,borderRadius:21,backgroundColor:C.bg,borderWidth:.8,borderColor:C.line}}><Icon name="lyrics" size={21}/><T style={{fontSize:13,fontFamily:F.bold}}>Текст песни</T></View>
       </Pressable>
     </View>
@@ -257,7 +259,7 @@ function Mini({compact=false,width=400}:{compact?:boolean;width?:number}) {
       <Animated.View {...swipe.handlers} style={[{ flex: 1, minWidth: 0,height:72 }, swipe.style]}>
       <Pressable onLongPress={e=>openTrackActions(t,undefined,{x:e.nativeEvent.pageX,y:e.nativeEvent.pageY})} onPress={() => { haptic(); player.expand(true); }} accessibilityRole="button" accessibilityLabel={`Открыть плеер: ${t.title}. Свайп влево — следующий трек, вправо — предыдущий`} style={{ flex: 1, minWidth: 0, height: 72 }}>
         <Animated.View key={t.id} entering={enter} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: compact ? 6 : 10 }}>
-          {width>155&&<View style={{ width: compact ? 40 : 48, height: compact ? 40 : 48, borderRadius: 24, overflow: 'hidden', backgroundColor: C.s2, borderWidth:StyleSheet.hairlineWidth,borderColor:C.glassLine }}><Image draggable={false} pointerEvents="none" source={{ uri: t.artwork }} style={StyleSheet.absoluteFill} transition={reduced ? 0 : 240}/></View>}
+          {width>155&&<View style={{ width: compact ? 44 : 56, height: compact ? 44 : 56, borderRadius: 28, overflow: 'hidden', backgroundColor: C.s2 }}><Artwork draggable={false} pointerEvents="none" uri={t.artwork} trackId={t.source==='yt'?t.id:undefined} style={StyleSheet.absoluteFill} transition={reduced ? 0 : 240}/></View>}
           <View style={{flex:1,minWidth:0,gap:2}}>
             <T numberOfLines={1} style={{ fontFamily: F.bold, fontSize: compact ? 13 : 15,color:'#fff' }}>{t.title}</T>
             {width>180&&<View style={{flexDirection:'row',alignItems:'center',gap:6}}>
@@ -299,15 +301,19 @@ export function Dock(){
  useEffect(()=>{if(!expanded)closeLyrics();},[expanded]);
  useEffect(()=>{let next=0;if(expanded){const frame=requestAnimationFrame(()=>{setMounted(true);next=requestAnimationFrame(()=>setReady(true));});return()=>{cancelAnimationFrame(frame);cancelAnimationFrame(next);};}const frame=requestAnimationFrame(()=>setReady(false));const timer=setTimeout(()=>setMounted(false),reduced?0:640);return()=>{cancelAnimationFrame(frame);clearTimeout(timer);};},[expanded,reduced]);
  const fullH=height;
+ const reveal=useSharedValue(0);
+ useEffect(()=>{reveal.set(reduced?(fullOn?1:0):withTiming(fullOn?1:0,{duration:fullOn?380:280,easing:Easing.bezier(.22,.8,.2,1)}));},[fullOn,reduced,reveal]);
+ const panelMotion=useAnimatedStyle(()=>({opacity:reveal.get(),transform:[{translateY:(1-reveal.get())*Math.min(height*.12,90)},{scale:.98+reveal.get()*.02}]}));
  const motion={transitionDuration:reduced?0:560,transitionTimingFunction:cubicBezier(.2,.75,.2,1)} as const;
  return <>
   {mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} style={[StyleSheet.absoluteFill,{backgroundColor:'rgba(0,0,0,.65)',opacity:fullOn?1:0,transitionProperty:'opacity',...motion}]}><Pressable accessibilityRole="button" accessibilityLabel="Закрыть полный плеер" onPress={()=>player.expand(false)} style={{flex:1}}/></Animated.View>}
+  {!layout.rail&&!hidden&&!expanded?<LinearGradient pointerEvents="none" colors={[C.bg+'00',C.bg,C.bg]} locations={[0,.5,1]} style={{position:'absolute',left:0,right:0,bottom:0,height:bottom+104}}/>:null}
   <View pointerEvents={hidden||expanded?'none':'box-none'} aria-hidden={hidden||expanded} accessibilityElementsHidden={hidden||expanded} importantForAccessibility={hidden||expanded?'no-hide-descendants':'auto'} style={{position:'absolute',left:layout.rail+side,width,bottom,height:has?168:84,opacity:hidden||expanded?0:1}}>
    {has&&<View style={{position:'absolute',left:0,right:0,bottom:miniBottom,borderRadius:36,overflow:'hidden',backgroundColor:C.s2}}><Mini width={width}/></View>}
-   {!layout.rail&&<View style={{position:'absolute',left:0,right:0,bottom:0}}><BottomNav active={active} onSelect={tab=>{player.expand(false);switchTab(`/${tab}` as '/listen'|'/wave'|'/search'|'/collection');}}/></View>}
+   {!layout.rail&&<View style={{position:'absolute',left:0,right:0,bottom:0}}><BottomNav active={active} onSelect={tab=>{if(path===`/${tab}`){routeExit.cancel?.();return;}player.expand(false);switchTab(`/${tab}` as '/listen'|'/wave'|'/search'|'/collection');}}/></View>}
   </View>
-  {has&&mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} aria-hidden={!expanded} accessibilityViewIsModal={expanded} accessibilityElementsHidden={!expanded} importantForAccessibility={expanded?'auto':'no-hide-descendants'} style={{position:'absolute',left:fullOn?0:layout.rail+side,right:fullOn?0:side,bottom:fullOn?0:bottom+miniBottom,height:fullOn?fullH:72,borderRadius:fullOn?0:36,opacity:fullOn?1:0,overflow:'hidden',transitionProperty:['left','right','height','bottom','opacity','borderRadius'],...motion}}>
-   <Surface radius={0} style={{flex:1,backgroundColor:C.bg,borderWidth:0}}><Animated.View style={{flex:1,opacity:fullOn?1:0,transform:[{translateY:fullOn?0:18}],transitionProperty:['opacity','transform'],transitionDuration:reduced?0:460}}><Full h={fullH} active={fullOn}/></Animated.View></Surface>
+  {has&&mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} aria-hidden={!expanded} accessibilityViewIsModal={expanded} accessibilityElementsHidden={!expanded} importantForAccessibility={expanded?'auto':'no-hide-descendants'} style={[{position:'absolute',left:0,right:0,bottom:0,height:fullH,overflow:'hidden'},panelMotion]}>
+   <Surface radius={0} style={{flex:1,backgroundColor:C.bg,borderWidth:0}}><Animated.View style={{flex:1}}><Full h={fullH} active={fullOn}/></Animated.View></Surface>
   </Animated.View>}
  </>;
 }
