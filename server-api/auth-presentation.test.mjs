@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {pathToFileURL} from 'node:url';import {build} from 'esbuild';
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'lull-auth-presentation-')),out=path.join(dir,'presentation.mjs');
+await build({entryPoints:['server-api/auth-presentation.ts'],bundle:true,platform:'node',format:'esm',outfile:out,logLevel:'silent'});
+const {botMessage,returnPage}=await import(pathToFileURL(out));const app='https://app.lull.website',api='https://api.lull.website';
+const welcome=botMessage(1,app,api);assert.ok(welcome.photo.startsWith(app+'/icons/'));assert.equal(welcome.reply_markup.inline_keyboard.length,1);assert.equal(welcome.reply_markup.inline_keyboard[0][0].url,app);assert.equal(welcome.reply_markup.keyboard,undefined);
+const message=botMessage(1,app,api,'a&next=<bad>');assert.equal(new URL(message.reply_markup.inline_keyboard[0][0].url).searchParams.get('nonce'),'a&next=<bad>');assert.equal(message.parse_mode,'HTML');assert.ok(message.caption.includes('Вход выполнен'));assert.equal(message.reply_markup.inline_keyboard[0][0].style,undefined);
+assert.equal(botMessage(1,app,api,'ok','telegram-file-id').photo,'telegram-file-id');
+const html=returnPage(app,'<img onerror=x>','<script>x</script>','x"/><script>bad</script>');assert.ok(html.includes('&lt;img onerror=x&gt;'));assert.ok(!html.includes('<script>bad</script>'));assert.ok(html.includes('prefers-reduced-motion'));assert.ok(html.includes('background:#fafaf8'));assert.ok(html.includes('/auth?nonce='));assert.ok(!html.includes('href="lull://auth?nonce=x"'));
+const redirect=returnPage(app,'Google','','', 'https://accounts.google.com/?x=</script>');assert.ok(!redirect.includes('x=</script>'));assert.ok(redirect.includes('location.replace('));
+fs.writeFileSync(path.resolve('../../outputs/Lull-Return-Preview.html'),returnPage(app,'Ты в Lull','Вход выполнен. Возвращайся к музыке.','demo-preview'));
+await build({entryPoints:['server-api/auth-presentation.ts'],bundle:true,platform:'node',format:'iife',globalName:'__lullAuthPresentation044',target:'node20',outfile:'../auth-presentation-044.bundle.js',logLevel:'silent'});
+console.log('Telegram inline photo, cached photo, safe nonce roundtrip, HTML/script escaping, return links and reduced motion passed');

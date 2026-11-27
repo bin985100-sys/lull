@@ -8,6 +8,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { botMessage, returnPage } from './auth-presentation';
 
 const DATA = process.env.LULL_API_DATA || './data';
 const PUBLIC = process.env.LULL_PUBLIC_URL || 'https://api.lull.website';
@@ -52,11 +53,24 @@ function login(find: (u: User) => boolean, make: () => Omit<User, 'id' | 'create
 }
 
 let botName = '';
+let botPhotoId = '';
 async function tg(method: string, body: unknown) {
   const r = await fetch(`${TG_API}/bot${TG}/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = (await r.json()) as { ok: boolean; result: any; description?: string };
   if (!j.ok) throw new Error(`telegram ${method}: ${j.description}`);
   return j.result;
+}
+
+async function sendLullBotMessage(chatId: number, nonce?: string) {
+  const message = botMessage(chatId, APP_URL, PUBLIC, nonce, botPhotoId);
+  try {
+    const sent = await tg('sendPhoto', message);
+    botPhotoId = sent.photo?.slice(-1)[0]?.file_id || botPhotoId;
+  } catch {
+    // A Telegram image fetch failure must not prevent a completed login returning.
+    const { photo: _photo, caption, ...rest } = message;
+    await tg('sendMessage', { ...rest, text: caption });
+  }
 }
 
 export const authEnabled = () => ({ telegram: !!TG, google: !!(G_ID && G_SECRET) });
@@ -112,13 +126,7 @@ export function deleteAccount(token: string) {
 
 /* ---------- страница «вернись в приложение» (relay не пробрасывает Location, поэтому без 302) ---------- */
 export function page(title: string, text: string, nonce?: string, redirect?: string) {
-  const back = `lull://auth${nonce ? `?nonce=${nonce}` : ''}`;
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#000"><title>Lull</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#000;color:#f5f5f4;font:600 17px/1.45 system-ui,-apple-system,sans-serif;text-align:center;padding:24px;box-sizing:border-box}
-h1{font-size:26px;margin:0 0 10px}p{color:#9ba0a7;margin:0 0 26px}a{display:block;margin:10px auto;max-width:320px;padding:17px 22px;border-radius:999px;text-decoration:none;font-weight:700}
-.w{background:#f5f5f4;color:#000}.d{background:#1a1c1f;color:#f5f5f4}</style></head><body><div>
-<h1>${title}</h1><p>${text}</p>${redirect ? '' : `<a class="w" href="${back}">Вернуться в Lull</a><a class="d" href="${APP_URL}">Открыть веб-версию</a>`}</div>
-<script>${redirect ? `location.replace(${JSON.stringify(redirect)})` : `setTimeout(function(){location.href=${JSON.stringify(back)}},400)`}</script></body></html>`;
+  return returnPage(APP_URL, title, text, nonce, redirect);
 }
 
 /* ---------- Google ---------- */
@@ -186,7 +194,7 @@ export async function runBot() {
         if (cmd !== '/start') continue;
         const p = arg ? pending.get(arg) : undefined;
         if (!p) {
-          await tg('sendMessage', { chat_id: m.chat.id, text: 'Привет! Это бот входа в Lull. Чтобы войти, нажми «Продолжить с Telegram» в приложении.', reply_markup: { inline_keyboard: [[{ text: 'Открыть Lull', url: APP_URL }]] } });
+          await sendLullBotMessage(m.chat.id);
           continue;
         }
         let avatar: string | undefined;
@@ -197,11 +205,7 @@ export async function runBot() {
         } catch { /* без аватара */ }
         const name = [m.from.first_name, m.from.last_name].filter(Boolean).join(' ') || m.from.username || 'Слушатель';
         p.token = login((x) => x.tgId === m.from.id, () => ({ provider: 'telegram', tgId: m.from.id, tgUsername: m.from.username, name, avatar }));
-        await tg('sendMessage', {
-          chat_id: m.chat.id,
-          text: `Готово, ${m.from.first_name || 'ты'} — ты зарегистрирован в Lull ✅\nВозвращайся в приложение, там уже всё готово.`,
-          reply_markup: { inline_keyboard: [[{ text: 'Вернуться в Lull', url: `${PUBLIC}/api/auth/back?nonce=${arg}` }]] },
-        });
+        await sendLullBotMessage(m.chat.id, arg);
       }
     } catch (e) {
       console.warn('[auth] бот:', (e as Error).message);
