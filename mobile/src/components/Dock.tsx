@@ -312,7 +312,7 @@ export function Dock(){
    {has&&<View style={{position:'absolute',left:0,right:0,bottom:miniBottom,borderRadius:36,overflow:'hidden',backgroundColor:C.s2}}><Mini width={width}/></View>}
    {!layout.rail&&<View style={{position:'absolute',left:0,right:0,bottom:0}}><BottomNav active={active} onSelect={tab=>{if(path===`/${tab}`){routeExit.cancel?.();return;}player.expand(false);switchTab(`/${tab}` as '/listen'|'/wave'|'/search'|'/collection');}}/></View>}
   </View>
-  {has&&mounted&&<Animated.View pointerEvents={expanded?'auto':'none'} aria-hidden={!expanded} accessibilityViewIsModal={expanded} accessibilityElementsHidden={!expanded} importantForAccessibility={expanded?'auto':'no-hide-descendants'} style={[{position:'absolute',left:0,right:0,bottom:0,height:fullH,overflow:'hidden'},panelMotion]}>
+  {has&&mounted&&<Animated.View testID="full-player-surface" pointerEvents={expanded?'auto':'none'} aria-hidden={!expanded} accessibilityViewIsModal={expanded} accessibilityElementsHidden={!expanded} importantForAccessibility={expanded?'auto':'no-hide-descendants'} style={[StyleSheet.absoluteFill,{overflow:'hidden'},panelMotion]}>
    <Surface radius={0} style={{flex:1,backgroundColor:C.bg,borderWidth:0}}><Animated.View style={{flex:1}}><Full h={fullH} active={fullOn}/></Animated.View></Surface>
   </Animated.View>}
  </>;

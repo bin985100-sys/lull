@@ -22,6 +22,9 @@ jobs:
       - run: node scripts/web-wave-smoke.mjs
         env:
           LULL_PLAYWRIGHT_MODULE: ${{ runner.temp }}/lull-browser/node_modules/playwright
+      - run: node scripts/web-wave-smoke.mjs --pwa
+        env:
+          LULL_PLAYWRIGHT_MODULE: ${{ runner.temp }}/lull-browser/node_modules/playwright
       - uses: actions/upload-artifact@v4
         if: always()
         with:

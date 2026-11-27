@@ -13,9 +13,16 @@ const raw=Array.from({length:10},(_,i)=>({id:'song'+i,title:'Песня '+i,arti
 const tracks=raw.map(t=>({id:t.id,title:t.title,artist:t.artists[0].name,artistId:t.artists[0].id,duration:60,source:'yt',streamable:true}));
 const sections=[{title:'Песни',layout:'tracks',items:raw.map(track=>({kind:'track',id:track.id,title:track.title,track}))}];
 const browser=await webkit.launch({headless:true});fs.mkdirSync('web-smoke-artifacts',{recursive:true});
-try{for(const width of [412,840,1440]){
- const page=await browser.newPage({serviceWorkers:'block',viewport:{width,height:915}}),errors=[],seeds=[];
+const pwa=process.argv.includes('--pwa');
+try{for(const width of (pwa?[402]:[412,840,1440])){
+ const page=await browser.newPage({serviceWorkers:'block',viewport:{width,height:pwa?874:915},...(pwa?{isMobile:true,hasTouch:true,deviceScaleFactor:3}:{})}),errors=[],seeds=[];
  page.on('pageerror',e=>errors.push(e.message));
+ if(pwa)await page.addInitScript(()=>{
+  Object.defineProperty(navigator,'standalone',{configurable:true,get:()=>true});
+  if(window.visualViewport)Object.defineProperty(window.visualViewport,'height',{configurable:true,get:()=>window.__lullKeyboardHeight??Math.max(1,innerHeight-(innerHeight>innerWidth?62:0))});
+  document.addEventListener('DOMContentLoaded',()=>{const style=document.createElement('style');style.textContent='body>div[style*="safe-area-inset-bottom"]{padding-top:62px!important;padding-bottom:34px!important;padding-left:0!important;padding-right:0!important}@media(orientation:landscape){body>div[style*="safe-area-inset-bottom"]{padding-top:0!important;padding-bottom:21px!important;padding-left:62px!important;padding-right:62px!important}}';document.head.appendChild(style);});
+ });
+
  await page.addInitScript(tracks=>{localStorage.setItem('lull.appearance.v1',JSON.stringify({state:{mode:'dark'},version:0}));localStorage.setItem('lull.library.v1',JSON.stringify({version:1,state:{onboarded:true,account:{name:'Тест'},liked:tracks,history:[],playlists:[{id:'qa',name:'Проверка волны',tracks,createdAt:1}],savedPlaylists:[],favArtists:[]}}));window.__audios=[];const A=window.Audio;window.Audio=class extends A{constructor(...args){super(...args);window.__audios.push(this);}};},tracks);
  await page.route('https://api.lull.website/**',async route=>{const request=route.request(),u=new URL(request.url()),headers={'Access-Control-Allow-Origin':base,'Access-Control-Allow-Headers':'Content-Type,Range,Authorization','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};if(request.method()==='OPTIONS')return route.fulfill({status:204,headers});
   if(u.pathname.includes('/api/stream/')){const m=request.headers().range?.match(/bytes=(\d+)-(\d*)/),start=m?Number(m[1]):0,end=m&&m[2]?Math.min(audio.length-1,Number(m[2])):audio.length-1;if(start>=audio.length)return route.fulfill({status:416,headers:{...headers,'Content-Range':`bytes */${audio.length}`}});return route.fulfill({status:m?206:200,contentType:mime,headers:{...headers,'Accept-Ranges':'bytes','Content-Length':String(end-start+1),...(m?{'Content-Range':`bytes ${start}-${end}/${audio.length}`}:{})},body:audio.subarray(start,end+1)});}
@@ -29,6 +36,16 @@ try{for(const width of [412,840,1440]){
   if(!(await mini.getAttribute('aria-label')).includes('Песня 3'))throw Error('Wrong seed song');
   await page.getByRole('tab',{name:'Моё',exact:true}).click();await page.getByRole('button',{name:'Проверка волны',exact:true}).click();await page.getByRole('button',{name:'Песня 5, Артист 2',exact:true}).click();
   await page.getByRole('tab',{name:'Волна',exact:true}).click();await page.waitForFunction(()=>document.querySelector('[data-testid="wave-cover-deck"]')?.getAttribute('aria-valuetext')?.startsWith('Песня 5,'));await page.getByRole('button',{name:'Включить мою волну',exact:true}).click();await page.getByRole('button',{name:'Приостановить волну',exact:true}).waitFor();
+
+  if(pwa){
+   const geometry=()=>page.evaluate(()=>{const r=document.getElementById('root').getBoundingClientRect(),n=document.querySelector('[data-testid="bottom-navigation"]').getBoundingClientRect();return {rootHeight:r.height,rootBottom:r.bottom,navBottom:n.bottom,gap:innerHeight-n.bottom,height:innerHeight,visual:visualViewport.height,mode:document.documentElement.dataset.lullStandalone};});
+   const portrait=await geometry();if(Math.abs(portrait.rootHeight-874)>1||Math.abs(portrait.gap-38)>3||portrait.visual!==812)throw Error('Installed portrait canvas/insets '+JSON.stringify(portrait));
+   await mini.click();const full=page.getByTestId('full-player-surface');await full.waitFor();await page.waitForTimeout(750);const bounds=await full.boundingBox();if(Math.abs(bounds.y)>1||Math.abs(bounds.height-874)>1)throw Error('Full player trusts short visualViewport '+JSON.stringify(bounds));await page.screenshot({path:'web-smoke-artifacts/pwa-full-player-portrait.png'});
+   await page.getByRole('button',{name:'Свернуть плеер',exact:true}).click();await page.getByRole('tab',{name:'Поиск',exact:true}).click();const input=page.getByRole('textbox',{name:'Поиск',exact:true});await input.focus();
+   await page.evaluate(()=>{window.__lullKeyboardHeight=544;visualViewport.dispatchEvent(new Event('resize'));});await page.waitForTimeout(350);const keyboard=await page.locator('#root').boundingBox();if(Math.abs(keyboard.height-544)>1)throw Error('Keyboard viewport not fitted '+JSON.stringify(keyboard));
+   await input.blur();await page.evaluate(()=>{delete window.__lullKeyboardHeight;visualViewport.dispatchEvent(new Event('resize'));});await page.waitForTimeout(400);const restored=await geometry();if(Math.abs(restored.rootHeight-874)>1||Math.abs(restored.gap-38)>3)throw Error('Keyboard left a bottom strip '+JSON.stringify(restored));
+   await page.screenshot({path:'web-smoke-artifacts/pwa-after-keyboard.png'});await page.setViewportSize({width:874,height:402});await page.waitForTimeout(650);const landscape=await geometry();if(Math.abs(landscape.rootHeight-402)>1||Math.abs(landscape.gap-25)>3)throw Error('Landscape canvas/insets '+JSON.stringify(landscape));await page.screenshot({path:'web-smoke-artifacts/pwa-landscape.png'});console.log('PWA_FULL_CANVAS_SHORT_VISUAL_VIEWPORT_KEYBOARD_RESTORE_AND_ROTATION_OK',JSON.stringify({portrait,fullPlayer:bounds,keyboard,restored,landscape}));
+  }
   if(!seeds.includes('song3')||!seeds.includes('song5')||errors.length)throw Error(JSON.stringify({seeds,errors}));
   if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Horizontal overflow');
   await page.screenshot({path:`web-smoke-artifacts/wave-${width}.png`});console.log(JSON.stringify({ok:true,engine:'WebKit',platform:process.platform,width,audio:mime,seeds,errors}));

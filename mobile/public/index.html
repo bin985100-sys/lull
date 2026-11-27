@@ -52,7 +52,7 @@
         position: fixed;
         inset: 0;
         height: 100%;
-        height: 100dvh;
+        height: var(--lull-app-height, 100dvh);
         margin: 0;
         overflow: hidden;
         overscroll-behavior: none;
@@ -70,11 +70,49 @@
         flex: 1;
         background: #000;
       }
+      /* Installed iPhone apps must keep the full canvas when WebKit reports a
+         shorter visual viewport. Insets belong to controls, not to this root. */
+      @media (display-mode: standalone), (display-mode: fullscreen) {
+        html { height: var(--lull-app-height, 100vh); }
+        body { height: var(--lull-app-height, 100vh); }
+      }
+      html[data-lull-standalone="true"] { height: var(--lull-app-height, 100vh); }
+      html[data-lull-standalone="true"] body { height: var(--lull-app-height, 100vh); }
       /* Внутренние списки прокручиваются с инерцией и не тянут за собой страницу */
       #root [style*="overflow"] { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
       ::-webkit-scrollbar { display: none; }
       * { scrollbar-width: none; }
     </style>
+    <script id="lull-viewport">
+      (function () {
+        var root = document.documentElement, viewport = window.visualViewport;
+        var display = window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)');
+        var frame = 0, previous = '', hadKeyboard = false;
+        function update() {
+          frame = 0;
+          var standalone = navigator.standalone === true || display.matches;
+          root.dataset.lullStandalone = String(standalone);
+          var active = document.activeElement;
+          var input = active && (/^(INPUT|TEXTAREA)$/.test(active.tagName) || active.isContentEditable);
+          var keyboard = !!(input && viewport && viewport.scale === 1 && window.innerHeight - viewport.height > 120);
+          // Use visualViewport only for the keyboard, never as the installed
+          // app's resting height: iOS can omit its entire status-bar extent.
+          var height = keyboard ? Math.round(viewport.height + viewport.offsetTop) + 'px' : standalone ? '100vh' : '100dvh';
+          if (height !== previous) { root.style.setProperty('--lull-app-height', height); previous = height; }
+          if (hadKeyboard && !keyboard) window.scrollTo(0, 0);
+          hadKeyboard = keyboard;
+        }
+        function schedule() { if (!frame) frame = requestAnimationFrame(update); }
+        window.addEventListener('resize', schedule);
+        window.addEventListener('orientationchange', function () { schedule(); setTimeout(schedule, 180); });
+        document.addEventListener('focusin', schedule);
+        document.addEventListener('focusout', schedule);
+        document.addEventListener('visibilitychange', schedule);
+        if (viewport) viewport.addEventListener('resize', schedule);
+        if (display.addEventListener) display.addEventListener('change', schedule);
+        update();
+      })();
+    </script>
     <script>
       /* Офлайн-оболочка и быстрый повторный запуск */
       if ('serviceWorker' in navigator) {
