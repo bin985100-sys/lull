@@ -1,0 +1,30 @@
+name: Lull WebKit audio and wave check
+on:
+  workflow_dispatch:
+  push:
+    branches: ['verify/**']
+permissions:
+  contents: read
+jobs:
+  safari-engine:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: mobile/package-lock.json}
+      - run: npm ci
+      - run: npx expo export -p web
+      - run: npm install --prefix "$RUNNER_TEMP/lull-browser" playwright@1.65.0
+      - run: node "$RUNNER_TEMP/lull-browser/node_modules/playwright/cli.js" install webkit
+      - run: node scripts/web-wave-smoke.mjs
+        env:
+          LULL_PLAYWRIGHT_MODULE: ${{ runner.temp }}/lull-browser/node_modules/playwright
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Lull-WebKit-wave-check
+          path: mobile/web-smoke-artifacts
+          if-no-files-found: ignore
