@@ -1,4 +1,4 @@
-import { artistMix, forYou, recommended, seedNow } from '@/reco/engine';
+import { artistMix, forYou, recommendationKey, recommended, seedNow } from '@/reco/engine';
 import { create } from 'zustand';
 import { audius, FOCUS_IMAGE, type Track } from './audius';
 import { lull } from './lull';
@@ -25,6 +25,7 @@ export function getMix(id: string, name?: string): Mix {
     const seed = seedNow();
     return { id: `${id}:${seed}`, title: name ? `Микс: ${name}` : 'Микс исполнителя', load: (s) => artistMix(aid, s, seed) };
   }
-  if (id === 'foryou') { const seed = seedNow(useMixSeed.getState().n); return { ...MIXES.foryou, id: `foryou:${seed}`, load: (s) => forYou(s, seed) }; }
+  if (id === 'foryou') { const seed = seedNow(useMixSeed.getState().n); return { ...MIXES.foryou, id: `foryou:${seed}:${recommendationKey()}`, load: (s) => forYou(s, seed) }; }
+  if (id === 'recommended') return { ...MIXES.recommended, id: `recommended:${seedNow()}:${recommendationKey()}` };
   return MIXES[id] ?? MIXES.trending;
 }

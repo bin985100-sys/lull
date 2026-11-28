@@ -27,7 +27,7 @@ globalThis.__makePlaylist = () => {
     remove(i) { if (i === p.currentIndex && p.playing) (globalThis.__reports ||= []).push(`удалён играющий трек ${i}`); p.sources.splice(i, 1); if (p.currentIndex > i) p.currentIndex--; if (p.currentIndex >= p.sources.length) p.currentIndex = Math.max(0, p.sources.length - 1); emit('trackChanged', { currentIndex: p.currentIndex }); },
     /* как ExoPlayer: после очистки номер текущего трека не сбрасывается */
     clear() { p.sources = []; p.playing = false; emit('trackChanged', { currentIndex: p.currentIndex }); },
-    skipTo(i) { if (i < p.sources.length) { p.currentIndex = i; p.time = 0; p.lastChange = Date.now(); emit('trackChanged', { currentIndex: i }); } },
+    skipTo(i) { if (i >= 0 && i < p.sources.length) { p.currentIndex = i; p.time = 0; p.lastChange = Date.now(); emit('trackChanged', { currentIndex: i }); } },
     next() { p.skipTo(p.currentIndex + 1); },
     previous() { p.skipTo(p.currentIndex - 1); },
     play() { p.playing = p.sources.length > 0; p.isLoaded=true; },
@@ -306,6 +306,30 @@ await test('Недоступная песня в очереди не остав�
  if(!m.usePlayer.getState().error)throw Error('Ошибка источника не обнаружена');m.player.next();await settle(650);
  if(same(m,'После недоступного трека')!=='s1'||m.usePlayer.getState().error)throw Error('Следующая песня сохранила состояние ошибки');m.player.stop();
  }finally{globalThis.fetch=fetch;}
+});
+await test('Волна из середины альбома владеет своей очередью без перезапуска текущего звука',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s3');await settle(600);const p=globalThis.__pl;p.time=42;
+ m.player.startWave([LIST[3],T('radio-a'),T('radio-b')],{newWave:true});await settle(450);
+ const origin=m.usePlayer.getState().wave;
+ if(origin?.startIndex!==3||origin.seed.id!=='s3')throw Error('Не сохранено начало волны внутри альбома');
+ if(same(m,'Запуск волны')!=='s3'||p.time<42)throw Error('Сброшен играющий трек/позиция');
+ if(m.usePlayer.getState().queue.slice(origin.startIndex).map(t=>t.id).join()!=='s3,radio-a,radio-b')throw Error('Обложки альбома попали в волну');
+ m.player.next();await settle(650);if(same(m,'Следующий волны')!=='radio-a')throw Error('Играет альбом вместо волны');
+ m.player.startWave([m.currentTrack(),T('radio-c'),T('radio-d')],{newWave:false});
+ if(m.usePlayer.getState().wave!==origin)throw Error('Автопродолжение сбросило начало волны');
+ await m.player.play(LIST,'s5');await settle(500);if(m.usePlayer.getState().wave)throw Error('Новый альбом унаследовал старую волну');m.player.stop();
+});
+await test('Запуск волны с другой песни атомарно устанавливает её режим и выбранный трек',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s2');await settle(400);
+ await m.player.startWave([T('other-seed'),T('other-radio')],{newWave:true});await settle(650);
+ const s=m.usePlayer.getState();if(!s.wave||s.wave.startIndex!==0||s.wave.seed.id!=='other-seed'||same(m,'Другая волна')!=='other-seed')throw Error('Новая сессия потеряла режим волны');m.player.stop();
+});
+await test('Предыдущий и повтор волны не возвращают песни прежнего альбома',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(650);m.player.next();await settle(450);m.player.next();await settle(450);
+ const p=globalThis.__pl;p.time=42;m.useProgress.setState({time:42});m.player.startWave([LIST[2],T('only-radio')],{newWave:true});await settle(450);
+ if(p.currentIndex!==0||p.sources[0]?.uri!=='yt:s2'||p.time<42)throw Error('В нативной волне осталась история альбома или потеряна позиция');
+ m.player.seek(1);m.player.prev();p.previous();await settle(400);if(same(m,'Начало волны')!=='s2')throw Error('Назад вернул старый альбом');
+ m.player.next();await settle(600);m.player.cycleRepeat();m.player.next();await settle(650);if(same(m,'Повтор волны')!=='s2')throw Error('Повтор перешёл в начало альбома');m.player.stop();
 });
 console.log(`\n${pass} прошло, ${fail} упало`);
 process.exit(fail ? 1 : 0);

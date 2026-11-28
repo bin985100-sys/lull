@@ -23,6 +23,7 @@ const queueEntry = (track: Track): QueueTrack => ({ ...track, queueEntryId: `que
 type PlayerState = {
   session: number; // changes only when a listener starts a different playback context
   queue: QueueTrack[]; // весь список, index — текущий
+  wave: { seed: Track; startIndex: number; kind: 'track' | 'personal' } | null;
   continueQueue: boolean;
   index: number;
   playing: boolean;
@@ -36,7 +37,7 @@ type PlayerState = {
 type Progress = { time: number; duration: number };
 
 export const usePlayer = create<PlayerState>(() => ({
-  session: 0, queue: [], continueQueue: true, index: -1, playing: false, buffering: false, shuffle: false, repeat: 'off', expanded: false, lastDir: 'next', error: null,
+  session: 0, queue: [], wave: null, continueQueue: true, index: -1, playing: false, buffering: false, shuffle: false, repeat: 'off', expanded: false, lastDir: 'next', error: null,
 }));
 export const useProgress = create<Progress>(() => ({ time: 0, duration: 0 }));
 
@@ -121,7 +122,7 @@ function engine() {
     if (real && st.currentIndex >= st.trackCount - 1) {
       /* дошли до конца окна: дальше по очереди или по кругу */
       if (s.index < s.queue.length - 1) jump(s.index + 1, 'next');
-      else if (s.repeat === 'all' && s.queue.length) jump(0, 'next');
+      else if (s.repeat === 'all' && s.queue.length) jump(s.wave?.startIndex ?? 0, 'next');
       else usePlayer.setState({ playing: false });
     }
   });
@@ -433,12 +434,12 @@ async function jumpInner(i: number, dir: 'next' | 'prev') {
   mount(i);
   onTrackStart();
 }
-async function load(queue: Track[], index: number) {
+async function load(queue: Track[], index: number, wave: boolean | 'track' | 'personal' | PlayerState['wave'] = false) {
   const seq = ++loadSeq;
   startup = { id: queue[index].id, at: Date.now() };
   loading = true; wantPlay = true;
   silence();
-  usePlayer.setState(s => ({ session: s.session + 1, queue, continueQueue: true, index, lastDir: 'next', error: null, playing: true, buffering: true }));
+  usePlayer.setState(s => ({ session: s.session + 1, queue, wave: wave === true || typeof wave === 'string' ? { seed: queue[index], startIndex: index, kind: wave === 'personal' ? 'personal' : 'track' } : wave || null, continueQueue: true, index, lastDir: 'next', error: null, playing: true, buffering: true }));
   useProgress.setState({ time: 0, duration: queue[index]?.duration || 0 });
   const t0 = Date.now();
   log(`play: «${queue[index]?.title}» ${queue[index]?.id}, в очереди ${queue.length}, local=${!!localAudio(queue[index]?.id || '')}`);
@@ -453,7 +454,7 @@ async function load(queue: Track[], index: number) {
 
 export const player = {
   /* Запуск трека из списка: остальное после него становится очередью */
-  async play(list: Track[], startId?: string, opts: { shuffle?: boolean } = {}) {
+  async play(list: Track[], startId?: string, opts: { shuffle?: boolean; wave?: boolean | 'track' | 'personal' } = {}) {
     const ok = list.filter((t) => t.streamable);
     if (!ok.length) return;
     const request = ++playRequest;
@@ -473,17 +474,17 @@ export const player = {
     if (opts.shuffle !== undefined) usePlayer.setState({ shuffle: opts.shuffle });
     if (!shuf && pl && !loading && start === s.index + 1 && nativeLen === start - base + 1 &&
         stagedTail === trackKey(q[start]) && q.every((t, i) => s.queue[i] && trackKey(t) === trackKey(s.queue[i]))) {
-      usePlayer.setState({ queue: q });
+      usePlayer.setState({ queue: q, wave: opts.wave ? { seed: q[start], startIndex: start, kind: opts.wave === 'personal' ? 'personal' : 'track' } : null });
       await jump(start, 'next');
       return;
     }
-    try { await load(q, start); } catch (e) { report(e, 'player.play'); usePlayer.setState({ playing: false, buffering: false }); }
+    try { await load(q, start, opts.wave); } catch (e) { report(e, 'player.play'); usePlayer.setState({ playing: false, buffering: false }); }
   },
   toggle() {
     const p = engine();
     if (!currentTrack()) return;
     const state = usePlayer.getState();
-    if (state.error) { void load(state.queue,state.index).catch(e=>report(e,"player.retry")); return; }
+    if (state.error) { void load(state.queue,state.index,state.wave).catch(e=>report(e,"player.retry")); return; }
     wantPlay = !usePlayer.getState().playing;
     usePlayer.setState({ playing: wantPlay });
     if (loading) return; // трек ещё готовится — включится сам, если не нажали паузу
@@ -494,13 +495,13 @@ export const player = {
     if (!currentTrack(s)) return;
     noteSkip();
     if (s.index < s.queue.length - 1) jump(s.index + 1, 'next');
-    else if (s.repeat === 'all' && s.queue.length) jump(0, 'next');
+    else if (s.repeat === 'all' && s.queue.length) jump(s.wave?.startIndex ?? 0, 'next');
   },
   prev() {
     const s = usePlayer.getState();
     const p = engine();
     if (!currentTrack(s)) return;
-    if (useProgress.getState().time > 3 || s.index === 0) { p.seekTo(0); useProgress.setState({ time: 0 }); return; }
+    if (useProgress.getState().time > 3 || s.index <= (s.wave?.startIndex ?? 0)) { p.seekTo(0); useProgress.setState({ time: 0 }); return; }
     jump(s.index - 1, 'prev');
   },
   async resume(queue: Track[], index: number, position: number) {
@@ -565,7 +566,7 @@ export const player = {
     ensureNext();
   },
   /* Волна: если исходный трек уже играет, не перезапускаем его, а меняем всё, что дальше */
-  startWave(list: Track[]) {
+  startWave(list: Track[], opts: { newWave?: boolean; kind?: 'track' | 'personal' } = {}) {
     syncNativeTrack();
     const s = usePlayer.getState();
     const cur = currentTrack(s);
@@ -577,12 +578,19 @@ export const player = {
       const tail = list.slice(1).filter(t => (t as QueueTrack).queueEntryId || !missingKeys.has(trackKey(t)));
       // A merged wave may already contain the edited manual order. Preserve it;
       // prepend only entries absent from the newly generated recommendations.
-      usePlayer.setState({ queue: [...s.queue.slice(0, s.index + 1), ...missing, ...tail], continueQueue: true, shuffle: false });
+      const wave = s.wave && !opts.newWave ? s.wave : { seed: cur, startIndex: s.index, kind: opts.kind ?? 'track' };
+      usePlayer.setState({ queue: [...s.queue.slice(0, s.index + 1), ...missing, ...tail], wave, continueQueue: true, shuffle: false });
+      // Hardware previous/repeat must not reopen the album that preceded this
+      // wave. Rebase only when native history actually crosses the new boundary.
+      if (base < wave.startIndex && s.index === wave.startIndex) mount(s.index, useProgress.getState().time);
       ensureNext();
       if (!s.playing) player.toggle();
       return;
     }
-    return player.play(list, list[0]?.id, { shuffle: false });
+    const manual = s.queue.slice(s.index + 1).filter(t => t.queueEntryId);
+    const keys = new Set(manual.map(trackKey));
+    const next = list.length ? [list[0], ...manual, ...list.slice(1).filter(t => !keys.has(trackKey(t)))] : list;
+    return player.play(next, next[0]?.id, { shuffle: false, wave: opts.kind ?? 'track' });
   },
   clearUpcoming() {
     syncNativeTrack();
@@ -619,7 +627,7 @@ export const player = {
     if (metaT) { clearTimeout(metaT); metaT = null; }
     if (pl) { pl.pause(); wipe(pl); nativeLen = 0; base = 0; try { pl.clearLockScreenControls(); } catch {} }
     lockActive = false;
-    usePlayer.setState(s => ({ session: s.session + 1, queue: [], index: -1, playing: false, buffering: false, error: null, expanded: false }));
+    usePlayer.setState(s => ({ session: s.session + 1, queue: [], wave: null, index: -1, playing: false, buffering: false, error: null, expanded: false }));
   },
 };
 

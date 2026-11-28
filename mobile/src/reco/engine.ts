@@ -8,6 +8,7 @@ import { audius, type Artist, type Track } from '@/api/audius';
 import { lull } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 import { artistKey, monthKey, prevMonthKey, useTaste, type WaveMode } from '@/store/taste';
+import { recordingKey, selectRecommendations, type Candidate, type SelectionPolicy } from './selection';
 
 const safe = <T,>(p: Promise<T>, d: T) => p.catch(() => d);
 
@@ -43,6 +44,30 @@ export function artistScores() {
 }
 
 const knownArtists = () => new Set(artistScores().map((a) => a.key));
+
+function policy(mode: WaveMode, length: number, personal: boolean, seed: number, exclude: Track[] = []): SelectionPolicy {
+  const taste = useTaste.getState(), lastPlayed = new Map<string, number>(), skips = new Map<string, number>();
+  for (const month of Object.values(taste.months)) for (const stat of Object.values(month.tracks)) {
+    const key = recordingKey(stat.track);
+    lastPlayed.set(key, Math.max(lastPlayed.get(key) || 0, stat.last));
+    skips.set(key, (skips.get(key) || 0) + (stat.skips || 0));
+  }
+  return { ...taste.reco, mode, length, personal, knownArtists: knownArtists(), random: rng(seed), now: Date.now(),
+    liked: new Set(useLibrary.getState().liked.map(recordingKey)), hiddenTracks: new Set(Object.keys(taste.hiddenTracks)),
+    hiddenArtists: new Set(Object.keys(taste.hiddenArtists)), skipped: new Set([...skips].filter(([, n]) => n >= 2).map(([key]) => key)),
+    lastPlayed, exclude: new Set(exclude.map(recordingKey)) };
+}
+const candidates = (tracks: Track[], source: Candidate['source']): Candidate[] => tracks.map(track => ({ track, source }));
+
+/** A stable cache identity changes on explicit taste edits, not each second of playback. */
+export function recommendationKey() {
+  const taste = useTaste.getState(), lib = useLibrary.getState();
+  const text = JSON.stringify([taste.reco, Object.keys(taste.hiddenTracks), Object.keys(taste.hiddenArtists),
+    lib.liked.map(recordingKey), lib.favArtists.map(a => a.id), [...new Set(lib.history.slice(0, 30).map(h => artistKey(h.track)))].sort()]);
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+  return (hash >>> 0).toString(36);
+}
 
 /* ---------- фильтры ---------- */
 export function cleanup(list: Track[], opts: { keepFirst?: boolean; allowRecent?: boolean } = {}) {
@@ -101,9 +126,6 @@ const topOf = (a: { id: string; source?: string }, s: AbortSignal) =>
 const similarOf = (a: { id: string; source?: string }, s: AbortSignal) =>
   safe<Artist[]>(a.source === 'audius' ? audius.related(a.id, s) : lull.artist(a.id, s).then((p) => p.similar), []);
 
-/* Доля знакомого по ползунку «Знакомое — Новое» */
-const familiarShare = () => [0.95, 0.75, 0.5, 0.25, 0.05][useTaste.getState().reco.balance];
-
 function dayChip() {
   if (!useTaste.getState().reco.timeOfDay) return null;
   const h = new Date().getHours();
@@ -117,53 +139,37 @@ const chipTracks = async (chip: string | null, s: AbortSignal) => {
 
 /* ---------- «Для тебя» ---------- */
 export async function forYou(s: AbortSignal, seed = seedNow()): Promise<Track[]> {
-  const r = rng(seed);
-  const lib = useLibrary.getState();
-  const scored = artistScores();
-  if (!scored.length) {
-    const charts=await safe(lull.charts(s),[]);
-    const popular=charts.filter(section=>section.layout==='tracks').flatMap(section=>section.items).flatMap(card=>card.track ? [card.track] : []);
-    if(popular.length)return cleanup(popular);
-    const home = await lull.home(undefined, s);
-    return cleanup(mix(home.flatMap((x) => x.items).filter((c) => c.track).map((c) => c.track!), r));
-  }
-  /* каждый раз — разные исполнители из первой десятки и разные их треки */
-  const top = [...scored.slice(0, 3), ...pick(scored.slice(3, 14), 4, r)];
-  const known = knownArtists();
-  const [tops, sims, radio, night] = await Promise.all([
-    Promise.all(top.map((a) => topOf(a, s).then((l) => pick(l.slice(0, 12), 4, r)))),
-    useTaste.getState().reco.similarArtists ? Promise.all(pick(top, 3, r).map((a) => similarOf(a, s))) : Promise.resolve([] as Artist[][]),
-    (() => {
-      const seeds = pick([...lib.liked.slice(0, 30), ...lib.history.slice(0, 20).map((h) => h.track)].filter((t) => t.source === 'yt'), 3, r);
-      return Promise.all(seeds.map((t) => safe(lull.upNext(t.id, s), [] as Track[])));
-    })(),
-    chipTracks(dayChip(), s),
-  ]);
-  const newArtists = pick(sims.flat().filter((a) => !known.has(a.id)), 6, r);
-  const fresh = await Promise.all(newArtists.map((a) => topOf(a, s).then((l) => pick(l.slice(0, 6), 3, r))));
-  const familiar: Track[] = [];
-  for (let i = 0; i < 4; i++) for (const l of tops) if (l[i]) familiar.push(l[i]);
-  const liked = pick(lib.liked, 15, r);
-  const discovery = mix([...fresh.flat(), ...radio.flat().filter((t) => !known.has(artistKey(t)))], r);
-  const f = familiarShare();
-  return cleanup(blend([
-    { list: familiar, w: f * 0.7 },
-    { list: liked, w: f * 0.3 },
-    { list: discovery, w: (1 - f) * 0.8 },
-    { list: mix(night, r), w: (1 - f) * 0.2 + 0.05 },
-  ], 60));
+  return buildMyWave(s, { seed, length: 60, mode: 'sound' });
 }
 
 /** Continue the listener's taste, rather than labeling an anonymous home feed as personal. */
 export async function recommended(s: AbortSignal): Promise<Track[]> {
-  const lib=useLibrary.getState();
-  const seed=lib.history[0]?.track || lib.liked[0];
-  if(seed?.source==='yt'){
-    const radio=await safe(lull.upNext(seed.id,s),[] as Track[]);
-    const next=cleanup(radio.filter(track=>track.id!==seed.id));
-    if(next.length)return next;
-  }
-  return forYou(s);
+  return buildMyWave(s, { seed: seedNow(7), length: 40, mode: 'sound' });
+}
+
+/** Rotate between distinct taste anchors. One latest play cannot monopolize the pool. */
+export async function buildMyWave(signal: AbortSignal, opts: { seed?: number; length?: number; mode?: WaveMode; exclude?: Track[] } = {}): Promise<Track[]> {
+  const seed = opts.seed ?? seedNow(), length = opts.length ?? 50, mode = opts.mode ?? useTaste.getState().reco.waveMode;
+  const r = rng(seed), lib = useLibrary.getState(), taste = useTaste.getState(), excluded = opts.exclude ?? [];
+  const eligible = (track: Track) => !taste.hiddenTracks[track.id] && !taste.hiddenArtists[artistKey(track)];
+  const scored = artistScores(), top = pick(scored.slice(0, 12), 3, r);
+  const history = Object.values(taste.months).flatMap(month => Object.values(month.tracks)).sort((a,b) => b.secs - a.secs).map(stat => stat.track);
+  const anchors = [...new Map(mix([...lib.liked, ...history, ...lib.history.slice(0, 30).map(h => h.track)], r)
+    .filter(t => t.source === 'yt' && eligible(t)).map(t => [artistKey(t), t])).values()].slice(0, 3);
+  const [radios, pages, mood, popular] = await Promise.all([
+    Promise.all(anchors.map(t => waveResource(s => lull.upNext(t.id, s), [] as Track[], signal))),
+    Promise.all(top.map(a => waveResource(s => a.source === 'audius' ? Promise.all([topOf(a,s), similarOf(a,s)]).then(([own,similar])=>({top:own,similar})) : lull.artist(a.id,s), null, signal))),
+    waveResource(s => chipTracks(mode === 'calm' ? 'Релакс' : mode === 'energy' ? 'Вечеринка' : dayChip(), s), [] as Track[], signal),
+    anchors.length ? [] : waveResource(s => lull.charts(s).then(sections => sections.filter(x => x.layout === 'tracks').flatMap(x => x.items).flatMap(c => c.track ? [c.track] : [])), [] as Track[], signal),
+  ]);
+  const related = taste.reco.similarArtists ? pick([...new Map(pages.flatMap(p => p?.similar ?? []).filter(a => !knownArtists().has(a.id)).map(a => [a.id,a])).values()], 3, r) : [];
+  const fresh = await Promise.all(related.map(a => waveResource(s => topOf(a,s), [] as Track[], signal)));
+  if (signal.aborted) throw Object.assign(new Error('Wave cancelled'), { name: 'AbortError' });
+  const pool = [...candidates(lib.liked, 'favorite'), ...candidates(pages.flatMap(p => p?.top ?? []), 'artist'),
+    ...candidates(radios.flat(), 'radio'), ...candidates(fresh.flat(), 'discovery'), ...candidates(mood, 'mood'), ...candidates(popular, 'charts')];
+  const p = policy(mode, length, true, seed, excluded), result = selectRecommendations(pool, p);
+  // Small catalogs may relax recency; hidden/skipped/queued items never return.
+  return result.length >= Math.min(8, length) ? result : selectRecommendations(pool, { ...p, random: rng(seed), allowRecent: true });
 }
 
 /* Микс исполнителя: его хиты вперемешку с похожими исполнителями */
@@ -198,38 +204,41 @@ function waveResource<T>(load: (signal: AbortSignal) => Promise<T>, fallback: T,
   });
 }
 
-export async function buildWave(seed: Track, mode: WaveMode, length: number, signal: AbortSignal): Promise<Track[]> {
+export async function buildWave(seed: Track, mode: WaveMode, length: number, signal: AbortSignal, exclude: Track[] = []): Promise<Track[]> {
   const ac = new AbortController(), abort = () => ac.abort();
   signal.addEventListener('abort', abort, { once: true });
   if (signal.aborted) ac.abort();
   const timer = setTimeout(abort, 9000);
   try {
-    const tracks = await assembleWave(seed, mode, length, ac.signal);
+    const tracks = await assembleWave(seed, mode, length, ac.signal, exclude);
     if (signal.aborted) throw Object.assign(new Error('Wave cancelled'), { name: 'AbortError' });
     return tracks;
   } finally { clearTimeout(timer); signal.removeEventListener('abort', abort); }
 }
 
-async function assembleWave(seed: Track, mode: WaveMode, length: number, s: AbortSignal): Promise<Track[]> {
+async function assembleWave(seed: Track, mode: WaveMode, length: number, s: AbortSignal, exclude: Track[]): Promise<Track[]> {
   const lib = useLibrary.getState();
   const yt = seed.source === 'yt';
   const seedArtist = { id: seed.artistId, source: seed.source };
   const known = knownArtists();
   const radio = yt ? await waveResource(signal => lull.upNext(seed.id, signal), [] as Track[], s) : [];
-  const clean = (list: Track[]) => {
-    const strict = cleanup([seed, ...list], { keepFirst: true });
+  const clean = (pool: Candidate[]) => {
+    const p = policy(mode, length - 1, false, seedNow(seed.id.length), [seed, ...exclude]);
+    const strict = selectRecommendations(pool, p);
     // Recent listening is a preference, not a reason to show an empty wave.
     // Hidden tracks/artists and skip feedback still apply in the fallback.
-    return (strict.length > 1 ? strict : cleanup([seed, ...list], { keepFirst: true, allowRecent: true })).slice(0, length);
+    return [seed, ...(strict.length ? strict : selectRecommendations(pool, { ...p, allowRecent: true }))];
   };
+  const radioPool = candidates(radio, 'radio');
+  const nearby = new Set([artistKey(seed), ...radio.map(artistKey)]);
   if (mode === 'sound') {
-    const primary = clean(radio);
+    const primary = clean([...radioPool, ...candidates(lib.liked.filter(t => nearby.has(artistKey(t))), 'favorite')]);
     if (primary.length >= Math.min(length, 8)) return primary;
   }
   const artistPage = yt && seed.artistId ? waveResource(signal => lull.artist(seed.artistId, signal), null, s) : Promise.resolve(null);
   const [own, sims, album, calm, energy] = await Promise.all([
     yt ? artistPage.then(p => p?.top || []) : seed.artistId ? waveResource(signal => topOf(seedArtist, signal), [] as Track[], s) : [],
-    mode === 'artist' ? [] : yt ? artistPage.then(p => p?.similar || []) : seed.artistId ? waveResource(signal => similarOf(seedArtist, signal), [] as Artist[], s) : [],
+    mode === 'artist' || !useTaste.getState().reco.similarArtists ? [] : yt ? artistPage.then(p => p?.similar || []) : seed.artistId ? waveResource(signal => similarOf(seedArtist, signal), [] as Artist[], s) : [],
     yt && seed.albumId && mode === 'artist' ? waveResource(signal => lull.collection('album', seed.albumId!, signal).then(c => c.tracks), [] as Track[], s) : [],
     mode === 'calm' ? waveResource(signal => chipTracks('Релакс', signal), [] as Track[], s) : [],
     mode === 'energy' ? waveResource(signal => chipTracks('Вечеринка', signal), [] as Track[], s) : [],
@@ -239,20 +248,7 @@ async function assembleWave(seed: Track, mode: WaveMode, length: number, s: Abor
   /* второй круг радио — от первых треков волны, чтобы она не замыкалась на одном звучании */
   const radio2 = yt && (mode === 'sound' || mode === 'discover' || length > 50)
     ? (await Promise.all(radio.slice(1, 3).map(t => waveResource(signal => lull.upNext(t.id, signal), [] as Track[], s)))).flat() : [];
-  const simKeys = new Set([artistKey(seed), ...sims.map((a) => a.id)]);
-  const likedNear = lib.liked.filter((t) => simKeys.has(artistKey(t)));
-  const likedAll = lib.liked;
-  const notKnown = (l: Track[]) => l.filter((t) => !known.has(artistKey(t)));
-
-  const plan: Record<WaveMode, { list: Track[]; w: number }[]> = {
-    sound: [{ list: radio, w: 5 }, { list: radio2, w: 2 }, { list: simTracks, w: 2 }, { list: own, w: 1 }, { list: likedNear, w: 1 }],
-    artist: [{ list: own, w: 5 }, { list: album, w: 3 }, { list: radio.filter((t) => artistKey(t) === artistKey(seed)), w: 2 }, { list: radio, w: 1 }],
-    discover: [{ list: simTracks, w: 4 }, { list: notKnown(radio), w: 3 }, { list: notKnown(radio2), w: 2 }],
-    favorite: [{ list: likedNear, w: 4 }, { list: likedAll, w: 2 }, { list: radio.filter((t) => known.has(artistKey(t))), w: 2 }, { list: own, w: 1 }],
-    calm: [{ list: radio, w: 3 }, { list: calm, w: 3 }, { list: simTracks, w: 1 }],
-    energy: [{ list: radio, w: 3 }, { list: energy, w: 3 }, { list: simTracks, w: 1 }],
-  };
-  const f = familiarShare();
-  const parts = plan[mode].map((p) => ({ ...p, w: p.list === likedAll || p.list === likedNear || p.list === own ? p.w * (0.5 + f) : p.w * (1.5 - f) }));
-  return clean(blend(parts, length * 2));
+  sims.forEach(a => nearby.add(a.id));
+  return clean([...radioPool, ...candidates(radio2, 'radio'), ...candidates(simTracks, 'discovery'),
+    ...candidates([...own, ...album], 'artist'), ...candidates(mode === 'favorite' ? lib.liked : lib.liked.filter(t => nearby.has(artistKey(t))), 'favorite'), ...candidates([...calm, ...energy], 'mood')]);
 }

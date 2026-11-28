@@ -11,6 +11,8 @@ const server=http.createServer((req,res)=>{const pathname=new URL(req.url,base).
 await new Promise(r=>server.listen(18884,'127.0.0.1',r));
 const raw=Array.from({length:10},(_,i)=>({id:'song'+i,title:'Песня '+i,artists:[{id:'artist'+i%3,name:'Артист '+i%3}],durationSec:60,thumb:base+'/icons/icon-192.png?album='+(i<5?'A':'B')}));
 const tracks=raw.map(t=>({id:t.id,title:t.title,artist:t.artists[0].name,artistId:t.artists[0].id,duration:60,source:'yt',streamable:true,artwork:t.thumb}));
+// Album and radio must be disjoint: reusing the album as radio hides ownership bugs.
+const radio=Array.from({length:15},(_,i)=>({...raw[0],id:'radio'+i,title:'Радио '+i,artists:[{id:'new'+i,name:'Новый артист '+i}]}));
 const sections=[{title:'Песни',layout:'tracks',items:raw.map(track=>({kind:'track',id:track.id,title:track.title,track}))}];
 const browser=await (engineName==='Chromium'?chromium:webkit).launch({headless:true,...(process.env.LULL_BROWSER_EXECUTABLE?{executablePath:process.env.LULL_BROWSER_EXECUTABLE}:{})});fs.mkdirSync('web-smoke-artifacts',{recursive:true});
 const pwa=process.argv.includes('--pwa');
@@ -27,7 +29,7 @@ try{for(const width of (pwa?[402]:[412,840,1440])){
  await page.addInitScript(tracks=>{localStorage.setItem('lull.appearance.v1',JSON.stringify({state:{mode:'dark'},version:0}));localStorage.setItem('lull.library.v1',JSON.stringify({version:1,state:{onboarded:true,account:{name:'Тест'},liked:tracks,history:[],playlists:[{id:'qa',name:'Проверка волны',tracks,createdAt:1}],savedPlaylists:[],favArtists:[]}}));window.__audios=[];const A=window.Audio;window.Audio=class extends A{constructor(...args){super(...args);window.__audios.push(this);}};},tracks);
  await page.route('https://api.lull.website/**',async route=>{const request=route.request(),u=new URL(request.url()),headers={'Access-Control-Allow-Origin':base,'Access-Control-Allow-Headers':'Content-Type,Range,Authorization','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};if(request.method()==='OPTIONS')return route.fulfill({status:204,headers});
   if(u.pathname.includes('/api/stream/')){const m=request.headers().range?.match(/bytes=(\d+)-(\d*)/),start=m?Number(m[1]):0,end=m&&m[2]?Math.min(audio.length-1,Number(m[2])):audio.length-1;if(start>=audio.length)return route.fulfill({status:416,headers:{...headers,'Content-Range':`bytes */${audio.length}`}});return route.fulfill({status:m?206:200,contentType:mime,headers:{...headers,'Accept-Ranges':'bytes','Content-Length':String(end-start+1),...(m?{'Content-Range':`bytes ${start}-${end}/${audio.length}`}:{})},body:audio.subarray(start,end+1)});}
-  let data=[];if(u.pathname.includes('/upnext/')){seeds.push(u.pathname.split('/').pop());data=raw;}else if(u.pathname.endsWith('/charts')||u.pathname.endsWith('/home'))data=sections;else if(u.pathname.includes('/artist/'))data={id:'artist0',name:'Артист 0',topTracks:raw,sections:[]};return route.fulfill({status:200,contentType:'application/json',headers,body:JSON.stringify(data)});
+  let data=[];if(u.pathname.includes('/upnext/')){const id=u.pathname.split('/').pop();seeds.push(id);await new Promise(resolve=>setTimeout(resolve,600));data=[...[...raw,...radio].filter(t=>t.id===id),...radio.filter(t=>t.id!==id)];}else if(u.pathname.endsWith('/charts')||u.pathname.endsWith('/home'))data=sections;else if(u.pathname.includes('/artist/'))data={id:'artist0',name:'Артист 0',topTracks:radio,sections:[]};return route.fulfill({status:200,contentType:'application/json',headers,body:JSON.stringify(data)});
  });
  try{
   await page.goto(base+'/my/qa');await page.getByRole('button',{name:'Песня 3, Артист 0',exact:true}).click();const mini=page.getByRole('button',{name:/Открыть плеер:/});await mini.waitFor();
@@ -40,11 +42,22 @@ try{for(const width of (pwa?[402]:[412,840,1440])){
   console.log(hardware.supported?'SYSTEM_MEDIA_KEYS_SAME_ALBUM_SYNCHRONOUS_METADATA_OK':'SYSTEM_MEDIA_SESSION_UNAVAILABLE_IN_THIS_HEADLESS_ENGINE',JSON.stringify(hardware));
   const snapshot=()=>page.locator('[data-testid^="wave-cover-"]').evaluateAll(es=>es.filter(e=>/^wave-cover--?\d+$/.test(e.getAttribute('data-testid'))).map(e=>e.getAttribute('aria-label')));
   await page.getByRole('tab',{name:'Главная',exact:true}).click();await page.getByTestId('wave-cover-deck').waitFor();await page.waitForTimeout(750);const homeOrder=await snapshot();
+  if(homeOrder.some(label=>label.startsWith('Песня ')&&!label.startsWith('Песня 3,')))throw Error('Previous album history leaked into the track wave '+JSON.stringify(homeOrder));
   await page.getByRole('tab',{name:'Волна',exact:true}).click();await page.getByTestId('wave-cover-deck').waitFor();await page.waitForTimeout(750);if(JSON.stringify(homeOrder)!==JSON.stringify(await snapshot()))throw Error('Home and Wave deck orders differ');
   await page.getByRole('tab',{name:'Главная',exact:true}).click();await page.getByTestId('wave-cover-deck').waitFor();await page.waitForTimeout(750);if(JSON.stringify(homeOrder)!==JSON.stringify(await snapshot()))throw Error('Returning home reshuffled the wave');
   console.log('HOME_WAVE_ROUND_TRIP_ORDER_OK',JSON.stringify(homeOrder));
   await page.getByRole('tab',{name:'Моё',exact:true}).click();await page.getByRole('button',{name:'Проверка волны',exact:true}).click();await page.getByRole('button',{name:'Песня 5, Артист 2',exact:true}).click();
   await page.getByRole('tab',{name:'Волна',exact:true}).click();await page.waitForFunction(()=>document.querySelector('[data-testid="wave-cover-deck"]')?.getAttribute('aria-valuetext')?.startsWith('Песня 5,'));await page.getByRole('button',{name:'Включить мою волну',exact:true}).click();await page.getByRole('button',{name:'Приостановить волну',exact:true}).waitFor();
+  if((await snapshot()).some(label=>label.startsWith('Песня ')&&!label.startsWith('Песня 5,')))throw Error('Second album overwrote its track wave');
+
+  if(!pwa){
+   await page.getByRole('button',{name:'Сбросить волну',exact:true}).click();await page.getByRole('button',{name:'Сбросить волну',exact:true}).waitFor({state:'hidden'});
+   const beforeMood=await mini.getAttribute('aria-label');await page.getByRole('button',{name:'Спокойнее',exact:true}).click();await page.waitForTimeout(1800);
+   if(await page.evaluate(()=>JSON.parse(localStorage.getItem('lull.taste.v1')).state.reco.waveMode)!=='calm')throw Error('Mood wheel did not commit');
+   if(await mini.getAttribute('aria-label')!==beforeMood)throw Error('Mood change interrupted current audio');
+   for(const text of ['Музыка не заканчивается','25 треков','Живой фон','Применить к текущему треку'])if(await page.getByText(text,{exact:true}).count())throw Error('Removed wave control remains: '+text);
+   console.log('PERSONAL_WAVE_RESET_AND_MOOD_WITHOUT_AUDIO_INTERRUPT_OK');
+  }
 
   if(pwa){
    const geometry=()=>page.evaluate(()=>{const r=document.getElementById('root').getBoundingClientRect(),n=document.querySelector('[data-testid="bottom-navigation"]').getBoundingClientRect();return {rootHeight:r.height,rootBottom:r.bottom,navBottom:n.bottom,gap:innerHeight-n.bottom,height:innerHeight,visual:visualViewport.height,mode:document.documentElement.dataset.lullStandalone};});

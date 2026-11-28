@@ -4,7 +4,8 @@ import { router, useIsFocused } from 'expo-router';
 import { usePlayer } from '@/player/player';
 import { MotionScope } from '@/ui/MotionScope';
 import { useData } from '@/api/useData';
-import { getMix, MIXES, useMixSeed } from '@/api/mixes';
+import { getMix, useMixSeed } from '@/api/mixes';
+import { useTaste } from '@/store/taste';
 import { lull } from '@/api/lull';
 import { useLibrary } from '@/store/library';
 import { F } from '@/theme/tokens';
@@ -24,8 +25,8 @@ export default function HomeFeed(){
  const [visible,setVisible]=useState<Set<string>>(()=>new Set(['wave'])),[scrolling,setScrolling]=useState(false);
  const onViewable=useCallback(({viewableItems}:{viewableItems:{item:FeedBlock}[]})=>{const keys=new Set(viewableItems.map(v=>v.item.key));setVisible(old=>old.size===keys.size&&[...keys].every(k=>old.has(k))?old:keys);},[]);
  const history=useLibrary(s=>s.history),liked=useLibrary(s=>s.liked),artists=useLibrary(s=>s.favArtists);
- useMixSeed(s=>s.n);const mix=getMix('foryou');
- const personal=useData('mix:'+mix.id,mix.load),next=useData('mix:recommended:'+(history[0]?.track.id??'new'),MIXES.recommended.load);
+ useMixSeed(s=>s.n);useTaste(s=>s.reco);useTaste(s=>s.hiddenTracks);useTaste(s=>s.hiddenArtists);const mix=getMix('foryou'),following=getMix('recommended');
+ const personal=useData('mix:'+mix.id,mix.load),next=useData('mix:'+following.id,following.load);
  const charts=useData('charts',s=>lull.charts(s)),home=useData('home',s=>lull.home(undefined,s));
  const blocks=useMemo(()=>{
   const favorites=liked.length?liked.slice(0,12):personal.data?.slice(0,8)??[];

@@ -40,6 +40,8 @@ jobs:
         run: node scripts/wave-session.test.mjs
       - name: Тесты источников волны и ограничений ожидания
         run: node scripts/wave-engine.test.mjs
+      - name: 1800 сценариев персональных рекомендаций
+        run: node scripts/recommendation-scenarios.test.mjs
       - name: Тесты 3D-карусели
         run: node scripts/deck.test.mjs
       - name: Тесты вывода звука
