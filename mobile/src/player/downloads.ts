@@ -76,7 +76,7 @@ export async function prepareDownload(t: Track): Promise<string | undefined> {
 /** A constant-time lookup; safe in the player's status/queue hot path. */
 export function downloaded(t: Track) {
   const entry=Platform.OS!=='web'&&valid(t)?entries.get(key(t)):undefined;
-  return entry&&Date.now()-entry.checked<60000?entry.uri:undefined;
+  return entry&&entry.checked>0?entry.uri:undefined;
 }
 
 export async function saveDownload(t: Track, url: string): Promise<void> {
