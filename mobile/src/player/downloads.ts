@@ -86,7 +86,7 @@ export async function saveDownload(t: Track, url: string): Promise<void> {
   if (existing) return existing;
   const task = (async () => {
     await makeDirectoryAsync(root().uri,{intermediates:true});
-    const tmp = new Directory(root(),id+'.part');tmp.create({intermediates:true,idempotent:true});
+    const tmp = new Directory(root(),id+'.part'),temporaryUri=tmp.uri;tmp.create({intermediates:true,idempotent:true});
     const ac = new AbortController(), timer = setTimeout(()=>ac.abort(),180000);
     try {
       const file = await File.downloadFileAsync(url,audio(tmp,t),{idempotent:true,signal:ac.signal});
@@ -94,7 +94,7 @@ export async function saveDownload(t: Track, url: string): Promise<void> {
       await new File(tmp,'track.json').write(JSON.stringify(t));
       const dest = folder(t);await deleteAsync(dest.uri,{idempotent:true});await tmp.move(dest);
       entries.set(id,{track:t,uri:audio(dest,t).uri,checked:Date.now()});revisions.set(id,++revision);publish();await persistIndex();
-    } catch (e) { await deleteAsync(tmp.uri,{idempotent:true}).catch(()=>{});throw e; }
+    } catch (e) { await deleteAsync(temporaryUri,{idempotent:true}).catch(()=>{});throw e; }
     finally { clearTimeout(timer); }
   })().finally(()=>{jobs.delete(id);useDownloads.setState({busy:[...jobs.keys()]});});
   jobs.set(id,task);useDownloads.setState({busy:[...jobs.keys()]});return task;
