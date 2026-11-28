@@ -47,7 +47,7 @@ function apply(seed: Track, tracks: Track[], intent: Intent, kind: Kind) {
   applying = true;
   try {
     continued = `${s.session}:${key(seed)}`;
-    const result = player.startWave(tracks, { newWave: intent === 'manual', kind });
+    const result = player.startWave(tracks, { newWave: intent === 'manual', kind, expected: { session: s.session, trackKey: cur ? key(cur) : null } });
     useWaveSession.setState({ active: !!usePlayer.getState().wave, error: null });
     return result;
   } finally { applying = false; }
@@ -67,7 +67,9 @@ function begin(seed: Track, mode: WaveMode, intent: Intent, kind: Kind = 'track'
   request = r;
   failed = null;
   const cached = kind === 'track' && prepared?.seed === key(seed) && prepared.mode === mode && prepared.length === length && prepared.taste === taste && prepared.session === state.session ? prepared.tracks : null;
-  useWaveSession.setState({ busy: !cached, seed, ...(kind === 'track' ? { tracks: cached || [seed] } : {}), error: null });
+  const shown = useWaveSession.getState();
+  const stablePreview = shown.seed && key(shown.seed) === key(seed) && shown.tracks.length > 1 ? shown.tracks : [seed];
+  useWaveSession.setState({ busy: !cached, seed, ...(kind === 'track' ? { tracks: cached || stablePreview } : {}), error: null });
 
   // Prepare recommendations alongside audio. Old status events must not cancel
   // a manual launch while the audio subsystem is still initializing.
@@ -88,7 +90,7 @@ function begin(seed: Track, mode: WaveMode, intent: Intent, kind: Kind = 'track'
     if (list.length < 2) throw Error('Пока не нашли похожие треки. Попробуй другой характер волны.');
     if (kind === 'track') prepared = { seed: key(seed), mode, length, taste, tracks: list, session: now.session };
     useWaveSession.setState({ seed, tracks: list, error: null });
-    if (r.intent !== 'preview') return Promise.resolve(apply(seed, now.queue === r.queue || (kind === 'personal' && r.intent === 'manual') ? list : preserveUpcoming(seed, list), r.intent, kind)).then(() => true);
+    if (r.intent !== 'preview') return Promise.resolve(apply(seed, now.queue === r.queue || (kind === 'personal' && r.intent === 'manual') ? list : preserveUpcoming(seed, list), r.intent, kind)).then(result => result !== false);
     return true;
   }).catch(e => {
     if (request === r && !r.controller.signal.aborted) {
@@ -106,8 +108,12 @@ function begin(seed: Track, mode: WaveMode, intent: Intent, kind: Kind = 'track'
 /** A library song gets its own cover deck without replacing the library queue. */
 export function prepareTrackWave(seed: Track) {
   const s = usePlayer.getState(), ui = useWaveSession.getState(), r = useTaste.getState().reco;
+  const current = currentTrack(s);
+  if (!current || key(current) !== key(seed)) return;
   if (s.wave || ui.active || request?.intent === 'manual' || useConnectivity.getState().offline) return;
-  if (prepared?.seed === key(seed) && prepared.mode === r.waveMode && prepared.length === r.waveLength && prepared.taste === recommendationKey() && prepared.session === s.session) return;
+  // Opening a screen is not a request to re-rank an already displayed deck.
+  // An explicit launch/mood change still checks the latest taste fingerprint.
+  if (prepared?.seed === key(seed) && prepared.mode === r.waveMode && prepared.length === r.waveLength && prepared.session === s.session) return;
   if (failed?.seed === key(seed) && failed.session === s.session && Date.now() - failed.at < 10000) return;
   void begin(seed, r.waveMode, 'preview');
 }

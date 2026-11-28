@@ -47,7 +47,7 @@ globalThis.__makePlaylist = () => {
 };
 
 const STUBS = {
-  '@/player/downloads': `export const downloaded=()=>undefined;`,
+  '@/player/downloads': `export const downloaded=()=>undefined;export const prepareDownload=async()=>undefined;`,
   '@/player/audio-cache': `export const localAudio=id=>globalThis.__localAudio?.get(id); export const pinAudio=()=>{}; export const prefetchAudio=()=>{};`,
   'expo-audio': `export const createAudioPlaylist=()=>globalThis.__makePlaylist(); export const setAudioModeAsync=async()=>{};`,
   '@react-native-async-storage/async-storage': `const m=new Map(); export default { getItem:async k=>m.get(k)??null, setItem:async (k,v)=>{m.set(k,v)}, removeItem:async k=>{m.delete(k)} };`,
@@ -330,6 +330,14 @@ await test('Предыдущий и повтор волны не возвращ�
  if(p.currentIndex!==0||p.sources[0]?.uri!=='yt:s2'||p.time<42)throw Error('В нативной волне осталась история альбома или потеряна позиция');
  m.player.seek(1);m.player.prev();p.previous();await settle(400);if(same(m,'Начало волны')!=='s2')throw Error('Назад вернул старый альбом');
  m.player.next();await settle(600);m.player.cycleRepeat();m.player.next();await settle(650);if(same(m,'Повтор волны')!=='s2')throw Error('Повтор перешёл в начало альбома');m.player.stop();
+});
+await test('Поздняя волна не возвращает старую песню после живого нативного перехода',async()=>{
+ const m=await freshApp();await m.player.play(LIST,'s0');await settle(800);const p=globalThis.__pl;
+ const expected={session:m.usePlayer.getState().session,trackKey:'yt:s0'};
+ // Media3 has already advanced; JS has not received trackChanged yet.
+ p.next();m.player.startWave([LIST[0],T('late-radio')],{newWave:false,expected});await settle(650);
+ if(same(m,'Поздний ответ волны')!=='s1')throw Error('Поздний ответ сам переключил звучащую песню');
+ m.player.stop();
 });
 console.log(`\n${pass} прошло, ${fail} упало`);
 process.exit(fail ? 1 : 0);

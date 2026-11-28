@@ -17,7 +17,7 @@ const sections=[{title:'Песни',layout:'tracks',items:raw.map(track=>({kind:
 const browser=await (engineName==='Chromium'?chromium:webkit).launch({headless:true,...(process.env.LULL_BROWSER_EXECUTABLE?{executablePath:process.env.LULL_BROWSER_EXECUTABLE}:{})});fs.mkdirSync('web-smoke-artifacts',{recursive:true});
 const pwa=process.argv.includes('--pwa');
 try{for(const width of (pwa?[402]:[412,840,1440])){
- const page=await browser.newPage({serviceWorkers:'block',viewport:{width,height:pwa?874:915},...(pwa?{isMobile:true,hasTouch:true,deviceScaleFactor:3}:{})}),errors=[],seeds=[];
+ const page=await browser.newPage({serviceWorkers:'block',viewport:{width,height:pwa?874:915},hasTouch:width<1000,...(pwa?{isMobile:true,deviceScaleFactor:3}:{})}),errors=[],seeds=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>{window.__mediaActions={};const ms=navigator.mediaSession;if(ms){const proto=Object.getPrototypeOf(ms),original=proto.setActionHandler;Object.defineProperty(proto,'setActionHandler',{configurable:true,writable:true,value:function(action,handler){window.__mediaActions[action]=handler;return original.call(this,action,handler);}});}});
  if(pwa)await page.addInitScript(()=>{
@@ -37,6 +37,12 @@ try{for(const width of (pwa?[402]:[412,840,1440])){
   await page.getByRole('tab',{name:'Волна',exact:true}).click();await page.waitForFunction(()=>document.querySelector('[data-testid="wave-cover-deck"]')?.getAttribute('aria-valuetext')?.startsWith('Песня 3,'));
   await page.getByRole('button',{name:'Включить мою волну',exact:true}).click();await page.getByRole('button',{name:'Приостановить волну',exact:true}).waitFor();
   if(!(await mini.getAttribute('aria-label')).includes('Песня 3'))throw Error('Wrong seed song');
+  const initialAudio=await mini.getAttribute('aria-label');
+  for(const name of ['Поиск','Моё','Главная','Волна']){
+   const tab=page.getByRole('tab',{name,exact:true});if(width<1000)await tab.tap();else await tab.click();await page.waitForTimeout(900);
+   if(await mini.getAttribute('aria-label')!==initialAudio)throw Error('Tab navigation changed the sounding song: '+name);
+  }
+  console.log('ALL_TABS_PRESERVE_SOUNDING_TRACK_OK');
   const hardware=await page.evaluate(()=>{if(!navigator.mediaSession||typeof MediaMetadata!=='function')return {supported:false,mediaSession:!!navigator.mediaSession,metadataConstructor:typeof MediaMetadata};if(typeof window.__mediaActions.nexttrack!=='function')throw Error('Media session actions were not registered: '+JSON.stringify({metadata:navigator.mediaSession.metadata?.title,actions:Object.keys(window.__mediaActions),lastError:localStorage.getItem('lull.lastError')}));const previous=navigator.mediaSession.metadata;window.__mediaActions.nexttrack();const next=navigator.mediaSession.metadata;window.__mediaActions.previoustrack();const back=navigator.mediaSession.metadata;return {supported:true,previous:previous?.title,next:next?.title,back:back?.title,previousArt:previous?.artwork[0]?.src,nextArt:next?.artwork[0]?.src,nextArtist:next?.artist};});
   if(hardware.supported&&(hardware.next===hardware.previous||hardware.back!==hardware.previous||!hardware.nextArtist||!hardware.previousArt||hardware.previousArt!==hardware.nextArt))throw Error('System metadata waits for a timer or artwork '+JSON.stringify(hardware));
   console.log(hardware.supported?'SYSTEM_MEDIA_KEYS_SAME_ALBUM_SYNCHRONOUS_METADATA_OK':'SYSTEM_MEDIA_SESSION_UNAVAILABLE_IN_THIS_HEADLESS_ENGINE',JSON.stringify(hardware));
@@ -46,6 +52,13 @@ try{for(const width of (pwa?[402]:[412,840,1440])){
   await page.getByRole('tab',{name:'Волна',exact:true}).click();await page.getByTestId('wave-cover-deck').waitFor();await page.waitForTimeout(750);if(JSON.stringify(homeOrder)!==JSON.stringify(await snapshot()))throw Error('Home and Wave deck orders differ');
   await page.getByRole('tab',{name:'Главная',exact:true}).click();await page.getByTestId('wave-cover-deck').waitFor();await page.waitForTimeout(750);if(JSON.stringify(homeOrder)!==JSON.stringify(await snapshot()))throw Error('Returning home reshuffled the wave');
   console.log('HOME_WAVE_ROUND_TRIP_ORDER_OK',JSON.stringify(homeOrder));
+  await page.getByRole('tab',{name:'Волна',exact:true}).click();await page.waitForURL('**/wave');await page.waitForTimeout(800);const covers=page.getByTestId('wave-cover-deck');await covers.scrollIntoViewIfNeeded();const rect=await covers.boundingBox();
+  await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);await page.mouse.down();await page.waitForTimeout(650);
+  await page.mouse.move(rect.x+rect.width/2-130,rect.y+rect.height/2,{steps:12});await page.waitForTimeout(250);
+  const picked=await covers.getAttribute('aria-valuetext');await page.mouse.up();
+  await page.waitForFunction(label=>document.querySelector('[aria-label^="Открыть плеер:"]')?.getAttribute('aria-label')?.startsWith('Открыть плеер: '+label.split(',')[0]+'.'),picked,{timeout:15000});
+  if(picked.startsWith('Песня 3,'))throw Error('Hold/drag did not advance its preview');
+  console.log('HOLD_DRAG_RELEASE_PLAYS_PREVIEWED_RECORDING_OK',picked);
   await page.getByRole('tab',{name:'Моё',exact:true}).click();await page.getByRole('button',{name:'Проверка волны',exact:true}).click();await page.getByRole('button',{name:'Песня 5, Артист 2',exact:true}).click();
   await page.getByRole('tab',{name:'Волна',exact:true}).click();await page.waitForFunction(()=>document.querySelector('[data-testid="wave-cover-deck"]')?.getAttribute('aria-valuetext')?.startsWith('Песня 5,'));await page.getByRole('button',{name:'Включить мою волну',exact:true}).click();await page.getByRole('button',{name:'Приостановить волну',exact:true}).waitFor();
   if((await snapshot()).some(label=>label.startsWith('Песня ')&&!label.startsWith('Песня 5,')))throw Error('Second album overwrote its track wave');

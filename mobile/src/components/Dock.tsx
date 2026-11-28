@@ -225,24 +225,30 @@ function swipePrev() {
 }
 function useTrackSwipe(onDown?: () => void) {
   const reduced=useReducedMotion();
+  const path=usePathname(),location=useRef(path);
   const tx = useSharedValue(0);
   const mode = useRef<'h' | 'v' | null>(null);
+  const origin=useRef<{path:string;session:number;track:string}|null>(null);
+  useEffect(()=>{location.current=path;mode.current=null;origin.current=null;tx.set(0);},[path,tx]);
+  const remember=()=>{const s=usePlayer.getState(),t=currentTrack(s);origin.current={path:location.current,session:s.session,track:t?`${t.source}:${t.id}`:''};};
   // eslint-disable-next-line react-hooks/refs -- PanResponder stores callbacks; refs are read only during touch events.
   const [pan] = useState(()=>PanResponder.create({
     /* забираем жест у кнопок, только когда палец явно повёл в сторону (или вниз — свернуть плеер) */
     onMoveShouldSetPanResponderCapture: (_, g) => {
-      if (Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.3) { mode.current = 'h'; return true; }
-      if (onDown && g.dy > 14 && g.dy > Math.abs(g.dx) * 1.3) { mode.current = 'v'; return true; }
+      if (Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.3) { remember();mode.current = 'h'; return true; }
+      if (onDown && g.dy > 14 && g.dy > Math.abs(g.dx) * 1.3) { remember();mode.current = 'v'; return true; }
       return false;
     },
     onPanResponderMove: (_, g) => { if (mode.current === 'h') tx.set(Math.max(-160,Math.min(160,g.dx*.7))); },
     onPanResponderRelease: (_, g) => {
+      const s=usePlayer.getState(),t=currentTrack(s),began=origin.current;
+      if(!began||began.path!==location.current||began.session!==s.session||began.track!==(t?`${t.source}:${t.id}`:'')){mode.current=null;tx.set(0);return;}
       if (mode.current === 'h') {
         const go = g.dx < -70 || g.vx < -0.7 ? 'next' : g.dx > 70 || g.vx > 0.7 ? 'prev' : null;
         if (go) { haptic(); tx.set(0); if (go === 'next') player.next(); else swipePrev(); }
         else tx.set(reduced ? 0 : withSpring(0, { damping: 20, stiffness: 160 }));
       } else if (mode.current === 'v' && g.dy > 90) onDown?.();
-      mode.current = null;
+      mode.current = null;origin.current=null;
     },
     onPanResponderTerminate: () => { tx.set(reduced ? 0 : withSpring(0)); mode.current = null; },
     onPanResponderTerminationRequest: () => mode.current !== 'h',

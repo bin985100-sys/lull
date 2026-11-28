@@ -103,7 +103,7 @@ function TrackActions({ t, playlistId }: { t: Track; playlistId?: string }) {
       <Item icon="waves" label="Волна по треку" onPress={() => openWave(t)} />
       <Item icon="plAdd" label="Добавить в плейлист" onPress={() => openSelectPlaylist(t)} />
       {Platform.OS !== 'web' && <Item icon="download" label={downloaded(t) ? 'Удалить загрузку' : 'Скачать для офлайна'} onPress={() => {
-        closeSheet(); if (downloaded(t)) { removeDownload(t); toast('Загрузка удалена','check'); } else void saveTracks([t]);
+        closeSheet(); if (downloaded(t)) { void removeDownload(t).then(()=>toast('Загрузка удалена','check'),()=>toast('Не удалось удалить загрузку','download')); } else void saveTracks([t]);
       }}/>}
       <Item icon="playNext" label="Поставить следующим" onPress={() => { closeSheet(); const undo = player.playNext(t); toast(undo ? 'Заиграет следующим' : 'Воспроизведение началось', 'playNext', undo ? {label:'Отменить',fn:undo} : undefined); }} />
       <Item icon="queue" label="Добавить в очередь" onPress={() => { closeSheet(); player.addToQueue(t); toast('Добавлено в очередь', 'queue'); }} />

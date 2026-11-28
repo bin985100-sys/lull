@@ -44,6 +44,8 @@ jobs:
         run: node scripts/recommendation-scenarios.test.mjs
       - name: Тесты 3D-карусели
         run: node scripts/deck.test.mjs
+      - name: Жесты карусели, офлайн-библиотека и сплошные фоны
+        run: npm run test:device-bugs
       - name: Тесты вывода звука
         run: node scripts/audio-output.test.mjs
       - name: Тесты цветов обложки
@@ -52,7 +54,7 @@ jobs:
         run: node --test scripts/audio-cache.test.mjs
       - name: Тесты текста песен
         run: node scripts/lyrics.test.mjs
-      - run: npx expo export -p web
+      - run: npm run export:web
       - uses: actions/upload-artifact@v4
         with: { name: Lull-Mobile-Web, path: mobile/dist, if-no-files-found: error }
 

@@ -11,7 +11,7 @@ import { useLibrary } from '@/store/library';
 import { useTaste } from '@/store/taste';
 import { useConnectivity } from '@/store/connectivity';
 import { log, logNow, report } from '@/ui/Crash';
-import { downloaded } from '@/player/downloads';
+import { downloaded, prepareDownload } from '@/player/downloads';
 import { localAudio, pinAudio, prefetchAudio } from '@/player/audio-cache';
 
 export type Repeat = 'off' | 'all' | 'one';
@@ -263,10 +263,12 @@ const primed = new Map<string, number>();
 const isPrimed = (t: Track | undefined) => !!t && (!!downloaded(t) || t.source !== 'yt' || !!localAudio(t.id) || Date.now() - (primed.get(t.id) || 0) < 20 * 60e3);
 const priming = new Map<string, Promise<boolean>>();
 function prime(t: Track | undefined): Promise<boolean> {
-  if (!t || isPrimed(t)) return Promise.resolve(true);
+  if (!t) return Promise.resolve(false);
+  if (isPrimed(t)) return Promise.resolve(true);
   const had = priming.get(t.id);
   if (had) return had; // один запрос на трек, даже если его просят несколько раз
   const run = (async () => {
+    if (await prepareDownload(t)) return true;
     {
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), 65000);
@@ -566,10 +568,11 @@ export const player = {
     ensureNext();
   },
   /* Волна: если исходный трек уже играет, не перезапускаем его, а меняем всё, что дальше */
-  startWave(list: Track[], opts: { newWave?: boolean; kind?: 'track' | 'personal' } = {}) {
+  startWave(list: Track[], opts: { newWave?: boolean; kind?: 'track' | 'personal'; expected?: { session: number; trackKey: string | null } } = {}) {
     syncNativeTrack();
     const s = usePlayer.getState();
     const cur = currentTrack(s);
+    if (opts.expected && (s.session !== opts.expected.session || (cur ? trackKey(cur) : null) !== opts.expected.trackKey)) return false;
     if (cur && list[0] && trackKey(list[0]) === trackKey(cur)) {
       const manual = s.queue.slice(s.index + 1).filter(t => t.queueEntryId);
       const proposed = new Set(list.slice(1).map(t => (t as QueueTrack).queueEntryId));

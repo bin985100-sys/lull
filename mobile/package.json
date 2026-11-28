@@ -61,6 +61,8 @@
     "test:lyrics": "node scripts/lyrics.test.mjs",
     "test:wave": "node scripts/wave-session.test.mjs",
     "test:recommendations": "node scripts/recommendation-scenarios.test.mjs && node scripts/wave-engine.test.mjs",
+    "test:device-bugs": "node scripts/deck-gestures.test.mjs && node scripts/downloads.test.mjs && node scripts/ambient-geometry.test.mjs",
+    "export:web": "expo export --platform web --clear",
     "test:colors": "node scripts/cover-colors.test.mjs",
     "test:output": "node scripts/audio-output.test.mjs",
     "test:deck": "node scripts/deck.test.mjs",
