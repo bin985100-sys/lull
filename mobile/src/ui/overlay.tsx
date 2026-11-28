@@ -2,7 +2,7 @@ import { resolveThemeValues , useTheme, themeValues } from '@/theme/state';
 /* Тосты, нижние панели и диалоги поверх всего приложения. */
 import { type ReactNode, useEffect, useState } from 'react';
 import { BackHandler, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn, ZoomOut, useReducedMotion } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, ZoomIn, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
@@ -36,14 +36,31 @@ export function Overlays() {
   const {colors:C}=useTheme();
  const st=resolveThemeValues(stThemeTable,C);
   const { toast: t, sheet, dialog,anchor,backdrop } = useOverlay();
+  const [presented,setPresented]=useState<{sheet:()=>ReactNode;anchor:MenuAnchor|null;backdrop:(()=>ReactNode)|null;id:number}|null>(null);
+  const sheetProgress=useSharedValue(0);
   const ins = useSafeAreaInsets();
   const {width,height}=useWindowDimensions();
   const [contentHeight,setContentHeight]=useState(0);
   const menuWidth=Math.min(340,width-24),menuHeight=Math.min(contentHeight?contentHeight+38:600,600,height-ins.top-ins.bottom-40);
-  const anchored=anchor ? {left:Math.max(12,Math.min(width-menuWidth-12,anchor.x-menuWidth/2)),right:undefined,width:menuWidth,top:Math.max(ins.top+12,Math.min(height-ins.bottom-menuHeight-12,anchor.y-menuHeight-10)),bottom:undefined,height:menuHeight,maxHeight:menuHeight,borderRadius:34,paddingHorizontal:18,paddingTop:16} : null;
+  const shownAnchor=presented?.anchor,anchored=shownAnchor ? {left:Math.max(12,Math.min(width-menuWidth-12,shownAnchor.x-menuWidth/2)),right:undefined,width:menuWidth,top:Math.max(ins.top+12,Math.min(height-ins.bottom-menuHeight-12,shownAnchor.y-menuHeight-10)),bottom:undefined,height:menuHeight,maxHeight:menuHeight,borderRadius:34,paddingHorizontal:18,paddingTop:16} : null;
   const hasTrack = usePlayer((x) => x.index >= 0);
   const expanded = usePlayer((x) => x.expanded);
   const reduced = useReducedMotion();
+  useEffect(()=>{
+    let frame=0,next=0,timer:ReturnType<typeof setTimeout>|undefined;
+    if(sheet){
+      sheetProgress.set(0);setContentHeight(0);setPresented({sheet,anchor,backdrop,id:Date.now()});
+      // Mount first, then animate explicitly. Fabric can reuse a popup's native
+      // view and skip layout-entry animations during fast menu changes.
+      frame=requestAnimationFrame(()=>{next=requestAnimationFrame(()=>sheetProgress.set(reduced?1:withTiming(1,{duration:anchor?460:540,easing:ease})));});
+    }else{
+      sheetProgress.set(reduced?0:withTiming(0,{duration:300,easing:Easing.bezier(.4,0,.2,1)}));
+      timer=setTimeout(()=>setPresented(null),reduced?0:320);
+    }
+    return()=>{cancelAnimationFrame(frame);cancelAnimationFrame(next);clearTimeout(timer);};
+  },[sheet,anchor,backdrop,reduced,sheetProgress]);
+  const sheetShade=useAnimatedStyle(()=>({opacity:sheetProgress.get()}));
+  const sheetMotion=useAnimatedStyle(()=>{const p=sheetProgress.get();return {opacity:p,transform:[{translateY:(1-p)*(shownAnchor?14:64)},{scale:(shownAnchor?.94:.975)+(shownAnchor?.06:.025)*p}]};});
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -59,18 +76,18 @@ export function Overlays() {
   const bottom = expanded ? undefined : (hasTrack ? DOCK.mini : DOCK.compact) + Math.max(ins.bottom, 14) + 14;
   return (
     <>
-      {sheet ? (
-        <Animated.View collapsable={false} exiting={reduced?undefined:FadeOut.duration(540)} style={StyleSheet.absoluteFill} accessibilityViewIsModal>
-          <Animated.View entering={reduced ? undefined : FadeIn.duration(220)} exiting={reduced ? undefined : FadeOut.duration(420)} style={[StyleSheet.absoluteFill, { backgroundColor: anchor ? 'rgba(0,0,0,.14)' : 'rgba(0,0,0,0.35)' }]}>
+      {presented ? (
+        <View collapsable={false} style={StyleSheet.absoluteFill} accessibilityViewIsModal>
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: shownAnchor ? 'rgba(0,0,0,.14)' : 'rgba(0,0,0,0.35)' },sheetShade]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} accessibilityRole="button" accessibilityLabel="Закрыть панель" />
           </Animated.View>
-          <Animated.View entering={reduced ? undefined : anchor ? ZoomIn.duration(340).withInitialValues({transform:[{scale:.92}]}) : SlideInDown.duration(600).easing(ease)} exiting={reduced ? undefined : anchor ? ZoomOut.duration(150).withTargetValues({transform:[{scale:.94}]}) : SlideOutDown.duration(500)} style={[st.sheet, { bottom: 8 + ins.bottom * 0.4 },anchored]}>
+          <Animated.View testID="sheet-panel" pointerEvents={sheet?'auto':'none'} collapsable={false} style={[st.sheet, { bottom: 8 + ins.bottom * 0.4 },anchored,sheetMotion]}>
             <Surface pointerEvents="none" radius={34} style={StyleSheet.absoluteFill}/>
-            {backdrop?.()}
-            {!anchor&&<View style={st.grab} />}
-            <ScrollView onContentSizeChange={(_w,h)=>setContentHeight(h)} style={{flexGrow:0,flexShrink:1}} contentContainerStyle={{paddingBottom:8}} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">{sheet()}</ScrollView>
+            {presented.backdrop?.()}
+            {!shownAnchor&&<View style={st.grab} />}
+            <ScrollView key={presented.id} onContentSizeChange={(_w,h)=>setContentHeight(h)} style={{flexGrow:0,flexShrink:1}} contentContainerStyle={{paddingBottom:8}} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">{presented.sheet()}</ScrollView>
           </Animated.View>
-        </Animated.View>
+        </View>
       ) : null}
       {dialog ? (
         <Animated.View entering={reduced?undefined:FadeIn.duration(420)} exiting={reduced?undefined:FadeOut.duration(400)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} accessibilityViewIsModal>

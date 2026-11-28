@@ -7,9 +7,11 @@ import type { Track } from '@/api/audius';
 
 const key = (t: Track) => (t.source || 'audius') + '-' + t.id;
 const valid = (t: Track) => !!t && /^[\w-]+$/.test(t.id) && (!t.source || t.source === 'yt' || t.source === 'audius');
-const root = () => new Directory(Paths.document, 'lull-downloads');
+let downloadRoot: Directory | undefined;
+const root = () => downloadRoot ??= new Directory(Paths.document, 'lull-downloads');
 const folder = (t: Track) => new Directory(root(), key(t));
 const audio = (d: Directory, t: Track) => new File(d, t.source === 'yt' ? 'audio.m4a' : 'audio.mp3');
+const audioUri = (t: Track) => `${root().uri}/${key(t)}/${t.source === 'yt' ? 'audio.m4a' : 'audio.mp3'}`;
 const INDEX = 'lull.downloads.index.v2';
 type Entry = { track: Track; uri: string; checked: number };
 const entries = new Map<string, Entry>(), revisions = new Map<string, number>();
@@ -29,7 +31,7 @@ export function loadDownloads(): Promise<void> {
   flight = (async () => {
     try {
       const cached = JSON.parse(await AsyncStorage.getItem(INDEX) || '[]');
-      if (Array.isArray(cached)) for (const t of cached) if (valid(t) && !revisions.has(key(t))) entries.set(key(t), { track: t, uri: audio(folder(t),t).uri, checked: 0 });
+      if (Array.isArray(cached)) for (const t of cached) if (valid(t) && !revisions.has(key(t))) entries.set(key(t), { track: t, uri: audioUri(t), checked: 0 });
     } catch {}
     if (entries.size) publish();
     const directory = root();
@@ -39,9 +41,9 @@ export function loadDownloads(): Promise<void> {
     for (let start = 0; start < names.length; start += 12) {
       await Promise.all(names.slice(start,start+12).map(async name => {
         try {
-          const dir = new Directory(directory,name), t = JSON.parse(await readAsStringAsync(new File(dir,'track.json').uri)) as Track;
+          const t = JSON.parse(await readAsStringAsync(`${directory.uri}/${name}/track.json`)) as Track;
           if (!valid(t) || key(t) !== name) return;
-          const uri = audio(dir,t).uri, info = await getInfoAsync(uri);
+          const uri = audioUri(t), info = await getInfoAsync(uri);
           if (!info.exists || info.isDirectory || info.size <= 0) return;
           found.add(name);
           if ((revisions.get(name) || 0) <= started) entries.set(name,{ track:t, uri, checked:Date.now() });
@@ -63,7 +65,7 @@ export async function prepareDownload(t: Track): Promise<string | undefined> {
   const id = key(t), cached = entries.get(id);
   if (cached && Date.now()-cached.checked < 60000) return cached.uri;
   try {
-    const uri = cached?.uri ?? audio(folder(t),t).uri, info = await getInfoAsync(uri);
+    const uri = cached?.uri ?? audioUri(t), info = await getInfoAsync(uri);
     if (info.exists && !info.isDirectory && info.size > 0) {
       entries.set(id,{track:t,uri,checked:Date.now()});revisions.set(id,++revision);return uri;
     }
