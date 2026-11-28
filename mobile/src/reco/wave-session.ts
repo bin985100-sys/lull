@@ -40,6 +40,9 @@ function apply(seed: Track, tracks: Track[], intent: Intent, kind: Kind) {
   const s = usePlayer.getState(), cur = currentTrack(s);
   if ((!cur || key(cur) !== key(seed)) && !(kind === 'personal' && intent === 'manual' && !cur)) return;
   if (intent === 'continue' && s.continueQueue === false) return;
+  // Refill appends after the visible upcoming songs; it must never replace the
+  // final two cards just because their queue was not edited during the request.
+  if (intent === 'continue') tracks = preserveUpcoming(seed, tracks);
   if (cur && !s.playing) { pending = { seed: key(seed), session: s.session, tracks, queue: s.queue, intent, kind }; return; }
   applying = true;
   try {
