@@ -47,17 +47,17 @@ export function Overlays() {
   const expanded = usePlayer((x) => x.expanded);
   const reduced = useReducedMotion();
   useEffect(()=>{
-    let frame=0,next=0,timer:ReturnType<typeof setTimeout>|undefined;
+    let frame=0,next=0,arrival=0,timer:ReturnType<typeof setTimeout>|undefined;
     if(sheet){
-      sheetProgress.set(0);setContentHeight(0);setPresented({sheet,anchor,backdrop,id:Date.now()});
+      sheetProgress.set(0);
       // Mount first, then animate explicitly. Fabric can reuse a popup's native
       // view and skip layout-entry animations during fast menu changes.
-      frame=requestAnimationFrame(()=>{next=requestAnimationFrame(()=>sheetProgress.set(reduced?1:withTiming(1,{duration:anchor?460:540,easing:ease})));});
+      frame=requestAnimationFrame(()=>{setContentHeight(0);setPresented({sheet,anchor,backdrop,id:Date.now()});next=requestAnimationFrame(()=>{arrival=requestAnimationFrame(()=>sheetProgress.set(reduced?1:withTiming(1,{duration:anchor?460:540,easing:ease})));});});
     }else{
       sheetProgress.set(reduced?0:withTiming(0,{duration:300,easing:Easing.bezier(.4,0,.2,1)}));
       timer=setTimeout(()=>setPresented(null),reduced?0:320);
     }
-    return()=>{cancelAnimationFrame(frame);cancelAnimationFrame(next);clearTimeout(timer);};
+    return()=>{cancelAnimationFrame(frame);cancelAnimationFrame(next);cancelAnimationFrame(arrival);clearTimeout(timer);};
   },[sheet,anchor,backdrop,reduced,sheetProgress]);
   const sheetShade=useAnimatedStyle(()=>({opacity:sheetProgress.get()}));
   const sheetMotion=useAnimatedStyle(()=>{const p=sheetProgress.get();return {opacity:p,transform:[{translateY:(1-p)*(shownAnchor?14:64)},{scale:(shownAnchor?.94:.975)+(shownAnchor?.06:.025)*p}]};});

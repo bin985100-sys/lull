@@ -43,6 +43,13 @@ try{for(const width of (pwa?[402]:[412,840,1440])){
    if(await mini.getAttribute('aria-label')!==initialAudio)throw Error('Tab navigation changed the sounding song: '+name);
   }
   console.log('ALL_TABS_PRESERVE_SOUNDING_TRACK_OK');
+  await page.evaluate(()=>{window.__sheetFrames=[];const until=performance.now()+2200;const sample=()=>{const panel=document.querySelector('[data-testid="sheet-panel"]');if(panel)window.__sheetFrames.push(Number(getComputedStyle(panel).opacity));if(performance.now()<until)requestAnimationFrame(sample);};requestAnimationFrame(sample);});
+  const miniBounds=await mini.boundingBox();await page.mouse.move(miniBounds.x+Math.min(70,miniBounds.width/2),miniBounds.y+miniBounds.height/2);await page.mouse.down();
+  const menu=page.getByTestId('sheet-panel');await menu.waitFor({state:'attached'});await page.mouse.up();await page.waitForTimeout(650);
+  const frames=await page.evaluate(()=>window.__sheetFrames);if(!frames.some(p=>p>.02&&p<.98)||!frames.some(p=>p>.99))throw Error('Track menu appeared without intermediate animation frames '+JSON.stringify(frames));
+  await page.getByRole('button',{name:'Закрыть панель',exact:true}).click({position:{x:3,y:3}});await menu.waitFor({state:'hidden'});
+  if(await mini.getAttribute('aria-label')!==initialAudio)throw Error('Opening/closing the track menu changed audio');
+  console.log('TRACK_MENU_ANIMATED_OPEN_CLOSE_WITHOUT_AUDIO_CHANGE_OK');
   const hardware=await page.evaluate(()=>{if(!navigator.mediaSession||typeof MediaMetadata!=='function')return {supported:false,mediaSession:!!navigator.mediaSession,metadataConstructor:typeof MediaMetadata};if(typeof window.__mediaActions.nexttrack!=='function')throw Error('Media session actions were not registered: '+JSON.stringify({metadata:navigator.mediaSession.metadata?.title,actions:Object.keys(window.__mediaActions),lastError:localStorage.getItem('lull.lastError')}));const previous=navigator.mediaSession.metadata;window.__mediaActions.nexttrack();const next=navigator.mediaSession.metadata;window.__mediaActions.previoustrack();const back=navigator.mediaSession.metadata;return {supported:true,previous:previous?.title,next:next?.title,back:back?.title,previousArt:previous?.artwork[0]?.src,nextArt:next?.artwork[0]?.src,nextArtist:next?.artist};});
   if(hardware.supported&&(hardware.next===hardware.previous||hardware.back!==hardware.previous||!hardware.nextArtist||!hardware.previousArt||hardware.previousArt!==hardware.nextArt))throw Error('System metadata waits for a timer or artwork '+JSON.stringify(hardware));
   console.log(hardware.supported?'SYSTEM_MEDIA_KEYS_SAME_ALBUM_SYNCHRONOUS_METADATA_OK':'SYSTEM_MEDIA_SESSION_UNAVAILABLE_IN_THIS_HEADLESS_ENGINE',JSON.stringify(hardware));
